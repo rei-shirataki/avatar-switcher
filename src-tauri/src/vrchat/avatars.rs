@@ -30,7 +30,12 @@ pub async fn get_favorite_avatars() -> Result<Vec<VRCAvatar>> {
     let groups = ["avatars1", "avatars2", "avatars3", "avatars4", "avatars5", "avatars6"];
     let mut all_avatars: Vec<VRCAvatar> = Vec::new();
 
-    for group in &groups {
+    for (i, group) in groups.iter().enumerate() {
+        // VRChat API のレート制限対策: リクエスト間に 100ms のディレイを入れる
+        if i > 0 {
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        }
+
         let mut offset = 0u32;
         loop {
             let resp = client
@@ -57,6 +62,8 @@ pub async fn get_favorite_avatars() -> Result<Vec<VRCAvatar>> {
                 break;
             }
             offset += 100;
+            // ページをまたぐ場合もディレイを挟む
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
         }
     }
 

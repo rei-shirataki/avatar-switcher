@@ -37,7 +37,7 @@ pub async fn init(app_data_dir: PathBuf) {
     let client = Client::builder()
         .cookie_provider(store)
         .user_agent(USER_AGENT)
-        .https_only(false)
+        .https_only(true)
         .timeout(std::time::Duration::from_secs(30))
         .build()
         .expect("Failed to build HTTP client");

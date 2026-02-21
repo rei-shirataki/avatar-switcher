@@ -1,0 +1,95 @@
+@import '@fontsource/inter/300.css';
+@import '@fontsource/inter/400.css';
+@import '@fontsource/inter/500.css';
+@import '@fontsource/inter/600.css';
+@import '@fontsource/inter/700.css';
+
+:root {
+  /* Surface layers */
+  --color-surface-0: #0a0a0f;
+  --color-surface-1: #111118;
+  --color-surface-2: #18181f;
+  --color-surface-3: #222230;
+  --color-surface-4: #2a2a3a;
+
+  /* Primary accent */
+  --color-primary:        #7c6af7;
+  --color-primary-hover:  #9485f9;
+  --color-primary-active: #6455e8;
+  --color-primary-dim:    rgba(124, 106, 247, 0.15);
+
+  /* Text */
+  --color-text-1: #f0f0f8;
+  --color-text-2: #c8c8de;
+  --color-text-3: #8888aa;
+  --color-text-4: #555570;
+
+  /* Semantic */
+  --color-success: #56c96e;
+  --color-warning: #f5a623;
+  --color-error:   #f56c6c;
+  --color-info:    #409eff;
+
+  /* Geometry */
+  --radius-sm:  4px;
+  --radius-md:  8px;
+  --radius-lg:  12px;
+  --radius-xl:  16px;
+
+  /* Typography */
+  --font-sans: 'Inter', 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Cascadia Code', 'Consolas', monospace;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background: transparent;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  color: var(--color-text-1);
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-surface-3);
+  border-radius: 2px;
+  &:hover {
+    background: var(--color-surface-4);
+  }
+}
+
+img {
+  -webkit-user-drag: none;
+}
+
+input, textarea, button {
+  font-family: var(--font-sans);
+}
+
+/* Routed view components fill the available flex space */
+app-login-view,
+app-avatars-view,
+app-settings-view,
+app-overlay-view {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}

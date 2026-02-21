@@ -1,0 +1,54 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "AvatarSwitcher",
+  "version": "0.1.0",
+  "identifier": "com.rei0932.avatar-switcher",
+  "build": {
+    "beforeDevCommand": "npm run start",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist/avatar-switcher/browser"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "AvatarSwitcher",
+        "width": 980,
+        "height": 660,
+        "minWidth": 820,
+        "minHeight": 560,
+        "decorations": false,
+        "transparent": true,
+        "resizable": true,
+        "visible": true,
+        "theme": "Dark"
+      }
+    ],
+    "security": {
+      "csp": null
+    },
+    "trayIcon": {
+      "iconPath": "icons/32x32.png",
+      "iconAsTemplate": false
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "windows": {
+      "nsis": {
+        "displayLanguageSelector": false,
+        "languages": ["Japanese"],
+        "installMode": "currentUser"
+      }
+    }
+  }
+}

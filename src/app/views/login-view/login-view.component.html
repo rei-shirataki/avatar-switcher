@@ -1,0 +1,89 @@
+<div class="login-view">
+  <div class="login-card">
+    <div class="login-card__header">
+      <span class="login-card__logo">⬡</span>
+      <h1 class="login-card__title">AvatarSwitcher</h1>
+      <p class="login-card__subtitle">VRChatアカウントでログイン</p>
+    </div>
+
+    @if (step() === 'credentials') {
+      <form class="login-form" (ngSubmit)="onLogin()">
+        <div class="form-group">
+          <label class="form-label">ユーザー名またはメールアドレス</label>
+          <input
+            class="form-input"
+            type="text"
+            [(ngModel)]="username"
+            name="username"
+            autocomplete="username"
+            placeholder="username@example.com"
+            [disabled]="loading()"
+          />
+        </div>
+        <div class="form-group">
+          <label class="form-label">パスワード</label>
+          <input
+            class="form-input"
+            type="password"
+            [(ngModel)]="password"
+            name="password"
+            autocomplete="current-password"
+            placeholder="••••••••"
+            [disabled]="loading()"
+          />
+        </div>
+
+        @if (error()) {
+          <div class="form-error">⚠ {{ error() }}</div>
+        }
+
+        <button class="btn-primary" type="submit" [disabled]="loading()">
+          @if (loading()) {
+            <span class="spinner">◌</span> ログイン中...
+          } @else {
+            ログイン
+          }
+        </button>
+      </form>
+    }
+
+    @if (step() === '2fa') {
+      <div class="login-form">
+        <div class="twofa-info">
+          @if (twoFactorMethod() === 'emailOtp') {
+            <p>登録メールアドレスに送信されたコードを入力してください</p>
+          } @else {
+            <p>認証アプリの6桁のコードを入力してください</p>
+          }
+        </div>
+        <div class="form-group">
+          <label class="form-label">認証コード</label>
+          <input
+            class="form-input form-input--code"
+            type="text"
+            [(ngModel)]="twoFactorCode"
+            placeholder="000000"
+            maxlength="6"
+            [disabled]="loading()"
+            (keyup.enter)="onVerify2fa()"
+          />
+        </div>
+
+        @if (error()) {
+          <div class="form-error">⚠ {{ error() }}</div>
+        }
+
+        <div class="twofa-actions">
+          <button class="btn-secondary" type="button" (click)="backToCredentials()">← 戻る</button>
+          <button class="btn-primary" type="button" (click)="onVerify2fa()" [disabled]="loading()">
+            @if (loading()) {
+              <span class="spinner">◌</span>
+            } @else {
+              確認
+            }
+          </button>
+        </div>
+      </div>
+    }
+  </div>
+</div>

@@ -1,4 +1,4 @@
-import { Injectable, signal } from '@angular/core';
+import { Injectable, signal, computed } from '@angular/core';
 import { TauriService } from './tauri.service';
 import { VRCAvatar, AvatarFolder } from '../models/avatar.model';
 
@@ -8,19 +8,25 @@ export class AvatarService {
   private readonly _favorites = signal<VRCAvatar[]>([]);
   private readonly _folders = signal<AvatarFolder[]>([]);
   private readonly _loading = signal(false);
+  private readonly _loadingFavorites = signal(false);
   private readonly _switching = signal<string | null>(null);
 
   readonly avatars = this._avatars.asReadonly();
   readonly favorites = this._favorites.asReadonly();
   readonly folders = this._folders.asReadonly();
-  readonly isLoading = this._loading.asReadonly();
+  readonly isLoading = computed(() => this._loading() || this._loadingFavorites());
   readonly switching = this._switching.asReadonly();
 
   constructor(private tauri: TauriService) {}
 
   async loadFavorites(): Promise<void> {
-    const favs = await this.tauri.invoke<VRCAvatar[]>('vrchat_get_favorite_avatars');
-    this._favorites.set(favs);
+    this._loadingFavorites.set(true);
+    try {
+      const favs = await this.tauri.invoke<VRCAvatar[]>('vrchat_get_favorite_avatars');
+      this._favorites.set(favs);
+    } finally {
+      this._loadingFavorites.set(false);
+    }
   }
 
   async loadAvatars(): Promise<void> {

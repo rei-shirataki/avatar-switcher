@@ -235,10 +235,6 @@
     <div class="detail-backdrop" (click)="detailAvatar.set(null)"></div>
     <div class="detail-panel">
       <div class="detail-panel__header">
-        <div class="detail-panel__title-wrap">
-          <div class="detail-panel__name" [title]="detailAvatar()!.name">{{ detailAvatar()!.name }}</div>
-          <div class="detail-panel__author">by {{ detailAvatar()!.authorName }}</div>
-        </div>
         <button class="detail-panel__close" (click)="detailAvatar.set(null)" title="閉じる">
           <app-icon name="close" [size]="14"/>
         </button>
@@ -265,6 +261,11 @@
       </div>
 
       <div class="detail-panel__body">
+        <div class="detail-panel__title-wrap">
+          <div class="detail-panel__name" [title]="detailAvatar()!.name">{{ detailAvatar()!.name }}</div>
+          <div class="detail-panel__author">by {{ detailAvatar()!.authorName }}</div>
+        </div>
+
         <div class="detail-panel__row">
           <span class="detail-panel__badge" [class]="'badge-' + detailAvatar()!.releaseStatus">
             {{ detailAvatar()!.releaseStatus === 'public' ? '公開' : '非公開' }}

@@ -96,6 +96,8 @@ pub fn run() {
             vrchat::commands::vrchat_get_my_avatars,
             vrchat::commands::vrchat_get_favorite_avatars,
             vrchat::commands::vrchat_select_avatar,
+            vrchat::commands::vrchat_update_avatar,
+            vrchat::commands::vrchat_update_avatar_image,
             // OSC
             osc::commands::osc_change_avatar,
             osc::commands::osc_get_status,
@@ -107,6 +109,10 @@ pub fn run() {
             storage::commands::folders_delete,
             storage::commands::folders_add_avatar,
             storage::commands::folders_remove_avatar,
+            // Storage (avatar overrides)
+            storage::commands::avatar_overrides_get_all,
+            storage::commands::avatar_overrides_set,
+            storage::commands::avatar_overrides_delete,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

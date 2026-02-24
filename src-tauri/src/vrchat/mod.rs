@@ -1,6 +1,7 @@
 pub mod auth;
 pub mod avatars;
 pub mod commands;
+pub mod files;
 pub mod models;
 
 pub async fn init(app: &tauri::AppHandle) {

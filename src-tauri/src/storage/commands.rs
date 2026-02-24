@@ -1,9 +1,11 @@
+use std::collections::HashMap;
 use tauri::AppHandle;
 use tauri_plugin_store::StoreExt;
-use crate::storage::AvatarFolder;
+use crate::storage::{AvatarFolder, AvatarOverride};
 
 const STORE_PATH: &str = "app-settings.json";
 const FOLDERS_KEY: &str = "avatar_folders";
+const OVERRIDES_KEY: &str = "avatar_overrides";
 
 fn load_folders(app: &AppHandle) -> Vec<AvatarFolder> {
     app.store(STORE_PATH)
@@ -91,5 +93,60 @@ pub async fn folders_remove_avatar(
         f.avatar_ids.retain(|id| id != &avatar_id);
     }
     save_folders(&app, &folders);
+    Ok(())
+}
+
+// ── Avatar overrides ──────────────────────────────────────────────────────────
+
+fn load_overrides(app: &AppHandle) -> HashMap<String, AvatarOverride> {
+    app.store(STORE_PATH)
+        .ok()
+        .and_then(|store| {
+            store
+                .get(OVERRIDES_KEY)
+                .and_then(|v| serde_json::from_value(v.clone()).ok())
+        })
+        .unwrap_or_default()
+}
+
+fn save_overrides(app: &AppHandle, map: &HashMap<String, AvatarOverride>) {
+    if let Ok(store) = app.store(STORE_PATH) {
+        if let Ok(value) = serde_json::to_value(map) {
+            store.set(OVERRIDES_KEY, value);
+            store.save().ok();
+        }
+    }
+}
+
+#[tauri::command]
+pub async fn avatar_overrides_get_all(app: AppHandle) -> Result<Vec<AvatarOverride>, String> {
+    Ok(load_overrides(&app).into_values().collect())
+}
+
+#[tauri::command]
+pub async fn avatar_overrides_set(
+    app: AppHandle,
+    avatar_id: String,
+    custom_name: Option<String>,
+    custom_thumbnail: Option<String>,
+) -> Result<AvatarOverride, String> {
+    let mut map = load_overrides(&app);
+    let existing = map.get(&avatar_id).cloned().unwrap_or_default();
+    let updated = AvatarOverride {
+        avatar_id: avatar_id.clone(),
+        // None 引数 = 変更なし → 既存値を引き継ぐ
+        custom_name: custom_name.or(existing.custom_name),
+        custom_thumbnail: custom_thumbnail.or(existing.custom_thumbnail),
+    };
+    map.insert(avatar_id, updated.clone());
+    save_overrides(&app, &map);
+    Ok(updated)
+}
+
+#[tauri::command]
+pub async fn avatar_overrides_delete(app: AppHandle, avatar_id: String) -> Result<(), String> {
+    let mut map = load_overrides(&app);
+    map.remove(&avatar_id);
+    save_overrides(&app, &map);
     Ok(())
 }

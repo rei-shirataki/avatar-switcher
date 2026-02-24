@@ -233,75 +233,132 @@
 
   <!-- Avatar detail panel -->
   @if (detailAvatar()) {
-    <div class="detail-backdrop" (click)="detailAvatar.set(null)"></div>
+    <div class="detail-backdrop" (click)="closeDetailPanel()"></div>
     <div class="detail-panel">
       <div class="detail-panel__header">
-        <button class="detail-panel__close" (click)="detailAvatar.set(null)" title="閉じる">
-          <app-icon name="close" [size]="14"/>
-        </button>
+        @if (detailEditMode()) {
+          <!-- 編集モード: キャンセル ─── 保存 -->
+          <button class="detail-panel__cancel-btn" (click)="cancelEdit()">キャンセル</button>
+          <span class="detail-panel__header-spacer"></span>
+          <button class="detail-panel__save-btn"
+                  (click)="saveEdit()"
+                  [disabled]="detailEditSaving()">
+            {{ detailEditSaving() ? '保存中…' : '保存' }}
+          </button>
+        } @else {
+          <!-- 通常モード: 編集アイコン（自作アバターのみ） ─── ✕ -->
+          @if (isDetailAvatarOwned()) {
+            <button class="detail-panel__edit-btn" (click)="startEdit()" title="編集">
+              <app-icon name="edit" [size]="14"/>
+            </button>
+          }
+          <span class="detail-panel__header-spacer"></span>
+          <button class="detail-panel__close" (click)="closeDetailPanel()" title="閉じる">
+            <app-icon name="close" [size]="14"/>
+          </button>
+        }
       </div>
 
+      <!-- サムネイル -->
       <div class="detail-panel__thumb">
-        @if (detailAvatar()!.thumbnailImageUrl) {
-          <!-- Low-res: always visible as base layer -->
-          <img class="detail-panel__thumb-low"
-               [src]="detailAvatar()!.thumbnailImageUrl"
-               [alt]="detailAvatar()!.name"/>
-          <!-- High-res: fades in once loaded -->
-          @if (detailAvatar()!.imageUrl) {
-            <img class="detail-panel__thumb-high"
-                 [src]="detailAvatar()!.imageUrl"
-                 [alt]="detailAvatar()!.name"
-                 [class.detail-panel__thumb-high--loaded]="detailHighResLoaded()"
-                 (load)="detailHighResLoaded.set(true)"
-                 (error)="detailHighResLoaded.set(false)"/>
+        @if (detailEditMode()) {
+          <!-- 編集モード: プレビュー + オーバーレイ -->
+          @if (editPreviewThumb) {
+            <img class="detail-panel__thumb-low"
+                 [src]="editPreviewThumb"
+                 [alt]="detailAvatar()!.name"/>
+          } @else {
+            <div class="detail-panel__thumb-placeholder">{{ detailAvatar()!.name.charAt(0) }}</div>
           }
+          <div class="detail-panel__thumb-overlay" (click)="thumbFileInput.click()">
+            <app-icon name="camera" [size]="22"/>
+            <span>画像を変更</span>
+          </div>
+          @if (hasCustomThumb) {
+            <button class="detail-panel__thumb-reset"
+                    (click)="resetThumbnail(); $event.stopPropagation()"
+                    title="元の画像に戻す">✕</button>
+          }
+          <input #thumbFileInput type="file" accept="image/*" hidden
+                 (change)="onThumbnailFileChange($event)"/>
         } @else {
-          <div class="detail-panel__thumb-placeholder">{{ detailAvatar()!.name.charAt(0) }}</div>
+          <!-- 通常モード: 既存の dual-layer 表示 -->
+          @if (detailAvatar()!.thumbnailImageUrl) {
+            <img class="detail-panel__thumb-low"
+                 [src]="detailAvatar()!.thumbnailImageUrl"
+                 [alt]="detailAvatar()!.name"/>
+            @if (detailAvatar()!.imageUrl) {
+              <img class="detail-panel__thumb-high"
+                   [src]="detailAvatar()!.imageUrl"
+                   [alt]="detailAvatar()!.name"
+                   [class.detail-panel__thumb-high--loaded]="detailHighResLoaded()"
+                   (load)="detailHighResLoaded.set(true)"
+                   (error)="detailHighResLoaded.set(false)"/>
+            }
+          } @else {
+            <div class="detail-panel__thumb-placeholder">{{ detailAvatar()!.name.charAt(0) }}</div>
+          }
         }
       </div>
 
       <div class="detail-panel__body">
         <div class="detail-panel__title-wrap">
-          <div class="detail-panel__name" [title]="detailAvatar()!.name">{{ detailAvatar()!.name }}</div>
+          <!-- 名前 -->
+          @if (detailEditMode()) {
+            <input class="detail-panel__name-input"
+                   [(ngModel)]="detailEditName"
+                   maxlength="64"
+                   placeholder="アバター名"/>
+          } @else {
+            <div class="detail-panel__name" [title]="detailAvatar()!.name">{{ detailAvatar()!.name }}</div>
+          }
           <div class="detail-panel__author">by {{ detailAvatar()!.authorName }}</div>
         </div>
 
-        <div class="detail-panel__row">
-          <span class="detail-panel__badge" [class]="'badge-' + detailAvatar()!.releaseStatus">
-            {{ detailAvatar()!.releaseStatus === 'public' ? '公開' : '非公開' }}
-          </span>
-          <span class="detail-panel__version">v{{ detailAvatar()!.version }}</span>
-        </div>
+        <!-- 編集モード: エラー -->
+        @if (detailEditMode() && detailEditError()) {
+          <div class="detail-panel__edit-error">{{ detailEditError() }}</div>
+        }
 
-        @if (displayableTags(detailAvatar()!.tags).length > 0) {
-          <div class="detail-panel__section">
-            <div class="detail-panel__section-label">タグ</div>
-            <div class="detail-panel__tags">
-              @for (tag of displayableTags(detailAvatar()!.tags); track tag) {
-                <span class="detail-panel__tag">{{ tag }}</span>
-              }
+        @if (!detailEditMode()) {
+          <div class="detail-panel__row">
+            <span class="detail-panel__badge" [class]="'badge-' + detailAvatar()!.releaseStatus">
+              {{ detailAvatar()!.releaseStatus === 'public' ? '公開' : '非公開' }}
+            </span>
+            <span class="detail-panel__version">v{{ detailAvatar()!.version }}</span>
+          </div>
+
+          @if (displayableTags(detailAvatar()!.tags).length > 0) {
+            <div class="detail-panel__section">
+              <div class="detail-panel__section-label">タグ</div>
+              <div class="detail-panel__tags">
+                @for (tag of displayableTags(detailAvatar()!.tags); track tag) {
+                  <span class="detail-panel__tag">{{ tag }}</span>
+                }
+              </div>
+            </div>
+          }
+
+          <div class="detail-panel__meta-group">
+            <div class="detail-panel__meta">
+              <span class="detail-panel__meta-label">作成日</span>
+              <span class="detail-panel__meta-value">{{ formatDate(detailAvatar()!.createdAt) }}</span>
+            </div>
+            <div class="detail-panel__meta">
+              <span class="detail-panel__meta-label">更新日</span>
+              <span class="detail-panel__meta-value">{{ formatDate(detailAvatar()!.updatedAt) }}</span>
             </div>
           </div>
         }
+      </div>
 
-        <div class="detail-panel__meta-group">
-          <div class="detail-panel__meta">
-            <span class="detail-panel__meta-label">作成日</span>
-            <span class="detail-panel__meta-value">{{ formatDate(detailAvatar()!.createdAt) }}</span>
-          </div>
-          <div class="detail-panel__meta">
-            <span class="detail-panel__meta-label">更新日</span>
-            <span class="detail-panel__meta-value">{{ formatDate(detailAvatar()!.updatedAt) }}</span>
-          </div>
+      @if (!detailEditMode()) {
+        <div class="detail-panel__footer">
+          <button class="detail-panel__switch-btn" (click)="onSwitch(detailAvatar()!.id); closeDetailPanel()">
+            <app-icon name="play" [size]="12"/>切り替え
+          </button>
         </div>
-      </div>
-
-      <div class="detail-panel__footer">
-        <button class="detail-panel__switch-btn" (click)="onSwitch(detailAvatar()!.id); detailAvatar.set(null)">
-          <app-icon name="play" [size]="12"/>切り替え
-        </button>
-      </div>
+      }
     </div>
   }
 </div>

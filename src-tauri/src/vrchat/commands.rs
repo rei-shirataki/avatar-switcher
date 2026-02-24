@@ -1,4 +1,4 @@
-use crate::vrchat::{auth, avatars};
+use crate::vrchat::{auth, avatars, files};
 use crate::vrchat::models::*;
 
 #[tauri::command]
@@ -34,4 +34,22 @@ pub async fn vrchat_get_favorite_avatars() -> Result<Vec<VRCAvatar>, String> {
 #[tauri::command]
 pub async fn vrchat_select_avatar(avatar_id: String) -> Result<VRCAvatar, String> {
     avatars::select_avatar(&avatar_id).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn vrchat_update_avatar(avatar_id: String, name: String) -> Result<VRCAvatar, String> {
+    avatars::update_avatar(&avatar_id, &name).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn vrchat_update_avatar_image(
+    avatar_id: String,
+    data_url: String,
+) -> Result<VRCAvatar, String> {
+    let image_url = files::upload_image(&data_url)
+        .await
+        .map_err(|e| e.to_string())?;
+    avatars::update_avatar_image(&avatar_id, &image_url)
+        .await
+        .map_err(|e| e.to_string())
 }

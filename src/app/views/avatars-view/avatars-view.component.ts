@@ -21,7 +21,14 @@ export class AvatarsViewComponent implements OnInit {
   showNewFolderInput = signal(false);
   newFolderName = '';
   successMessage = signal<string | null>(null);
-  detailAvatar = signal<VRCAvatar | null>(null);
+  // 詳細パネルの表示対象を ID で管理し、computed でオーバーライド適用済みデータを参照
+  // → 保存後に detailAvatar が自動更新される
+  private readonly _detailAvatarId = signal<string | null>(null);
+  readonly detailAvatar = computed(() => {
+    const id = this._detailAvatarId();
+    if (!id) return null;
+    return this.avatarService.allAvatarsWithOverrides().find(a => a.id === id) ?? null;
+  });
   detailHighResLoaded = signal(false);
   contextMenuFolder = signal<AvatarFolder | null>(null);
   contextMenuPos = signal({ x: 0, y: 0 });
@@ -32,6 +39,25 @@ export class AvatarsViewComponent implements OnInit {
   selectionMode = signal(false);
   selectedAvatarIds = signal<string[]>([]);
   bulkFolderId = '';
+
+  /** 詳細表示中のアバターが自分のアップロードかどうか */
+  readonly isDetailAvatarOwned = computed(() => {
+    const av = this.detailAvatar();
+    const uid = this.authService.user()?.id;
+    return !!av && !!uid && av.authorId === uid;
+  });
+
+  // ── 編集モード ──────────────────────────────────────────
+  detailEditMode = signal(false);
+  detailEditName = '';
+  /**
+   * null    = 変更なし（既存値をそのまま使う）
+   * 'reset' = カスタムサムネイルを削除してVRChatのURLに戻す
+   * string  = 新しく選択された base64 data URL
+   */
+  detailEditThumbnail = signal<string | null>(null);
+  detailEditSaving = signal(false);
+  detailEditError = signal<string | null>(null);
 
   readonly FAVORITES_TAB = '__favorites__';
   readonly UPLOADED_TAB = '__uploaded__';
@@ -49,19 +75,22 @@ export class AvatarsViewComponent implements OnInit {
   filteredAvatars = computed(() => {
     const query = this.searchQuery().toLowerCase();
     const folderId = this.selectedFolderId();
+    const all = this.avatarService.allAvatarsWithOverrides();
     let avatars: VRCAvatar[];
 
     if (folderId === this.FAVORITES_TAB) {
-      avatars = this.avatarService.favorites();
+      const favIds = new Set(this.avatarService.favorites().map(a => a.id));
+      avatars = all.filter(a => favIds.has(a.id));
     } else if (folderId === this.UPLOADED_TAB) {
-      avatars = this.avatarService.avatars();
+      const upIds = new Set(this.avatarService.avatars().map(a => a.id));
+      avatars = all.filter(a => upIds.has(a.id));
     } else if (folderId) {
       const folder = this.avatarService.folders().find(f => f.id === folderId);
       avatars = folder
-        ? this.avatarService.allAvatars().filter(a => folder.avatarIds.includes(a.id))
+        ? all.filter(a => folder.avatarIds.includes(a.id))
         : [];
     } else {
-      avatars = this.avatarService.allAvatars();
+      avatars = all;
     }
 
     if (query) {
@@ -101,6 +130,7 @@ export class AvatarsViewComponent implements OnInit {
       this.avatarService.loadAvatars(),
       this.avatarService.loadFavorites(),
       this.avatarService.loadFolders(),
+      this.avatarService.loadOverrides(),
     ]);
   }
 
@@ -242,8 +272,16 @@ export class AvatarsViewComponent implements OnInit {
   }
 
   openDetailPanel(avatar: VRCAvatar) {
-    this.detailAvatar.set(avatar);
+    this._detailAvatarId.set(avatar.id);
     this.detailHighResLoaded.set(false);
+    this.detailEditMode.set(false);
+    this.detailEditThumbnail.set(null);
+  }
+
+  closeDetailPanel() {
+    this._detailAvatarId.set(null);
+    this.detailEditMode.set(false);
+    this.detailEditThumbnail.set(null);
   }
 
   formatDate(iso: string): string {
@@ -262,5 +300,107 @@ export class AvatarsViewComponent implements OnInit {
       !t.startsWith('debug_') &&
       !t.startsWith('system_')
     );
+  }
+
+  // ── 編集モード ──────────────────────────────────────────
+
+  startEdit() {
+    const av = this.detailAvatar();
+    if (!av) return;
+    // 編集の起点は VRChat 上の実際の名前（ローカルオーバーライドではなく）
+    // allAvatarsWithOverrides 経由で来る av.name はオーバーライド後の値なので、
+    // 元の VRChat 名は avatarService.avatars() か favorites() から取得する
+    const originalAvatar =
+      this.avatarService.avatars().find(a => a.id === av.id) ??
+      this.avatarService.favorites().find(a => a.id === av.id);
+    this.detailEditName = originalAvatar?.name ?? av.name;
+    this.detailEditThumbnail.set(null);
+    this.detailEditError.set(null);
+    this.detailEditMode.set(true);
+  }
+
+  cancelEdit() {
+    this.detailEditMode.set(false);
+    this.detailEditThumbnail.set(null);
+    this.detailEditError.set(null);
+  }
+
+  onThumbnailFileChange(event: Event) {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      this.detailEditThumbnail.set(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+    // 同じファイルを再選択できるようにリセット
+    input.value = '';
+  }
+
+  resetThumbnail() {
+    this.detailEditThumbnail.set('reset');
+  }
+
+  /** 編集プレビュー用に表示すべきサムネイル URL を返す */
+  get editPreviewThumb(): string {
+    const av = this.detailAvatar()!;
+    const newThumb = this.detailEditThumbnail();
+    if (newThumb === 'reset') return av.imageUrl ?? av.thumbnailImageUrl;
+    if (newThumb) return newThumb;
+    // null = 変更なし → 既存オーバーライドまたは VRChat 高解像度 URL
+    const ov = this.avatarService.overrides()[av.id];
+    return ov?.customThumbnail ?? av.imageUrl ?? av.thumbnailImageUrl;
+  }
+
+  /** 現在カスタムサムネイルが設定されているか（リセット前提の表示に使用） */
+  get hasCustomThumb(): boolean {
+    const av = this.detailAvatar();
+    if (!av) return false;
+    const newThumb = this.detailEditThumbnail();
+    if (newThumb === 'reset') return false;
+    if (newThumb) return true;
+    return !!(this.avatarService.overrides()[av.id]?.customThumbnail);
+  }
+
+  async saveEdit() {
+    const av = this.detailAvatar();
+    if (!av || this.detailEditSaving()) return;
+    this.detailEditSaving.set(true);
+    this.detailEditError.set(null);
+    try {
+      const newName = this.detailEditName.trim();
+      const thumbnail = this.detailEditThumbnail() as string | null;
+
+      // VRChat 上の元の名前を取得して変更有無を判定
+      const originalAvatar =
+        this.avatarService.avatars().find(a => a.id === av.id) ??
+        this.avatarService.favorites().find(a => a.id === av.id);
+      const vrcName = originalAvatar?.name ?? av.name;
+
+      if (newName && newName !== vrcName) {
+        // 名前変更 → VRChat API で反映（自分が作成したアバターのみ可能）
+        await this.avatarService.updateAvatarName(av.id, newName);
+      }
+
+      // サムネイル変更 → VRChat サーバーにアップロード（自分のアバターのみこのパスに来る）
+      if (thumbnail !== null) {
+        if (thumbnail !== 'reset') {
+          await this.avatarService.updateAvatarImage(av.id, thumbnail);
+        } else {
+          // 'reset' = ローカルオーバーライドをクリア
+          await this.avatarService.saveOverride(av.id, undefined, 'reset');
+        }
+      }
+
+      this.detailEditMode.set(false);
+      this.detailEditThumbnail.set(null);
+      this.showSuccess('変更を保存しました');
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      this.detailEditError.set(msg || '保存に失敗しました');
+    } finally {
+      this.detailEditSaving.set(false);
+    }
   }
 }

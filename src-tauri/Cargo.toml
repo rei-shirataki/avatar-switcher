@@ -41,6 +41,7 @@ base64 = "0.22"
 urlencoding = "2"
 log = "0.4"
 uuid = { version = "1", features = ["v4"] }
+md5 = "0.7"
 
 [features]
 custom-protocol = ["tauri/custom-protocol"]

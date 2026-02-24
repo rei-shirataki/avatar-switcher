@@ -84,3 +84,54 @@ pub async fn select_avatar(avatar_id: &str) -> Result<VRCAvatar> {
     let avatar: VRCAvatar = resp.json().await?;
     Ok(avatar)
 }
+
+/// VRChat API でアバターの画像を更新する。
+/// `files::upload_image` で取得した VRChat API プロキシ URL を imageUrl に指定する。
+pub async fn update_avatar_image(avatar_id: &str, image_url: &str) -> Result<VRCAvatar> {
+    let client = get_client();
+    let resp = client
+        .put(format!("{}/avatars/{}", VRCHAT_API, avatar_id))
+        .json(&serde_json::json!({ "imageUrl": image_url }))
+        .send()
+        .await?;
+
+    if resp.status() == reqwest::StatusCode::FORBIDDEN {
+        return Err(anyhow::anyhow!(
+            "このアバターは編集できません（作成者のみ変更可能です）"
+        ));
+    }
+    if !resp.status().is_success() {
+        return Err(anyhow::anyhow!(
+            "アバター画像の更新に失敗しました: {}",
+            resp.status()
+        ));
+    }
+
+    Ok(resp.json::<VRCAvatar>().await?)
+}
+
+/// VRChat API でアバターのメタデータ（名前など）を更新する。
+/// 自分が作成したアバターのみ更新可能。
+pub async fn update_avatar(avatar_id: &str, name: &str) -> Result<VRCAvatar> {
+    let client = get_client();
+    let body = serde_json::json!({ "name": name });
+    let resp = client
+        .put(format!("{}/avatars/{}", VRCHAT_API, avatar_id))
+        .json(&body)
+        .send()
+        .await?;
+
+    if resp.status() == reqwest::StatusCode::FORBIDDEN {
+        return Err(anyhow::anyhow!(
+            "このアバターは編集できません（作成者のみ変更可能です）"
+        ));
+    }
+    if !resp.status().is_success() {
+        return Err(anyhow::anyhow!(
+            "アバターの更新に失敗しました: {}",
+            resp.status()
+        ));
+    }
+
+    Ok(resp.json::<VRCAvatar>().await?)
+}

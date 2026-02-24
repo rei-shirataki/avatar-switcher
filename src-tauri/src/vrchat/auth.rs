@@ -73,8 +73,9 @@ pub async fn login(username: &str, password: &str) -> Result<LoginResult> {
         .await?;
 
     let status = resp.status();
-    let body: AuthUserResponse = resp.json().await?;
 
+    // Check authentication failure before attempting JSON parse so that a
+    // non-standard 401 body never causes a misleading parse error.
     if status == 401 {
         return Ok(LoginResult {
             success: false,
@@ -85,6 +86,7 @@ pub async fn login(username: &str, password: &str) -> Result<LoginResult> {
         });
     }
 
+    let body: AuthUserResponse = resp.json().await?;
     persist_cookies();
 
     if let Some(methods) = body.requires_two_factor_auth {
@@ -172,12 +174,14 @@ pub async fn get_current_user() -> Result<Option<VRCUser>> {
 
 pub async fn logout() -> Result<()> {
     let client = get_client();
-    client
+    // Best-effort: invalidate session server-side. Ignore errors so that a network
+    // failure cannot prevent local cookie cleanup.
+    let _ = client
         .put(format!("{}/logout", VRCHAT_API))
         .send()
-        .await?;
+        .await;
 
-    // Clear cookies
+    // Always clear local cookies regardless of server response.
     if let Some(store) = COOKIE_STORE.get() {
         let mut store = store.lock().unwrap();
         *store = CookieStore::new(None);

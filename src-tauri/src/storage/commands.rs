@@ -6,17 +6,22 @@ const STORE_PATH: &str = "app-settings.json";
 const FOLDERS_KEY: &str = "avatar_folders";
 
 fn load_folders(app: &AppHandle) -> Vec<AvatarFolder> {
-    let store = app.store(STORE_PATH).unwrap();
-    store
-        .get(FOLDERS_KEY)
-        .and_then(|v| serde_json::from_value(v.clone()).ok())
+    app.store(STORE_PATH)
+        .ok()
+        .and_then(|store| {
+            store
+                .get(FOLDERS_KEY)
+                .and_then(|v| serde_json::from_value(v.clone()).ok())
+        })
         .unwrap_or_default()
 }
 
 fn save_folders(app: &AppHandle, folders: &[AvatarFolder]) {
     if let Ok(store) = app.store(STORE_PATH) {
-        store.set(FOLDERS_KEY, serde_json::to_value(folders).unwrap());
-        store.save().ok();
+        if let Ok(value) = serde_json::to_value(folders) {
+            store.set(FOLDERS_KEY, value);
+            store.save().ok();
+        }
     }
 }
 

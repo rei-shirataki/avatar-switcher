@@ -64,7 +64,7 @@
       (click)="selectedFolderId.set(null)"
     >
       すべて
-      <span class="folder-tab__count">{{ allAvatars().length }}</span>
+      <span class="folder-tab__count">{{ avatarService.allAvatars().length }}</span>
     </button>
     <button
       class="folder-tab folder-tab--favorites"
@@ -157,6 +157,7 @@
         @for (avatar of filteredAvatars(); track avatar.id) {
           <app-avatar-card
             [avatar]="avatar"
+            [isSwitching]="avatarService.switching() === avatar.id"
             [folders]="avatarService.folders()"
             [selectionMode]="selectionMode()"
             [selected]="selectedAvatarIds().includes(avatar.id)"

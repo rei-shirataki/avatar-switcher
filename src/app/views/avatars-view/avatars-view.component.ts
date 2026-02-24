@@ -20,7 +20,6 @@ export class AvatarsViewComponent implements OnInit {
   selectedFolderId = signal<string | null>(null);
   showNewFolderInput = signal(false);
   newFolderName = '';
-  switchingId = signal<string | null>(null);
   successMessage = signal<string | null>(null);
   detailAvatar = signal<VRCAvatar | null>(null);
   detailHighResLoaded = signal(false);
@@ -47,17 +46,6 @@ export class AvatarsViewComponent implements OnInit {
 
   sortMode = signal<string>('updated-desc');
 
-  // Uploaded + favorites merged, deduplicated by ID.
-  // Used for "すべて" and folder lookups so favorited-only avatars are reachable.
-  allAvatars = computed(() => {
-    const map = new Map<string, VRCAvatar>();
-    for (const a of this.avatarService.avatars()) map.set(a.id, a);
-    for (const a of this.avatarService.favorites()) {
-      if (!map.has(a.id)) map.set(a.id, a);
-    }
-    return Array.from(map.values());
-  });
-
   filteredAvatars = computed(() => {
     const query = this.searchQuery().toLowerCase();
     const folderId = this.selectedFolderId();
@@ -70,10 +58,10 @@ export class AvatarsViewComponent implements OnInit {
     } else if (folderId) {
       const folder = this.avatarService.folders().find(f => f.id === folderId);
       avatars = folder
-        ? this.allAvatars().filter(a => folder.avatarIds.includes(a.id))
+        ? this.avatarService.allAvatars().filter(a => folder.avatarIds.includes(a.id))
         : [];
     } else {
-      avatars = this.allAvatars();
+      avatars = this.avatarService.allAvatars();
     }
 
     if (query) {
@@ -117,14 +105,11 @@ export class AvatarsViewComponent implements OnInit {
   }
 
   async onSwitch(avatarId: string) {
-    this.switchingId.set(avatarId);
     try {
       await this.avatarService.switchAvatar(avatarId);
       this.showSuccess('アバターを切り替えました');
     } catch (e: unknown) {
       console.error(e);
-    } finally {
-      this.switchingId.set(null);
     }
   }
 
@@ -259,10 +244,6 @@ export class AvatarsViewComponent implements OnInit {
   openDetailPanel(avatar: VRCAvatar) {
     this.detailAvatar.set(avatar);
     this.detailHighResLoaded.set(false);
-  }
-
-  isSwitching(avatarId: string): boolean {
-    return this.switchingId() === avatarId;
   }
 
   formatDate(iso: string): string {

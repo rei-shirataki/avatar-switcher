@@ -17,6 +17,17 @@ export class AvatarService {
   readonly isLoading = computed(() => this._loading() || this._loadingFavorites());
   readonly switching = this._switching.asReadonly();
 
+  // Uploaded + favorites merged, deduplicated by ID so that favorited-only
+  // avatars are reachable from "すべて" and folder lookups.
+  readonly allAvatars = computed(() => {
+    const map = new Map<string, VRCAvatar>();
+    for (const a of this._avatars()) map.set(a.id, a);
+    for (const a of this._favorites()) {
+      if (!map.has(a.id)) map.set(a.id, a);
+    }
+    return Array.from(map.values());
+  });
+
   constructor(private tauri: TauriService) {}
 
   async loadFavorites(): Promise<void> {

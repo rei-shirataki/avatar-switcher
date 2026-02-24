@@ -16,12 +16,12 @@ export interface CardContextMenuEvent {
   template: `
     <div
       class="avatar-card"
-      [class.avatar-card--switching]="isSwitching()"
+      [class.avatar-card--switching]="isSwitching"
       [class.avatar-card--selected]="selected"
       [class.avatar-card--selection-mode]="selectionMode"
       (mouseenter)="hovered.set(true)"
       (mouseleave)="hovered.set(false)"
-      (click)="selectionMode && selectToggle.emit()"
+      (click)="selectionMode ? selectToggle.emit() : openDetail.emit(avatar)"
       (contextmenu)="onCardContextMenu($event)"
     >
       <div class="avatar-card__thumb">
@@ -42,12 +42,12 @@ export interface CardContextMenuEvent {
             @if (selected) { <span>✓</span> }
           </div>
         }
-        @if (!selectionMode && hovered() && !isSwitching()) {
+        @if (!selectionMode && hovered() && !isSwitching) {
           <div class="avatar-card__overlay" (click)="onSwitch(); $event.stopPropagation()">
             <span class="avatar-card__switch-btn"><app-icon name="play" [size]="11"/> 切り替え</span>
           </div>
         }
-        @if (isSwitching()) {
+        @if (isSwitching) {
           <div class="avatar-card__overlay avatar-card__overlay--switching">
             <app-icon class="avatar-card__spinner" name="spinner" [size]="24"/>
           </div>
@@ -94,7 +94,7 @@ export interface CardContextMenuEvent {
 })
 export class AvatarCardComponent {
   @Input({ required: true }) avatar!: VRCAvatar;
-  @Input() isSwitching = signal(false);
+  @Input() isSwitching = false;
   @Input() folders: AvatarFolder[] = [];
   @Input() selected = false;
   @Input() selectionMode = false;

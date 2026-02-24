@@ -361,6 +361,7 @@
 .detail-backdrop {
   position: fixed;
   inset: 0;
+  top: 36px; // below title bar
   z-index: 300;
   background: rgba(0, 0, 0, 0.45);
 }

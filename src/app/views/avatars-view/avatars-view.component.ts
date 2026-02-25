@@ -59,6 +59,11 @@ export class AvatarsViewComponent implements OnInit {
   detailEditSaving = signal(false);
   detailEditError = signal<string | null>(null);
 
+  private readonly MAX_DIMENSION    = 2048;
+  private readonly MAX_FILE_BYTES   = 10 * 1024 * 1024;
+  private readonly JPEG_QUALITY_STEP = 0.1;
+  private readonly JPEG_QUALITY_MIN  = 0.5;
+
   readonly FAVORITES_TAB = '__favorites__';
   readonly UPLOADED_TAB = '__uploaded__';
 
@@ -330,12 +335,74 @@ export class AvatarsViewComponent implements OnInit {
     const file = input.files?.[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = () => {
-      this.detailEditThumbnail.set(reader.result as string);
+    reader.onload = async () => {
+      try {
+        const processed = await this.processAvatarImage(reader.result as string);
+        this.detailEditThumbnail.set(processed);
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        this.detailEditError.set(msg);
+      }
     };
     reader.readAsDataURL(file);
     // 同じファイルを再選択できるようにリセット
     input.value = '';
+  }
+
+  /** Canvas API で VRChat アップロード制限（2048px / 10MB）に収める */
+  private processAvatarImage(dataUrl: string): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onerror = () => reject(new Error('画像の読み込みに失敗しました'));
+      img.onload = () => {
+        try {
+          const scale = Math.min(
+            1,
+            this.MAX_DIMENSION / img.naturalWidth,
+            this.MAX_DIMENSION / img.naturalHeight,
+          );
+          const targetW = Math.round(img.naturalWidth  * scale);
+          const targetH = Math.round(img.naturalHeight * scale);
+
+          const canvas = document.createElement('canvas');
+          canvas.width  = targetW;
+          canvas.height = targetH;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) { reject(new Error('Canvas コンテキストを取得できませんでした')); return; }
+          ctx.drawImage(img, 0, 0, targetW, targetH);
+
+          // JPEG かつリサイズ不要 → バイト数のみ確認して無変換で返す
+          if (scale === 1 && dataUrl.startsWith('data:image/jpeg')) {
+            const b64 = dataUrl.split(',')[1] ?? '';
+            if (Math.ceil(b64.length * 0.75) <= this.MAX_FILE_BYTES) {
+              resolve(dataUrl); return;
+            }
+          }
+
+          // JPEG エンコード → サイズが収まるまで quality を下げる
+          let quality = 0.92;
+          let result  = canvas.toDataURL('image/jpeg', quality);
+          while (true) {
+            const b64   = result.split(',')[1] ?? '';
+            const bytes = Math.ceil(b64.length * 0.75);
+            if (bytes <= this.MAX_FILE_BYTES) { resolve(result); return; }
+
+            quality -= this.JPEG_QUALITY_STEP;
+            if (quality < this.JPEG_QUALITY_MIN) {
+              reject(new Error(
+                `画像ファイルが大きすぎます（品質 ${Math.round(this.JPEG_QUALITY_MIN * 100)}% ` +
+                `でも ${(bytes / 1024 / 1024).toFixed(1)} MB）。より小さい画像を選択してください。`
+              ));
+              return;
+            }
+            result = canvas.toDataURL('image/jpeg', quality);
+          }
+        } catch (err) {
+          reject(err instanceof Error ? err : new Error(String(err)));
+        }
+      };
+      img.src = dataUrl;
+    });
   }
 
   resetThumbnail() {

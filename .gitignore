@@ -5,9 +5,11 @@ dist/
 
 # Rust / Cargo
 src-tauri/target/
+.cargo/
 
 # Tauri
 src-tauri/gen/
+src-tauri/gen/schemas/
 
 # OS
 .DS_Store
@@ -16,12 +18,23 @@ Thumbs.db
 # IDE
 .vscode/
 .idea/
+*.swp
+*.swo
 
-# Env / secrets
+# Env / secrets / Local data
 .env
 *.env.local
+key.bin
+cookies.json
+cookies.enc
 
-# Claude Code
+# Logs and temporary files
+.output.txt
+*.log
+logs/
+tmp/
+
+# Tool-specific
 .claude/
 .cursor/
 .agent/

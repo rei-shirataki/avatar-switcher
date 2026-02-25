@@ -28,6 +28,10 @@ pub async fn osc_get_status() -> Result<OscStatus, String> {
 
 #[tauri::command]
 pub async fn osc_send_parameter(address: String, value: OscValue) -> Result<(), String> {
+    // Only allow VRChat avatar parameter addresses to prevent misuse.
+    if !address.starts_with("/avatar/parameters/") {
+        return Err("OSC address must start with /avatar/parameters/".into());
+    }
     let osc_val = match value {
         OscValue::Float(v) => OscType::Float(v),
         OscValue::Int(v) => OscType::Int(v),

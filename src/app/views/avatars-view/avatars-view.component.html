@@ -93,6 +93,7 @@
               class="folder-name-input"
               type="text"
               [(ngModel)]="renamingFolderName"
+              maxlength="64"
               (keyup.enter)="confirmRenameFolder()"
               (keyup.escape)="cancelRenameFolder()"
               autofocus
@@ -118,6 +119,7 @@
           class="folder-name-input"
           type="text"
           [(ngModel)]="newFolderName"
+          maxlength="64"
           placeholder="フォルダ名"
           (keyup.enter)="createFolder()"
           (keyup.escape)="showNewFolderInput.set(false)"

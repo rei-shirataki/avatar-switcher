@@ -34,8 +34,10 @@ export class LoginViewComponent {
     try {
       const result = await this.auth.login(this.username, this.password);
       if (result.success) {
+        this.password = '';
         this.router.navigate(['/avatars']);
       } else if (result.requires2fa) {
+        this.password = ''; // no longer needed; subsequent requests use the session cookie
         this.twoFactorMethod.set(result.method);
         this.step.set('2fa');
       } else {

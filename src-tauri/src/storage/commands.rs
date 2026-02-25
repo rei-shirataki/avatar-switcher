@@ -32,13 +32,25 @@ pub async fn folders_get_all(app: AppHandle) -> Result<Vec<AvatarFolder>, String
     Ok(load_folders(&app))
 }
 
+fn validate_folder_name(name: &str) -> Result<(), String> {
+    let trimmed = name.trim();
+    if trimmed.is_empty() {
+        return Err("フォルダ名を入力してください".into());
+    }
+    if trimmed.chars().count() > 64 {
+        return Err("フォルダ名は64文字以内で入力してください".into());
+    }
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn folders_create(app: AppHandle, name: String) -> Result<AvatarFolder, String> {
+    validate_folder_name(&name)?;
     let mut folders = load_folders(&app);
     let order = folders.len() as u32;
     let folder = AvatarFolder {
         id: uuid::Uuid::new_v4().to_string(),
-        name,
+        name: name.trim().to_string(),
         avatar_ids: vec![],
         color: None,
         order,
@@ -50,6 +62,7 @@ pub async fn folders_create(app: AppHandle, name: String) -> Result<AvatarFolder
 
 #[tauri::command]
 pub async fn folders_update(app: AppHandle, folder: AvatarFolder) -> Result<(), String> {
+    validate_folder_name(&folder.name)?;
     let mut folders = load_folders(&app);
     if let Some(f) = folders.iter_mut().find(|f| f.id == folder.id) {
         *f = folder;

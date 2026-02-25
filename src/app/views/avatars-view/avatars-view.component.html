@@ -30,7 +30,7 @@
       (click)="toggleSelectionMode()"
       title="複数選択"
     ><app-icon name="select" [size]="16"/></button>
-    <button class="btn-icon" (click)="avatarService.loadAvatars()" title="再読み込み"><app-icon name="reload" [size]="16"/></button>
+    <button class="btn-icon" (click)="avatarService.refresh()" title="再読み込み"><app-icon name="reload" [size]="16"/></button>
   </div>
 
   <!-- Bulk action bar -->

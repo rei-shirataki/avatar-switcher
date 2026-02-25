@@ -45,7 +45,34 @@ export class AvatarService {
     });
   });
 
+  private _initPromise: Promise<void> | null = null;
+
   constructor(private tauri: TauriService) {}
+
+  /**
+   * 初回のみ全データをフェッチし、2回目以降はキャッシュ済みの Promise を返す。
+   * タブ切り替え時に不要な再フェッチを防ぐ。
+   * エラー時は _initPromise をリセットし、次回再試行できるようにする。
+   */
+  ensureLoaded(): Promise<void> {
+    if (this._initPromise) return this._initPromise;
+    this._initPromise = Promise.all([
+      this.loadAvatars(),
+      this.loadFavorites(),
+      this.loadFolders(),
+      this.loadOverrides(),
+    ]).then(() => {}).catch((e) => {
+      this._initPromise = null;
+      throw e;
+    });
+    return this._initPromise;
+  }
+
+  /** データを強制的に再フェッチする（手動更新ボタン用）。 */
+  async refresh(): Promise<void> {
+    this._initPromise = null;
+    await this.ensureLoaded();
+  }
 
   async loadFavorites(): Promise<void> {
     this._loadingFavorites.set(true);
@@ -59,16 +86,17 @@ export class AvatarService {
 
   async loadAvatars(): Promise<void> {
     this._loading.set(true);
+    // 先にクリアして古いデータをリセット
+    this._avatars.set([]);
     try {
-      const results: VRCAvatar[] = [];
       let offset = 0;
       while (true) {
         const page = await this.tauri.invoke<VRCAvatar[]>('vrchat_get_my_avatars', { offset });
-        results.push(...page);
+        // ページ単位で即時反映し、最初の 100 件をすぐに表示する
+        this._avatars.update(current => [...current, ...page]);
         if (page.length < 100) break;
         offset += 100;
       }
-      this._avatars.set(results);
     } finally {
       this._loading.set(false);
     }

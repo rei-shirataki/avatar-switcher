@@ -131,12 +131,7 @@ export class AvatarsViewComponent implements OnInit {
   ) {}
 
   async ngOnInit() {
-    await Promise.all([
-      this.avatarService.loadAvatars(),
-      this.avatarService.loadFavorites(),
-      this.avatarService.loadFolders(),
-      this.avatarService.loadOverrides(),
-    ]);
+    await this.avatarService.ensureLoaded();
   }
 
   async onSwitch(avatarId: string) {

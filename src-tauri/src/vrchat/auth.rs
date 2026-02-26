@@ -51,44 +51,31 @@ fn get_encryption_key() -> Option<&'static [u8; 32]> {
 }
 
 fn init_encryption_key() -> Option<[u8; 32]> {
-    // 1. Keyring is the primary source of truth.
-    if let Some(key) = try_keyring_key_load() {
-        // If it was also in key.bin, remove the less-secure backup.
-        remove_key_file();
+    // Try keyring first (more secure), then key.bin as offline backup.
+    let key = try_keyring_key_load().or_else(|| try_file_key_load());
+
+    if let Some(key) = key {
+        // Always persist to BOTH locations so that a future keyring failure
+        // does not invalidate cookies.enc.  If one location already has the
+        // correct value this is a cheap no-op.
+        let _ = try_keyring_save(&key);
+        let _ = save_key_to_file(&key);
         return Some(key);
     }
 
-    // 2. Migration: load from key.bin, try to persist to keyring, and then delete key.bin.
-    if let Some(key) = try_file_key_load() {
-        log::info!("Migrating encryption key from key.bin → keyring.");
-        if try_keyring_save(&key) {
-            remove_key_file();
-        }
-        return Some(key);
-    }
-
-    // 3. Neither source had a key — generate a fresh one.
+    // No persisted key found — generate a fresh one and save to both.
     let mut key = [0u8; 32];
     OsRng.fill_bytes(&mut key);
     log::info!("Generated new encryption key.");
 
-    // Prefer keyring, fall back to key.bin if keyring is unavailable.
-    if try_keyring_save(&key) {
-        Some(key)
-    } else if save_key_to_file(&key) {
+    let in_keyring = try_keyring_save(&key);
+    let in_file = save_key_to_file(&key);
+
+    if in_keyring || in_file {
         Some(key)
     } else {
         log::warn!("Cannot persist encryption key. Cookies will be stored unencrypted.");
         None
-    }
-}
-
-fn remove_key_file() {
-    if let Some(path) = KEY_FILE_PATH.get() {
-        if path.exists() {
-            let _ = std::fs::remove_file(path);
-            log::info!("Removed unsecure key.bin (now using OS keyring).");
-        }
     }
 }
 
@@ -184,24 +171,20 @@ fn decrypt_cookies(data: &[u8]) -> Option<Vec<u8>> {
 
 // ── Cookie persistence ────────────────────────────────────────────────────────
 
-/// Load the cookie store from disk.
+/// Cookie ストアをディスクから読み込む。
 ///
-/// Priority:
-/// 1. `cookies.enc` — encrypted binary (normal case).
-/// 2. `cookies.json` — legacy plain-text or encryption fallback.
+/// 優先順位:
+/// 1. `cookies.enc` — 暗号化バイナリ（通常）。
+/// 2. `cookies.json` — 暗号化不可時のフォールバック。
 ///
-/// The plain-text file is intentionally NOT deleted here; `persist_cookies()`
-/// removes it only after a successful encrypted write, guaranteeing we never
-/// lose cookies if encryption fails mid-write.
-#[allow(deprecated)]
+/// `cookies.json` はここでは削除しない。`persist_cookies()` が暗号化書き込み
+/// 成功後に削除することで、書き込み途中の失敗でクッキーを失わないようにする。
 fn load_cookie_store(enc_path: &PathBuf, legacy_path: &PathBuf) -> CookieStore {
     // Try encrypted store first.
     if enc_path.exists() {
         if let Ok(data) = std::fs::read(enc_path) {
             if let Some(json) = decrypt_cookies(&data) {
-                if let Ok(store) = CookieStore::load_json(json.as_slice()) {
-                    return store;
-                }
+                return deserialize_cookie_store(&json);
             }
         }
         // cookies.enc exists but failed to load — fall through to the plaintext backup.
@@ -211,12 +194,27 @@ fn load_cookie_store(enc_path: &PathBuf, legacy_path: &PathBuf) -> CookieStore {
     // Plaintext fallback (migration path or keyring-unavailable path).
     if legacy_path.exists() {
         let content = std::fs::read_to_string(legacy_path).unwrap_or_default();
-        return CookieStore::load_json(content.as_bytes())
-            .unwrap_or_else(|_| CookieStore::new(None));
+        return deserialize_cookie_store(content.as_bytes());
         // Deletion of cookies.json is deferred to persist_cookies().
     }
 
     CookieStore::new(None)
+}
+
+/// Cookie ストアをバイト列（JSON 配列 `[{"n":"name","v":"value"}, ...]`）から復元する。
+fn deserialize_cookie_store(data: &[u8]) -> CookieStore {
+    let Ok(entries) = serde_json::from_slice::<Vec<serde_json::Value>>(data) else {
+        return CookieStore::new(None);
+    };
+    let url = reqwest::Url::parse("https://api.vrchat.cloud/api/1/auth/user")
+        .expect("hardcoded URL is always valid");
+    let mut store = CookieStore::new(None);
+    for entry in &entries {
+        if let (Some(name), Some(value)) = (entry["n"].as_str(), entry["v"].as_str()) {
+            store.parse(&format!("{}={}; Path=/", name, value), &url).ok();
+        }
+    }
+    store
 }
 
 fn persist_cookies() {
@@ -226,8 +224,17 @@ fn persist_cookies() {
     let mut buf = Vec::new();
     {
         let store = store.lock().unwrap();
-        #[allow(deprecated)]
-        store.save_json(&mut buf).ok();
+        // `save_json()` (deprecated) only serializes persistent cookies (those with an explicit
+        // Expires / Max-Age).  VRChat's `auth` cookie is a *session* cookie with no expiry, so
+        // it was silently dropped every time — causing the user to be logged out on each restart.
+        //
+        // `iter_any()` returns all cookies including session (non-persistent) ones.
+        // We serialize them manually as a JSON array of {n, v} objects.
+        let cookies: Vec<serde_json::Value> = store
+            .iter_any()
+            .map(|c| serde_json::json!({"n": c.name(), "v": c.value()}))
+            .collect();
+        serde_json::to_writer(&mut buf, &cookies).ok();
     }
 
     let plain_path = enc_path.with_extension("json");

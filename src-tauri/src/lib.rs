@@ -8,17 +8,6 @@ use tauri::{
     Manager,
 };
 
-#[tauri::command]
-fn close_splashscreen(app: tauri::AppHandle) {
-    if let Some(w) = app.get_webview_window("splashscreen") {
-        w.close().unwrap();
-    }
-    if let Some(w) = app.get_webview_window("main") {
-        w.show().unwrap();
-        w.set_focus().unwrap();
-    }
-}
-
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -86,7 +75,6 @@ pub fn run() {
             }
         })
         .invoke_handler(tauri::generate_handler![
-            close_splashscreen,
             // VRChat auth
             vrchat::commands::vrchat_login,
             vrchat::commands::vrchat_verify_2fa,
@@ -100,8 +88,6 @@ pub fn run() {
             vrchat::commands::vrchat_update_avatar_image,
             // OSC
             osc::commands::osc_change_avatar,
-            osc::commands::osc_get_status,
-            osc::commands::osc_send_parameter,
             // Storage (folders)
             storage::commands::folders_get_all,
             storage::commands::folders_create,

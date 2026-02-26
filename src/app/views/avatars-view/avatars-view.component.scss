@@ -245,12 +245,6 @@
   color: var(--color-text-4) !important;
 }
 
-.context-menu-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 200;
-}
-
 .context-menu {
   position: fixed;
   z-index: 201;
@@ -724,12 +718,6 @@
     line-height: 1.4;
   }
 
-  // 編集モード: 補足説明
-  &__edit-note {
-    font-size: 10px;
-    color: var(--color-text-4);
-    line-height: 1.5;
-  }
 }
 
 @keyframes slide-in-right {

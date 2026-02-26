@@ -2,7 +2,6 @@ import { Component, OnInit, signal, computed, HostListener } from '@angular/core
 import { FormsModule } from '@angular/forms';
 import { CommonModule } from '@angular/common';
 import { AvatarService } from '../../core/services/avatar.service';
-import { TauriService } from '../../core/services/tauri.service';
 import { VRChatAuthService } from '../../core/services/vrchat-auth.service';
 import { AvatarCardComponent, CardContextMenuEvent } from '../../shared/components/avatar-card/avatar-card.component';
 import { IconComponent } from '../../shared/components/icon/icon.component';
@@ -127,7 +126,6 @@ export class AvatarsViewComponent implements OnInit {
   constructor(
     public avatarService: AvatarService,
     public authService: VRChatAuthService,
-    private tauri: TauriService,
   ) {}
 
   async ngOnInit() {

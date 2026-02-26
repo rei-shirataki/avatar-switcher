@@ -1,10 +1,6 @@
 pub mod commands;
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-
-#[allow(dead_code)]
-pub type AvatarOverrideMap = HashMap<String, AvatarOverride>;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AvatarFolder {

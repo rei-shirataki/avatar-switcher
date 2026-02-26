@@ -67,7 +67,7 @@
       <span class="folder-tab__count">{{ avatarService.allAvatars().length }}</span>
     </button>
     <button
-      class="folder-tab folder-tab--favorites"
+      class="folder-tab"
       [class.folder-tab--active]="selectedFolderId() === FAVORITES_TAB"
       (click)="selectedFolderId.set(FAVORITES_TAB)"
     >

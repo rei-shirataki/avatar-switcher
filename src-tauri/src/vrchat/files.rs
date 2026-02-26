@@ -85,9 +85,6 @@ pub async fn upload_image(data_url: &str) -> Result<String> {
     let sig_md5_b64  = B64.encode(sig_digest.0);       // base64(MD5(MD5(file)))
     let file_size    = raw_bytes.len() as u64;
 
-    // 診断用 hex ETag（file.status 確認メッセージに使用）
-    let file_etag_hex = format!("{:x}", file_digest);
-
     let client = get_client();
 
     // ── 1. ファイルエンティティ作成 ──────────────────────────
@@ -164,42 +161,6 @@ pub async fn upload_image(data_url: &str) -> Result<String> {
     )
     .await?;
 
-    // ── 4.5 診断: finish 前のファイル状態を確認 ─────────────
-    let pre_finish_status = {
-        let result: Result<String> = async {
-            // 正しいエンドポイント: /file/{id} (バージョン番号なし)
-            let body: serde_json::Value = client
-                .get(format!("{}/file/{}", VRCHAT_API, file_id))
-                .send()
-                .await?
-                .json()
-                .await?;
-            let status = body["versions"]
-                .as_array()
-                .and_then(|vs| {
-                    vs.iter()
-                        .find(|v| v["version"].as_u64() == Some(version_id as u64))
-                })
-                .map(|v| {
-                    format!(
-                        "file={} sig={}",
-                        v["file"]["status"].as_str().unwrap_or("?"),
-                        v["signature"]["status"].as_str().unwrap_or("?")
-                    )
-                })
-                .unwrap_or_else(|| {
-                    format!(
-                        "version{}not_in_array(len={})",
-                        version_id,
-                        body["versions"].as_array().map(|a| a.len()).unwrap_or(0)
-                    )
-                });
-            Ok(status)
-        }
-        .await;
-        result.unwrap_or_else(|e| format!("diag_err:{e}"))
-    };
-
     // ── 5. ファイルアップロード完了通知（etags なし: VRCX 準拠）
     resp_json(
         client
@@ -210,7 +171,7 @@ pub async fn upload_image(data_url: &str) -> Result<String> {
             }))
             .send()
             .await?,
-        &format!("PUT file/finish [status={}, etag_hex={}]", pre_finish_status, file_etag_hex),
+        "PUT file/finish",
     )
     .await?;
 

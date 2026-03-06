@@ -38,8 +38,8 @@ export class AvatarsViewComponent implements OnInit {
   selectionMode = signal(false);
   selectedAvatarIds = signal<string[]>([]);
   bulkFolderId = signal('');
-  sortOpen = false;
-  bulkFolderOpen = false;
+  sortOpen = signal(false);
+  bulkFolderOpen = signal(false);
 
   readonly sortLabel = computed(() =>
     this.SORT_OPTIONS.find(o => o.value === this.sortMode())?.label ?? '');
@@ -217,8 +217,8 @@ export class AvatarsViewComponent implements OnInit {
       this.contextMenuFolder.set(null);
       this.cardMenuAvatar.set(null);
     }
-    this.sortOpen = false;
-    this.bulkFolderOpen = false;
+    this.sortOpen.set(false);
+    this.bulkFolderOpen.set(false);
   }
 
   @HostListener('document:contextmenu', ['$event'])
@@ -253,32 +253,32 @@ export class AvatarsViewComponent implements OnInit {
     if (!this.selectionMode()) {
       this.selectedAvatarIds.set([]);
       this.bulkFolderId.set('');
-      this.bulkFolderOpen = false;
+      this.bulkFolderOpen.set(false);
     }
   }
 
   openSort(e: Event): void {
     e.stopPropagation();
-    this.bulkFolderOpen = false;
-    this.sortOpen = !this.sortOpen;
+    this.bulkFolderOpen.set(false);
+    this.sortOpen.set(!this.sortOpen());
   }
 
   openBulkFolder(e: Event): void {
     e.stopPropagation();
-    this.sortOpen = false;
-    this.bulkFolderOpen = !this.bulkFolderOpen;
+    this.sortOpen.set(false);
+    this.bulkFolderOpen.set(!this.bulkFolderOpen());
   }
 
   onSortSelect(val: string, e: Event): void {
     e.stopPropagation();
     this.sortMode.set(val);
-    this.sortOpen = false;
+    this.sortOpen.set(false);
   }
 
   onBulkFolderSelect(val: string, e: Event): void {
     e.stopPropagation();
     this.bulkFolderId.set(val);
-    this.bulkFolderOpen = false;
+    this.bulkFolderOpen.set(false);
   }
 
   toggleAvatarSelection(avatarId: string) {
@@ -294,9 +294,8 @@ export class AvatarsViewComponent implements OnInit {
   async bulkAddToFolder() {
     if (!this.bulkFolderId() || this.selectedAvatarIds().length === 0) return;
     const ids = this.selectedAvatarIds();
-    for (const id of ids) {
-      await this.avatarService.addAvatarToFolder(this.bulkFolderId(), id);
-    }
+    const folderId = this.bulkFolderId();
+    await Promise.all(ids.map(id => this.avatarService.addAvatarToFolder(folderId, id)));
     this.showSuccess(`${ids.length} 件のアバターをフォルダに追加しました`);
     this.selectedAvatarIds.set([]);
     this.bulkFolderId.set('');

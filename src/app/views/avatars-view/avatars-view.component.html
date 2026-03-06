@@ -14,7 +14,7 @@
         <button class="search-box__clear" (click)="searchQuery.set('')">✕</button>
       }
     </div>
-    <div class="cselect cselect--sort" [class.cselect--open]="sortOpen" (click)="openSort($event)">
+    <div class="cselect cselect--sort" [class.cselect--open]="sortOpen()" (click)="openSort($event)">
       <div class="cselect__trigger">
         <span>{{ sortLabel() }}</span>
         <span class="cselect__chevron"></span>
@@ -43,7 +43,7 @@
       <button class="btn-sm" (click)="selectAll()">全選択</button>
       <div class="bulk-bar__spacer"></div>
       @if (selectedAvatarIds().length > 0 && avatarService.folders().length > 0) {
-        <div class="cselect" [class.cselect--open]="bulkFolderOpen" (click)="openBulkFolder($event)">
+        <div class="cselect" [class.cselect--open]="bulkFolderOpen()" (click)="openBulkFolder($event)">
           <div class="cselect__trigger">
             <span [class.cselect__placeholder]="!bulkFolderId()">{{ bulkFolderLabel() }}</span>
             <span class="cselect__chevron"></span>

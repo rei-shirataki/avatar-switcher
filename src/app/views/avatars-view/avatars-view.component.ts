@@ -37,7 +37,18 @@ export class AvatarsViewComponent implements OnInit {
   renamingFolderName = '';
   selectionMode = signal(false);
   selectedAvatarIds = signal<string[]>([]);
-  bulkFolderId = '';
+  bulkFolderId = signal('');
+  sortOpen = false;
+  bulkFolderOpen = false;
+
+  readonly sortLabel = computed(() =>
+    this.SORT_OPTIONS.find(o => o.value === this.sortMode())?.label ?? '');
+
+  readonly bulkFolderLabel = computed(() => {
+    const id = this.bulkFolderId();
+    if (!id) return 'フォルダを選択...';
+    return this.avatarService.folders().find(f => f.id === id)?.name ?? 'フォルダを選択...';
+  });
 
   /** 詳細表示中のアバターが自分のアップロードかどうか */
   readonly isDetailAvatarOwned = computed(() => {
@@ -206,6 +217,8 @@ export class AvatarsViewComponent implements OnInit {
       this.contextMenuFolder.set(null);
       this.cardMenuAvatar.set(null);
     }
+    this.sortOpen = false;
+    this.bulkFolderOpen = false;
   }
 
   @HostListener('document:contextmenu', ['$event'])
@@ -239,8 +252,33 @@ export class AvatarsViewComponent implements OnInit {
     this.selectionMode.update(v => !v);
     if (!this.selectionMode()) {
       this.selectedAvatarIds.set([]);
-      this.bulkFolderId = '';
+      this.bulkFolderId.set('');
+      this.bulkFolderOpen = false;
     }
+  }
+
+  openSort(e: Event): void {
+    e.stopPropagation();
+    this.bulkFolderOpen = false;
+    this.sortOpen = !this.sortOpen;
+  }
+
+  openBulkFolder(e: Event): void {
+    e.stopPropagation();
+    this.sortOpen = false;
+    this.bulkFolderOpen = !this.bulkFolderOpen;
+  }
+
+  onSortSelect(val: string, e: Event): void {
+    e.stopPropagation();
+    this.sortMode.set(val);
+    this.sortOpen = false;
+  }
+
+  onBulkFolderSelect(val: string, e: Event): void {
+    e.stopPropagation();
+    this.bulkFolderId.set(val);
+    this.bulkFolderOpen = false;
   }
 
   toggleAvatarSelection(avatarId: string) {
@@ -254,14 +292,14 @@ export class AvatarsViewComponent implements OnInit {
   }
 
   async bulkAddToFolder() {
-    if (!this.bulkFolderId || this.selectedAvatarIds().length === 0) return;
+    if (!this.bulkFolderId() || this.selectedAvatarIds().length === 0) return;
     const ids = this.selectedAvatarIds();
     for (const id of ids) {
-      await this.avatarService.addAvatarToFolder(this.bulkFolderId, id);
+      await this.avatarService.addAvatarToFolder(this.bulkFolderId(), id);
     }
     this.showSuccess(`${ids.length} 件のアバターをフォルダに追加しました`);
     this.selectedAvatarIds.set([]);
-    this.bulkFolderId = '';
+    this.bulkFolderId.set('');
   }
 
   private showSuccess(msg: string) {

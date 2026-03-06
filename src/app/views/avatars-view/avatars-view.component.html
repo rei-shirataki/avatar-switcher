@@ -14,16 +14,19 @@
         <button class="search-box__clear" (click)="searchQuery.set('')">✕</button>
       }
     </div>
-    <select
-      class="sort-select"
-      [ngModel]="sortMode()"
-      (ngModelChange)="sortMode.set($event)"
-      title="並び替え"
-    >
-      @for (opt of SORT_OPTIONS; track opt.value) {
-        <option [value]="opt.value">{{ opt.label }}</option>
-      }
-    </select>
+    <div class="cselect cselect--sort" [class.cselect--open]="sortOpen" (click)="openSort($event)">
+      <div class="cselect__trigger">
+        <span>{{ sortLabel() }}</span>
+        <span class="cselect__chevron"></span>
+      </div>
+      <ul class="cselect__list">
+        @for (opt of SORT_OPTIONS; track opt.value) {
+          <li class="cselect__item"
+              [class.cselect__item--active]="sortMode() === opt.value"
+              (click)="onSortSelect(opt.value, $event)">{{ opt.label }}</li>
+        }
+      </ul>
+    </div>
     <button
       class="btn-icon"
       [class.btn-icon--active]="selectionMode()"
@@ -40,16 +43,23 @@
       <button class="btn-sm" (click)="selectAll()">全選択</button>
       <div class="bulk-bar__spacer"></div>
       @if (selectedAvatarIds().length > 0 && avatarService.folders().length > 0) {
-        <select class="sort-select" [(ngModel)]="bulkFolderId">
-          <option value="">フォルダを選択...</option>
-          @for (folder of avatarService.folders(); track folder.id) {
-            <option [value]="folder.id">{{ folder.name }}</option>
-          }
-        </select>
+        <div class="cselect" [class.cselect--open]="bulkFolderOpen" (click)="openBulkFolder($event)">
+          <div class="cselect__trigger">
+            <span [class.cselect__placeholder]="!bulkFolderId()">{{ bulkFolderLabel() }}</span>
+            <span class="cselect__chevron"></span>
+          </div>
+          <ul class="cselect__list">
+            @for (folder of avatarService.folders(); track folder.id) {
+              <li class="cselect__item"
+                  [class.cselect__item--active]="bulkFolderId() === folder.id"
+                  (click)="onBulkFolderSelect(folder.id, $event)">{{ folder.name }}</li>
+            }
+          </ul>
+        </div>
         <button
           class="btn-sm btn-primary-sm"
           (click)="bulkAddToFolder()"
-          [disabled]="!bulkFolderId"
+          [disabled]="!bulkFolderId()"
         >追加</button>
       }
       <button class="btn-sm" (click)="toggleSelectionMode()">解除</button>

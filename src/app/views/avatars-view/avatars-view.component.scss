@@ -59,22 +59,9 @@
   }
 }
 
-.sort-select {
-  height: 34px;
-  padding: 0 8px;
-  background: var(--color-surface-3);
-  border: 1px solid var(--color-surface-3);
-  border-radius: var(--radius-md);
-  color: var(--color-text-2);
-  font-size: 12px;
-  font-family: var(--font-sans);
-  cursor: pointer;
-  outline: none;
+.cselect {
   flex-shrink: 0;
-  transition: border-color 0.15s;
-
-  &:hover { border-color: var(--color-primary); }
-  option { background: var(--color-surface-2); }
+  &--sort { min-width: 175px; }
 }
 
 .btn-icon {

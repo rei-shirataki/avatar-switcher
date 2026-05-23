@@ -65,11 +65,17 @@ export class AvatarService {
    * タブ切り替え時に不要な再フェッチを防ぐ。
    * 最終ロードから CACHE_TTL_MS 以上経過していたら自動で再フェッチする。
    * エラー時は _initPromise をリセットし、次回再試行できるようにする。
+   *
+   * `_loadedAt === 0` の間（= in-flight）は TTL を評価せず必ず同じ Promise を返す。
+   * 評価すると Date.now()-0 が常に TTL 超過と判定され、二重ロードが発生する。
    */
   ensureLoaded(): Promise<void> {
-    const stale = Date.now() - this._loadedAt > CACHE_TTL_MS;
-    if (this._initPromise && !stale) return this._initPromise;
-    if (stale) this._initPromise = null;
+    if (this._initPromise) {
+      // _loadedAt が未設定（=0）の場合は in-flight。TTL 判定をスキップして共有 Promise を返す。
+      const expired = this._loadedAt !== 0 && Date.now() - this._loadedAt > CACHE_TTL_MS;
+      if (!expired) return this._initPromise;
+      this._initPromise = null;
+    }
 
     this._initPromise = Promise.all([
       this.loadAvatars(),
@@ -294,6 +300,26 @@ export class AvatarService {
         ? { ...f, avatarIds: [...f.avatarIds, avatarId] }
         : f
       )
+    );
+  }
+
+  /**
+   * 複数アバターを 1 回の Tauri 呼び出しでフォルダに追加する。
+   * バックエンドの folders_add_avatars が排他ロック下で 1 トランザクションとして
+   * 書き込むため、並列の addAvatarToFolder と違い RMW 競合で消失しない。
+   */
+  async addAvatarsToFolder(folderId: string, avatarIds: string[]): Promise<void> {
+    if (avatarIds.length === 0) return;
+    await this.tauri.invoke('folders_add_avatars', { folderId, avatarIds });
+    this._folders.update(fs =>
+      fs.map(f => {
+        if (f.id !== folderId) return f;
+        const merged = [...f.avatarIds];
+        for (const id of avatarIds) {
+          if (!merged.includes(id)) merged.push(id);
+        }
+        return { ...f, avatarIds: merged };
+      })
     );
   }
 

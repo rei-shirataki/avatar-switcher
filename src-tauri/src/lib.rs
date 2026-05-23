@@ -96,6 +96,7 @@ pub fn run() {
             vrchat::commands::vrchat_update_avatar_image,
             // OSC
             osc::commands::osc_change_avatar,
+            osc::commands::osc_set_avatar_parameter_float,
             // Storage (folders)
             storage::commands::folders_get_all,
             storage::commands::folders_create,

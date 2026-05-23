@@ -53,6 +53,7 @@ interface NavItem {
 export class SidebarComponent {
   navItems: NavItem[] = [
     { route: '/avatars', iconName: 'avatars', label: 'アバター' },
+    { route: '/height', iconName: 'height', label: '身長' },
     { route: '/settings', iconName: 'settings', label: '設定' },
   ];
 

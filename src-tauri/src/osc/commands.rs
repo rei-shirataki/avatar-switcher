@@ -6,9 +6,6 @@ pub async fn osc_change_avatar(avatar_id: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub async fn osc_set_avatar_parameter_float(
-    name: String,
-    value: f32,
-) -> Result<(), String> {
-    osc::send_avatar_parameter_float(&name, value).map_err(|e| e.to_string())
+pub async fn osc_set_avatar_eye_height(value: f32) -> Result<(), String> {
+    osc::send_avatar_eye_height(value).map_err(|e| e.to_string())
 }

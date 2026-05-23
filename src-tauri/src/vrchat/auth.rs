@@ -38,6 +38,18 @@ pub fn get_client() -> &'static Client {
     HTTP_CLIENT.get().expect("HTTP client not initialized")
 }
 
+// ── ユーティリティ ────────────────────────────────────────────────────────────
+
+/// `s` を最大 `max` 文字（char 単位）まで切り詰める。
+/// `&s[..n]` は n がマルチバイト境界でないと panic するため、ログや anyhow!
+/// メッセージにレスポンス本文を埋め込む際は必ず本関数を使う。
+pub fn truncate_for_log(s: &str, max: usize) -> &str {
+    match s.char_indices().nth(max) {
+        Some((idx, _)) => &s[..idx],
+        None => s,
+    }
+}
+
 // ── レート制限対応リトライ ────────────────────────────────────────────────────
 
 /// VRChat / S3 への HTTP リクエストを 429 や一過性の 5xx で再試行する。
@@ -469,7 +481,7 @@ pub async fn verify_2fa(code: &str, method: &str) -> Result<bool> {
         return Err(anyhow!(
             "2FA 認証に失敗しました: {} - {}",
             status,
-            &text[..text.len().min(500)]
+            truncate_for_log(&text, 500)
         ));
     }
 

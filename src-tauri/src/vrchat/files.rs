@@ -1,7 +1,7 @@
 use anyhow::{anyhow, Result};
 use base64::engine::general_purpose::STANDARD as B64;
 use base64::Engine as _;
-use crate::vrchat::auth::{get_client, send_with_retry, USER_AGENT, VRCHAT_API};
+use crate::vrchat::auth::{get_client, send_with_retry, truncate_for_log, USER_AGENT, VRCHAT_API};
 
 // ─── ヘルパー ──────────────────────────────────────────────────
 
@@ -18,7 +18,7 @@ async fn resp_json(resp: reqwest::Response, context: &str) -> Result<serde_json:
         return Err(anyhow!(msg));
     }
     serde_json::from_str(&text).map_err(|e| {
-        anyhow!("{} レスポンス解析エラー: {} | body: {}", context, e, &text[..text.len().min(500)])
+        anyhow!("{} レスポンス解析エラー: {} | body: {}", context, e, truncate_for_log(&text, 500))
     })
 }
 
@@ -58,7 +58,7 @@ async fn s3_put(
             "{} failed: {} - {}",
             context,
             status,
-            &text[..text.len().min(500)]
+            truncate_for_log(&text, 500)
         ));
     }
     Ok(())
@@ -67,13 +67,13 @@ async fn s3_put(
 /// 失敗時に VRChat 側に残ったゴミ file エンティティを削除する（ベストエフォート）。
 /// ネットワーク失敗や権限不足で削除できなくても元のエラーを優先したいので、
 /// 結果はログのみに残す。
+///
+/// upload 失敗が 429 連鎖中に起きた場合、cleanup も同様に 429 を返しやすいので
+/// `send_with_retry` 経由で再試行を試みる。
 async fn cleanup_file(file_id: &str) {
     let client = get_client();
-    match client
-        .delete(format!("{}/file/{}", VRCHAT_API, file_id))
-        .send()
-        .await
-    {
+    let url = format!("{}/file/{}", VRCHAT_API, file_id);
+    match send_with_retry(|| client.delete(&url).send(), "DELETE /file/{id} (cleanup)").await {
         Ok(r) if r.status().is_success() => {
             log::info!("アップロード失敗のため file {} を削除しました。", file_id);
         }
@@ -353,6 +353,9 @@ fn parse_data_url(data_url: &str) -> Result<(&'static str, Vec<u8>)> {
 /// 旧実装は 2 秒固定 × 15 回 (=30 秒) だった。サイズの大きい画像や VRChat 側の
 /// バックエンド遅延に対して取りこぼしが発生していた。`error` ステータスは即座に
 /// 中断、それ以外は 1s → 2s → 4s → 8s → 16s → 30s の指数バックオフで最大 ~60 秒待つ。
+///
+/// 401/403/404 を受け取った場合（Cookie 失効・権限喪失・file 削除）は再試行せず
+/// 即座に Err を返し、ユーザーをタイムアウトの 60 秒待ちから救う。
 async fn poll_until_complete(file_id: &str, version_id: u32) -> Result<()> {
     let client = get_client();
     let mut delay_ms: u64 = 1000;
@@ -363,21 +366,42 @@ async fn poll_until_complete(file_id: &str, version_id: u32) -> Result<()> {
         tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
         elapsed_ms = elapsed_ms.saturating_add(delay_ms);
 
-        let body: serde_json::Value = match client
+        let resp = match client
             .get(format!("{}/file/{}", VRCHAT_API, file_id))
             .send()
             .await
         {
-            Ok(r) => match r.json().await {
-                Ok(v) => v,
-                Err(_) => {
-                    if elapsed_ms >= TIMEOUT_MS {
-                        break;
-                    }
-                    delay_ms = (delay_ms * 2).min(30_000);
-                    continue;
+            Ok(r) => r,
+            Err(_) => {
+                if elapsed_ms >= TIMEOUT_MS {
+                    break;
                 }
-            },
+                delay_ms = (delay_ms * 2).min(30_000);
+                continue;
+            }
+        };
+
+        let http_status = resp.status();
+        if http_status == reqwest::StatusCode::UNAUTHORIZED
+            || http_status == reqwest::StatusCode::FORBIDDEN
+            || http_status == reqwest::StatusCode::NOT_FOUND
+        {
+            return Err(anyhow!(
+                "ファイル状態の取得に失敗しました（再試行不可）: {}",
+                http_status
+            ));
+        }
+        // 5xx・429 等は一過性とみなして再試行。本ループのバックオフで吸収する。
+        if !http_status.is_success() {
+            if elapsed_ms >= TIMEOUT_MS {
+                break;
+            }
+            delay_ms = (delay_ms * 2).min(30_000);
+            continue;
+        }
+
+        let body: serde_json::Value = match resp.json().await {
+            Ok(v) => v,
             Err(_) => {
                 if elapsed_ms >= TIMEOUT_MS {
                     break;

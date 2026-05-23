@@ -1,29 +1,33 @@
 use anyhow::{anyhow, Result};
-use crate::vrchat::auth::{get_client, send_with_retry, VRCHAT_API};
+use crate::vrchat::auth::{get_client, send_with_retry, truncate_for_log, VRCHAT_API};
 use crate::vrchat::models::VRCAvatar;
 
 const PAGE_SIZE: u32 = 100;
 const API_DELAY: u64 = 150; // VRChat API rate limit safety margin (ms)
 
 /// HTTP ステータスが失敗のとき、ボディ本文を含めた anyhow エラーを返す。
-async fn ensure_success(resp: reqwest::Response, context: &str) -> Result<reqwest::Response> {
+/// `forbidden_msg` を渡すと 403 専用の文言を使う（編集系エンドポイント向け）。
+/// select 等の閲覧系では `None` を渡し、誤誘導するメッセージを出さない。
+async fn ensure_success(
+    resp: reqwest::Response,
+    context: &str,
+    forbidden_msg: Option<&str>,
+) -> Result<reqwest::Response> {
     let status = resp.status();
     if status.is_success() {
         return Ok(resp);
     }
     let text = resp.text().await.unwrap_or_default();
     if status == reqwest::StatusCode::FORBIDDEN {
-        return Err(anyhow!(
-            "このアバターは編集できません（作成者のみ変更可能です）: {} - {}",
-            status,
-            &text[..text.len().min(500)]
-        ));
+        if let Some(msg) = forbidden_msg {
+            return Err(anyhow!("{}: {} - {}", msg, status, truncate_for_log(&text, 500)));
+        }
     }
     Err(anyhow!(
         "{}: {} - {}",
         context,
         status,
-        &text[..text.len().min(500)]
+        truncate_for_log(&text, 500)
     ))
 }
 
@@ -48,7 +52,7 @@ pub async fn get_my_avatars(offset: u32) -> Result<Vec<VRCAvatar>> {
         "GET /avatars",
     )
     .await?;
-    let resp = ensure_success(resp, "アバター一覧の取得に失敗しました").await?;
+    let resp = ensure_success(resp, "アバター一覧の取得に失敗しました", None).await?;
     Ok(resp.json::<Vec<VRCAvatar>>().await?)
 }
 
@@ -95,7 +99,7 @@ pub async fn get_favorite_avatars() -> Result<Vec<VRCAvatar>> {
                     "お気に入りグループ {} の取得に失敗しました: {} - {}",
                     group,
                     status,
-                    &text[..text.len().min(500)]
+                    truncate_for_log(&text, 500)
                 );
                 break;
             }
@@ -129,7 +133,9 @@ pub async fn select_avatar(avatar_id: &str) -> Result<VRCAvatar> {
         "PUT /avatars/{id}/select",
     )
     .await?;
-    let resp = ensure_success(resp, "アバターの装着に失敗しました").await?;
+    // select は閲覧系。403 はプライベート/BAN/権限の総合的事由なので
+    // 「編集できません」とは表示せず、ステータスのみ伝える。
+    let resp = ensure_success(resp, "アバターの装着に失敗しました", None).await?;
     Ok(resp.json::<VRCAvatar>().await?)
 }
 
@@ -148,7 +154,12 @@ pub async fn update_avatar_image(avatar_id: &str, image_url: &str) -> Result<VRC
         "PUT /avatars/{id} (imageUrl)",
     )
     .await?;
-    let resp = ensure_success(resp, "アバター画像の更新に失敗しました").await?;
+    let resp = ensure_success(
+        resp,
+        "アバター画像の更新に失敗しました",
+        Some("このアバターは編集できません（作成者のみ変更可能です）"),
+    )
+    .await?;
     Ok(resp.json::<VRCAvatar>().await?)
 }
 
@@ -167,6 +178,11 @@ pub async fn update_avatar(avatar_id: &str, name: &str) -> Result<VRCAvatar> {
         "PUT /avatars/{id} (name)",
     )
     .await?;
-    let resp = ensure_success(resp, "アバターの更新に失敗しました").await?;
+    let resp = ensure_success(
+        resp,
+        "アバターの更新に失敗しました",
+        Some("このアバターは編集できません（作成者のみ変更可能です）"),
+    )
+    .await?;
     Ok(resp.json::<VRCAvatar>().await?)
 }

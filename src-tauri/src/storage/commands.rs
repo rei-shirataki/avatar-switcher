@@ -1,11 +1,19 @@
+use once_cell::sync::Lazy;
 use std::collections::HashMap;
 use tauri::AppHandle;
 use tauri_plugin_store::StoreExt;
+use tokio::sync::Mutex;
 use crate::storage::{AvatarFolder, AvatarOverride};
 
 const STORE_PATH: &str = "app-settings.json";
 const FOLDERS_KEY: &str = "avatar_folders";
 const OVERRIDES_KEY: &str = "avatar_overrides";
+
+// 並列 invoke の read-modify-write 競合を防ぐためのプロセス全体ロック。
+// tauri-plugin-store は単一 set/get 単位でしか同期しないため、
+// load → 変更 → save の一連を必ず排他化する。
+static FOLDERS_LOCK: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
+static OVERRIDES_LOCK: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
 
 fn load_folders(app: &AppHandle) -> Vec<AvatarFolder> {
     app.store(STORE_PATH)
@@ -46,6 +54,7 @@ fn validate_folder_name(name: &str) -> Result<(), String> {
 #[tauri::command]
 pub async fn folders_create(app: AppHandle, name: String) -> Result<AvatarFolder, String> {
     validate_folder_name(&name)?;
+    let _guard = FOLDERS_LOCK.lock().await;
     let mut folders = load_folders(&app);
     let order = folders.len() as u32;
     let folder = AvatarFolder {
@@ -63,6 +72,7 @@ pub async fn folders_create(app: AppHandle, name: String) -> Result<AvatarFolder
 #[tauri::command]
 pub async fn folders_update(app: AppHandle, folder: AvatarFolder) -> Result<(), String> {
     validate_folder_name(&folder.name)?;
+    let _guard = FOLDERS_LOCK.lock().await;
     let mut folders = load_folders(&app);
     if let Some(f) = folders.iter_mut().find(|f| f.id == folder.id) {
         *f = folder;
@@ -73,6 +83,7 @@ pub async fn folders_update(app: AppHandle, folder: AvatarFolder) -> Result<(), 
 
 #[tauri::command]
 pub async fn folders_delete(app: AppHandle, folder_id: String) -> Result<(), String> {
+    let _guard = FOLDERS_LOCK.lock().await;
     let mut folders = load_folders(&app);
     folders.retain(|f| f.id != folder_id);
     save_folders(&app, &folders);
@@ -85,10 +96,33 @@ pub async fn folders_add_avatar(
     folder_id: String,
     avatar_id: String,
 ) -> Result<(), String> {
+    let _guard = FOLDERS_LOCK.lock().await;
     let mut folders = load_folders(&app);
     if let Some(f) = folders.iter_mut().find(|f| f.id == folder_id) {
         if !f.avatar_ids.contains(&avatar_id) {
             f.avatar_ids.push(avatar_id);
+        }
+    }
+    save_folders(&app, &folders);
+    Ok(())
+}
+
+/// 複数アバターを 1 トランザクションでフォルダに追加する。
+/// 並列の folders_add_avatar 呼び出しは個別ロックを取り直すため、
+/// バルク追加では本コマンドを使うことで読み書きを 1 回に集約する。
+#[tauri::command]
+pub async fn folders_add_avatars(
+    app: AppHandle,
+    folder_id: String,
+    avatar_ids: Vec<String>,
+) -> Result<(), String> {
+    let _guard = FOLDERS_LOCK.lock().await;
+    let mut folders = load_folders(&app);
+    if let Some(f) = folders.iter_mut().find(|f| f.id == folder_id) {
+        for id in avatar_ids {
+            if !f.avatar_ids.contains(&id) {
+                f.avatar_ids.push(id);
+            }
         }
     }
     save_folders(&app, &folders);
@@ -101,6 +135,7 @@ pub async fn folders_remove_avatar(
     folder_id: String,
     avatar_id: String,
 ) -> Result<(), String> {
+    let _guard = FOLDERS_LOCK.lock().await;
     let mut folders = load_folders(&app);
     if let Some(f) = folders.iter_mut().find(|f| f.id == folder_id) {
         f.avatar_ids.retain(|id| id != &avatar_id);
@@ -143,6 +178,7 @@ pub async fn avatar_overrides_set(
     custom_name: Option<String>,
     custom_thumbnail: Option<String>,
 ) -> Result<AvatarOverride, String> {
+    let _guard = OVERRIDES_LOCK.lock().await;
     let mut map = load_overrides(&app);
     let existing = map.get(&avatar_id).cloned().unwrap_or_default();
     let updated = AvatarOverride {
@@ -158,6 +194,7 @@ pub async fn avatar_overrides_set(
 
 #[tauri::command]
 pub async fn avatar_overrides_delete(app: AppHandle, avatar_id: String) -> Result<(), String> {
+    let _guard = OVERRIDES_LOCK.lock().await;
     let mut map = load_overrides(&app);
     map.remove(&avatar_id);
     save_overrides(&app, &map);

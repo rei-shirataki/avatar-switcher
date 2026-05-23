@@ -94,6 +94,7 @@ pub fn run() {
             storage::commands::folders_update,
             storage::commands::folders_delete,
             storage::commands::folders_add_avatar,
+            storage::commands::folders_add_avatars,
             storage::commands::folders_remove_avatar,
             // Storage (avatar overrides)
             storage::commands::avatar_overrides_get_all,

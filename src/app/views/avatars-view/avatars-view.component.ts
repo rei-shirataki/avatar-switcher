@@ -294,19 +294,16 @@ export class AvatarsViewComponent implements OnInit {
     if (!this.bulkFolderId() || this.selectedAvatarIds().length === 0) return;
     const ids = this.selectedAvatarIds();
     const folderId = this.bulkFolderId();
-    const results = await Promise.allSettled(
-      ids.map(id => this.avatarService.addAvatarToFolder(folderId, id))
-    );
-    const rejectedIds = ids.filter((_, i) => results[i].status === 'rejected');
-    const failed = rejectedIds.length;
-    if (failed === 0) {
+    try {
+      // バックエンド側の単一トランザクション。並列 invoke だと
+      // load → save の RMW 競合で追加が消える問題があるため bulk 化済み。
+      await this.avatarService.addAvatarsToFolder(folderId, ids);
       this.showToast(`${ids.length} 件のアバターをフォルダに追加しました`);
       this.selectedAvatarIds.set([]);
       this.bulkFolderId.set('');
-    } else {
-      // 失敗したIDのみ選択に残して、ユーザーがそのまま再試行できるようにする
-      this.selectedAvatarIds.set(rejectedIds);
-      this.showToast(`${ids.length - failed} 件追加、${failed} 件失敗しました`, 'error');
+    } catch (e: unknown) {
+      console.error(e);
+      this.showToast('フォルダへの追加に失敗しました', 'error');
     }
   }
 

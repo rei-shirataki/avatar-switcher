@@ -13,7 +13,9 @@ use std::sync::Arc;
 use crate::vrchat::models::*;
 
 pub const VRCHAT_API: &str = "https://api.vrchat.cloud/api/1";
-pub const USER_AGENT: &str = "AvatarSwitcher/0.1.0 (admin@rei-shirataki.com)";
+// VRChat API は User-Agent に連絡先の明示を要求するが、平文メールはスパム標的になる。
+// ドメインのみ記載し、必要に応じて当該ドメインの contact ページから連絡可能にしておく。
+pub const USER_AGENT: &str = "AvatarSwitcher/0.1.0 (rei-shirataki.com)";
 
 static HTTP_CLIENT: OnceCell<Client> = OnceCell::new();
 static COOKIE_STORE: OnceCell<Arc<CookieStoreMutex>> = OnceCell::new();
@@ -34,6 +36,67 @@ const NONCE_LEN: usize = 12;
 
 pub fn get_client() -> &'static Client {
     HTTP_CLIENT.get().expect("HTTP client not initialized")
+}
+
+// ── レート制限対応リトライ ────────────────────────────────────────────────────
+
+/// VRChat / S3 への HTTP リクエストを 429 や一過性の 5xx で再試行する。
+///
+/// VRChat 公式ガイドラインに沿い、初回 1 秒・最大 30 秒の指数バックオフで最大
+/// `MAX_ATTEMPTS` 回まで再試行する。429 以外（4xx 一般）は即座に呼び出し側へ
+/// 返し、判断を委ねる。
+///
+/// `send` クロージャは毎回新しい `RequestBuilder` を組み立てる必要があるため、
+/// 呼び出し側でリクエストごとに closure 内で `client.method(...).send()` を
+/// 呼び直すこと。
+pub async fn send_with_retry<F, Fut>(send: F, context: &str) -> reqwest::Result<reqwest::Response>
+where
+    F: Fn() -> Fut,
+    Fut: std::future::Future<Output = reqwest::Result<reqwest::Response>>,
+{
+    const MAX_ATTEMPTS: u32 = 5;
+    let mut delay_ms: u64 = 1000;
+    let mut last_err: Option<reqwest::Error> = None;
+
+    for attempt in 1..=MAX_ATTEMPTS {
+        match send().await {
+            Ok(resp) => {
+                let status = resp.status();
+                let retryable =
+                    status == reqwest::StatusCode::TOO_MANY_REQUESTS || status.is_server_error();
+                if !retryable || attempt == MAX_ATTEMPTS {
+                    return Ok(resp);
+                }
+                log::warn!(
+                    "{}: HTTP {} (試行 {}/{}), {} ms 待機後に再試行します。",
+                    context,
+                    status.as_u16(),
+                    attempt,
+                    MAX_ATTEMPTS,
+                    delay_ms
+                );
+            }
+            Err(e) => {
+                if attempt == MAX_ATTEMPTS {
+                    return Err(e);
+                }
+                log::warn!(
+                    "{}: 通信エラー (試行 {}/{}): {}。{} ms 待機後に再試行します。",
+                    context,
+                    attempt,
+                    MAX_ATTEMPTS,
+                    e,
+                    delay_ms
+                );
+                last_err = Some(e);
+            }
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
+        // 指数バックオフ。上限 30 秒。
+        delay_ms = delay_ms.saturating_mul(2).min(30_000);
+    }
+    // ループは必ず return するが、保険として最後のエラーがあれば返す。
+    Err(last_err.expect("retry loop exited without sending"))
 }
 
 // ── Encryption helpers ────────────────────────────────────────────────────────
@@ -303,11 +366,17 @@ pub async fn login(username: &str, password: &str) -> Result<LoginResult> {
     let b64 = base64::engine::general_purpose::STANDARD.encode(encoded.as_bytes());
 
     let client = get_client();
-    let resp = client
-        .get(format!("{}/auth/user", VRCHAT_API))
-        .header("Authorization", format!("Basic {}", b64))
-        .send()
-        .await?;
+    let auth_header = format!("Basic {}", b64);
+    let resp = send_with_retry(
+        || {
+            client
+                .get(format!("{}/auth/user", VRCHAT_API))
+                .header("Authorization", auth_header.clone())
+                .send()
+        },
+        "GET /auth/user (login)",
+    )
+    .await?;
 
     let status = resp.status();
 
@@ -327,9 +396,15 @@ pub async fn login(username: &str, password: &str) -> Result<LoginResult> {
     persist_cookies();
 
     if let Some(methods) = body.requires_two_factor_auth {
-        let method = methods.first().map(|m| {
-            if m == "emailOtp" { "emailOtp".to_string() } else { "totp".to_string() }
-        });
+        // VRChat は通常 `["totp"]` か `["emailOtp"]` を返す。emailOtp が
+        // 優先されるべきユーザー（メール認証中のアカウント）が稀に両方含む
+        // 場合があるため、emailOtp を優先する。リカバリーコード（`otp`）は
+        // ユーザーが UI 上で明示的に選択するので、初期 method には含めない。
+        let method = if methods.iter().any(|m| m == "emailOtp") {
+            Some("emailOtp".to_string())
+        } else {
+            Some("totp".to_string())
+        };
         return Ok(LoginResult {
             success: false,
             requires_2fa: true,
@@ -337,6 +412,15 @@ pub async fn login(username: &str, password: &str) -> Result<LoginResult> {
             user: None,
             error: None,
         });
+    }
+
+    // 利用規約未同意やメール未確認は API 側で 200 を返すが、後続の API 呼び出しが
+    // 403 で全滅するため、ログイン時点でユーザーに通知できるようログに残す。
+    if body.email_verified == Some(false) {
+        log::warn!("VRChat アカウントのメールアドレスが未確認です。");
+    }
+    if body.accepted_tos_version.unwrap_or(0) == 0 {
+        log::warn!("VRChat の利用規約に同意していない可能性があります。");
     }
 
     let user = VRCUser {
@@ -359,21 +443,34 @@ pub async fn login(username: &str, password: &str) -> Result<LoginResult> {
 }
 
 pub async fn verify_2fa(code: &str, method: &str) -> Result<bool> {
-    let endpoint = if method == "emailOtp" {
-        format!("{}/auth/twofactorauth/emailotp/verify", VRCHAT_API)
-    } else {
-        format!("{}/auth/twofactorauth/totp/verify", VRCHAT_API)
+    // `otp` はリカバリーコード（TOTP デバイス紛失時のバックアップ）。
+    let endpoint = match method {
+        "emailOtp" => format!("{}/auth/twofactorauth/emailotp/verify", VRCHAT_API),
+        "otp" => format!("{}/auth/twofactorauth/otp/verify", VRCHAT_API),
+        _ => format!("{}/auth/twofactorauth/totp/verify", VRCHAT_API),
     };
 
     let client = get_client();
-    let resp = client
-        .post(&endpoint)
-        .json(&serde_json::json!({ "code": code }))
-        .send()
-        .await?;
+    let body_json = serde_json::json!({ "code": code });
+    let resp = send_with_retry(
+        || {
+            client
+                .post(&endpoint)
+                .json(&body_json)
+                .send()
+        },
+        "POST /auth/twofactorauth/*/verify",
+    )
+    .await?;
 
-    if !resp.status().is_success() {
-        return Err(anyhow!("2FA verification failed"));
+    let status = resp.status();
+    if !status.is_success() {
+        let text = resp.text().await.unwrap_or_default();
+        return Err(anyhow!(
+            "2FA 認証に失敗しました: {} - {}",
+            status,
+            &text[..text.len().min(500)]
+        ));
     }
 
     let body: TwoFactorVerifyResponse = resp.json().await?;
@@ -395,10 +492,11 @@ pub async fn get_current_user() -> Result<Option<VRCUser>> {
     let client = HTTP_CLIENT
         .get()
         .ok_or_else(|| anyhow!("HTTP client initialization timed out"))?;
-    let resp = client
-        .get(format!("{}/auth/user", VRCHAT_API))
-        .send()
-        .await?;
+    let resp = send_with_retry(
+        || client.get(format!("{}/auth/user", VRCHAT_API)).send(),
+        "GET /auth/user (current)",
+    )
+    .await?;
 
     if resp.status() == 401 {
         return Ok(None);

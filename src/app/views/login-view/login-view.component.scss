@@ -146,6 +146,21 @@
   justify-content: flex-end;
 }
 
+.btn-link {
+  align-self: center;
+  background: none;
+  border: none;
+  padding: 4px 8px;
+  color: var(--color-primary);
+  font-size: 12px;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+
+  &:hover { color: var(--color-primary-hover); }
+}
+
 .twofa-info {
   p {
     margin: 0;

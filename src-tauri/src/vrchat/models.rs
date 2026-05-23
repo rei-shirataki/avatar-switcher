@@ -63,6 +63,14 @@ pub struct AuthUserResponse {
     pub profile_pic_override: Option<String>,
     pub status: Option<String>,
     pub state: Option<String>,
+    /// 利用規約の最新バージョンに同意していない場合、API が `accountDeletionDate` などと
+    /// 合わせて返すフラグ。同意が無いと一部 API が 403 を返すので、ログイン時に検知する。
+    #[serde(default)]
+    pub accepted_tos_version: Option<u32>,
+    #[serde(default)]
+    pub accepted_privacy_version: Option<u32>,
+    #[serde(default)]
+    pub email_verified: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]

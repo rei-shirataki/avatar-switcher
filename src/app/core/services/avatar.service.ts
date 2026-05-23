@@ -1,6 +1,16 @@
 import { Injectable, signal, computed } from '@angular/core';
 import { TauriService } from './tauri.service';
+import { VRChatAuthService } from './vrchat-auth.service';
 import { VRCAvatar, AvatarFolder, AvatarOverride } from '../models/avatar.model';
+
+/// アバター取得時の安全上限。1 ページ 100 件 × 100 ページ = 10,000 件まで。
+/// 通常ユーザーは数十〜数百件なのでこの上限は実質的に到達しない。
+/// API バグや想定外の挙動で無限ループに陥らないための保険。
+const MAX_AVATAR_PAGES = 100;
+
+/// アバター・お気に入り一覧のキャッシュ有効期限（ミリ秒）。
+/// 長時間起動でも別端末からのアバター追加・削除を反映できるようにする。
+const CACHE_TTL_MS = 10 * 60 * 1000; // 10 分
 
 @Injectable({ providedIn: 'root' })
 export class AvatarService {
@@ -46,22 +56,29 @@ export class AvatarService {
   });
 
   private _initPromise: Promise<void> | null = null;
+  private _loadedAt = 0;
 
-  constructor(private tauri: TauriService) {}
+  constructor(private tauri: TauriService, private auth: VRChatAuthService) {}
 
   /**
    * 初回のみ全データをフェッチし、2回目以降はキャッシュ済みの Promise を返す。
    * タブ切り替え時に不要な再フェッチを防ぐ。
+   * 最終ロードから CACHE_TTL_MS 以上経過していたら自動で再フェッチする。
    * エラー時は _initPromise をリセットし、次回再試行できるようにする。
    */
   ensureLoaded(): Promise<void> {
-    if (this._initPromise) return this._initPromise;
+    const stale = Date.now() - this._loadedAt > CACHE_TTL_MS;
+    if (this._initPromise && !stale) return this._initPromise;
+    if (stale) this._initPromise = null;
+
     this._initPromise = Promise.all([
       this.loadAvatars(),
       this.loadFavorites(),
       this.loadFolders(),
       this.loadOverrides(),
-    ]).then(() => {}).catch((e) => {
+    ]).then(() => {
+      this._loadedAt = Date.now();
+    }).catch((e) => {
       this._initPromise = null;
       throw e;
     });
@@ -71,6 +88,7 @@ export class AvatarService {
   /** データを強制的に再フェッチする（手動更新ボタン用）。 */
   async refresh(): Promise<void> {
     this._initPromise = null;
+    this._loadedAt = 0;
     await this.ensureLoaded();
   }
 
@@ -90,13 +108,18 @@ export class AvatarService {
     this._avatars.set([]);
     try {
       let offset = 0;
-      while (true) {
-        const page = await this.tauri.invoke<VRCAvatar[]>('vrchat_get_my_avatars', { offset });
+      // MAX_AVATAR_PAGES を上限とする安全策。API バグで常に 100 件返り続けても
+      // UI ハングを起こさず、警告ログを残してループを抜ける。
+      for (let page = 0; page < MAX_AVATAR_PAGES; page++) {
+        const items = await this.tauri.invoke<VRCAvatar[]>('vrchat_get_my_avatars', { offset });
         // ページ単位で即時反映し、最初の 100 件をすぐに表示する
-        this._avatars.update(current => [...current, ...page]);
-        if (page.length < 100) break;
+        this._avatars.update(current => [...current, ...items]);
+        if (items.length < 100) return;
         offset += 100;
       }
+      console.warn(
+        `loadAvatars: ${MAX_AVATAR_PAGES} ページ取得しても終端に達しませんでした。打ち切りました。`,
+      );
     } finally {
       this._loading.set(false);
     }
@@ -229,10 +252,17 @@ export class AvatarService {
     this._switching.set(avatarId);
     try {
       // REST + OSC を並行送信 (OSC は localhost UDP なので即時、REST は ~1秒かかる)
-      await Promise.all([
-        this.tauri.invoke('vrchat_select_avatar', { avatarId }),
+      const [selected] = await Promise.all([
+        this.tauri.invoke<VRCAvatar>('vrchat_select_avatar', { avatarId }),
         this.tauri.invoke('osc_change_avatar', { avatarId }).catch(() => {}),
       ]);
+      // 装着結果でサイドバーの「現在のアバター」画像を即時更新する。
+      // オーバーライドがあればそちらを優先（VRChat に未反映のカスタムサムネ）。
+      const override = this._overrides()[avatarId];
+      const imageUrl = override?.customThumbnail ?? selected?.thumbnailImageUrl ?? selected?.imageUrl;
+      if (imageUrl) {
+        this.auth.updateCurrentAvatarImage(imageUrl);
+      }
     } finally {
       this._switching.set(null);
     }

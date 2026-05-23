@@ -17,21 +17,12 @@ const MDNS_RETRY_DELAY: Duration = Duration::from_secs(60);
 /// デフォルト 9000。mDNS 探索成功時に動的更新される。
 pub static VRCHAT_OSC_PORT: AtomicU16 = AtomicU16::new(DEFAULT_VRCHAT_OSC_PORT);
 
-/// 発見した VRChat の OSC 受信 IP。同一マシン前提だが、LAN 上の VRChat にも
-/// 追従できるよう OSCQuery が解決したアドレスを保持する。
-static VRCHAT_OSC_IP: Mutex<Option<String>> = Mutex::new(None);
-
 /// 最後に発見した VRChat の mDNS フルネーム。
-/// `ServiceRemoved` が同じ名前で来たときだけポート/IP をデフォルトに戻す。
+/// `ServiceRemoved` が同じ名前で来たときだけポートをデフォルトに戻す。
 static CURRENT_VRCHAT_FULLNAME: Mutex<Option<String>> = Mutex::new(None);
 
 pub fn get_vrchat_osc_port() -> u16 {
     VRCHAT_OSC_PORT.load(Ordering::Relaxed)
-}
-
-/// OSCQuery で発見した VRChat の IP を返す（未発見ならNone）。
-pub fn get_vrchat_osc_ip() -> Option<String> {
-    VRCHAT_OSC_IP.lock().ok().and_then(|g| g.clone())
 }
 
 /// OSCQuery を初期化する。
@@ -70,7 +61,6 @@ pub async fn start(our_osc_port: u16) -> anyhow::Result<()> {
 fn register_service(mdns: &ServiceDaemon, http_port: u16, our_osc_port: u16) {
     let instance_name = format!("{}-{}", APP_NAME, std::process::id());
     let host_name = get_hostname();
-    // 同一マシン前提で 127.0.0.1 を広告する。LAN 越しの OSCQuery 連携には未対応。
     let local_ip = "127.0.0.1";
     let props: &[(String, String)] = &[("oscPort".to_string(), our_osc_port.to_string())];
 
@@ -141,39 +131,22 @@ fn on_mdns_event(event: ServiceEvent) {
                 *guard = Some(name.clone());
             }
 
-            let resolved_ip = info
-                .get_addresses()
-                .iter()
-                .next()
-                .copied()
-                .map(|a| a.to_string());
-            if let Some(ref ip) = resolved_ip {
-                if let Ok(mut guard) = VRCHAT_OSC_IP.lock() {
-                    *guard = Some(ip.clone());
-                }
-            }
-
             // TXT レコード "oscPort" から直接取得
             if let Some(port_str) = info.get_properties().get_property_val_str("oscPort") {
                 if let Ok(port) = port_str.parse::<u16>() {
                     VRCHAT_OSC_PORT.store(port, Ordering::Relaxed);
-                    log::info!(
-                        "[OSCQuery] VRChat 発見: {} → {}:{}",
-                        name,
-                        resolved_ip.as_deref().unwrap_or("?"),
-                        port
-                    );
+                    log::info!("[OSCQuery] VRChat 発見: {} → OSC ポート {}", name, port);
                     return;
                 }
             }
 
             // TXT になければ HTTP HOST_INFO を問い合わせる
+            // 同一マシン前提のため宛先は 127.0.0.1 固定。
             let http_port = info.get_port();
-            let ip = resolved_ip.unwrap_or_else(|| "127.0.0.1".to_string());
             let expected_name = name.clone();
 
             tokio::spawn(async move {
-                match query_vrchat_osc_port(&ip, http_port).await {
+                match query_vrchat_osc_port("127.0.0.1", http_port).await {
                     Ok(port) => {
                         // 完了時点で別のインスタンスが新たに登録されていれば古い結果は捨てる。
                         let still_current = CURRENT_VRCHAT_FULLNAME
@@ -191,8 +164,8 @@ fn on_mdns_event(event: ServiceEvent) {
                         }
                         VRCHAT_OSC_PORT.store(port, Ordering::Relaxed);
                         log::info!(
-                            "[OSCQuery] VRChat HOST_INFO 取得: {} → {}:{}",
-                            expected_name, ip, port
+                            "[OSCQuery] VRChat HOST_INFO 取得: {} → OSC ポート {}",
+                            expected_name, port
                         );
                     }
                     Err(e) => log::warn!("[OSCQuery] HOST_INFO 取得失敗 ({}): {}", expected_name, e),
@@ -220,9 +193,6 @@ fn on_mdns_event(event: ServiceEvent) {
                     name, DEFAULT_VRCHAT_OSC_PORT
                 );
                 VRCHAT_OSC_PORT.store(DEFAULT_VRCHAT_OSC_PORT, Ordering::Relaxed);
-                if let Ok(mut guard) = VRCHAT_OSC_IP.lock() {
-                    *guard = None;
-                }
             }
         }
         _ => {}

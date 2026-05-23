@@ -8,10 +8,9 @@ use std::net::UdpSocket;
 const DEFAULT_OSC_HOST: &str = "127.0.0.1";
 
 /// 送信用 UDP ソケット。プロセス全体で 1 つだけ bind して再利用する。
-/// 0.0.0.0 でバインドするのは VRChat が別マシンにいるケース
-/// （`AVATAR_SWITCHER_OSC_HOST=<LAN IP>` 構成）でも送信できるようにするため。
+/// 同一マシン上の VRChat に向けて送るだけなので 127.0.0.1 に bind する。
 static OSC_SOCKET: Lazy<Option<UdpSocket>> = Lazy::new(|| {
-    match UdpSocket::bind("0.0.0.0:0") {
+    match UdpSocket::bind("127.0.0.1:0") {
         Ok(s) => Some(s),
         Err(e) => {
             log::error!("OSC 送信ソケットの bind に失敗しました: {}", e);
@@ -51,14 +50,13 @@ pub fn get_osc_receive_port() -> u16 {
 
 /// VRChat への OSC 送信先アドレスを返す。
 ///
-/// 優先順位（host / port は独立に解決）:
+/// 優先順位:
 /// 1. 環境変数 `AVATAR_SWITCHER_OSC_HOST` / `AVATAR_SWITCHER_OSC_PORT`
-/// 2. OSCQuery で発見した VRChat の IP / ポート
+/// 2. OSCQuery で発見した VRChat のポート（host は常に 127.0.0.1）
 /// 3. デフォルト (127.0.0.1:9000)
 fn get_osc_addr() -> String {
     let host = OSC_HOST_OVERRIDE
         .clone()
-        .or_else(oscquery::get_vrchat_osc_ip)
         .unwrap_or_else(|| DEFAULT_OSC_HOST.to_string());
     let port = OSC_PORT_OVERRIDE.unwrap_or_else(oscquery::get_vrchat_osc_port);
     format!("{}:{}", host, port)

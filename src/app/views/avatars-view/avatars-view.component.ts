@@ -7,6 +7,9 @@ import { AvatarCardComponent, CardContextMenuEvent } from '../../shared/componen
 import { IconComponent } from '../../shared/components/icon/icon.component';
 import { VRCAvatar, AvatarFolder } from '../../core/models/avatar.model';
 
+type DropdownName = 'sort' | 'bulk';
+type ToastKind = 'success' | 'error';
+
 @Component({
   selector: 'app-avatars-view',
   standalone: true,
@@ -20,6 +23,7 @@ export class AvatarsViewComponent implements OnInit {
   showNewFolderInput = signal(false);
   newFolderName = '';
   successMessage = signal<string | null>(null);
+  toastKind = signal<ToastKind>('success');
   // 詳細パネルの表示対象を ID で管理し、computed でオーバーライド適用済みデータを参照
   // → 保存後に detailAvatar が自動更新される
   private readonly _detailAvatarId = signal<string | null>(null);
@@ -38,8 +42,7 @@ export class AvatarsViewComponent implements OnInit {
   selectionMode = signal(false);
   selectedAvatarIds = signal<string[]>([]);
   bulkFolderId = signal('');
-  sortOpen = signal(false);
-  bulkFolderOpen = signal(false);
+  activeDropdown = signal<DropdownName | null>(null);
 
   readonly sortLabel = computed(() =>
     this.SORT_OPTIONS.find(o => o.value === this.sortMode())?.label ?? '');
@@ -146,7 +149,7 @@ export class AvatarsViewComponent implements OnInit {
   async onSwitch(avatarId: string) {
     try {
       await this.avatarService.switchAvatar(avatarId);
-      this.showSuccess('アバターを切り替えました');
+      this.showToast('アバターを切り替えました');
     } catch (e: unknown) {
       console.error(e);
     }
@@ -217,8 +220,7 @@ export class AvatarsViewComponent implements OnInit {
       this.contextMenuFolder.set(null);
       this.cardMenuAvatar.set(null);
     }
-    this.sortOpen.set(false);
-    this.bulkFolderOpen.set(false);
+    this.activeDropdown.set(null);
   }
 
   @HostListener('document:contextmenu', ['$event'])
@@ -253,32 +255,29 @@ export class AvatarsViewComponent implements OnInit {
     if (!this.selectionMode()) {
       this.selectedAvatarIds.set([]);
       this.bulkFolderId.set('');
-      this.bulkFolderOpen.set(false);
+      this.activeDropdown.set(null);
     }
   }
 
-  openSort(e: Event): void {
+  openDropdown(name: DropdownName, e: Event): void {
     e.stopPropagation();
-    this.bulkFolderOpen.set(false);
-    this.sortOpen.set(!this.sortOpen());
+    this.activeDropdown.update(v => v === name ? null : name);
   }
 
-  openBulkFolder(e: Event): void {
-    e.stopPropagation();
-    this.sortOpen.set(false);
-    this.bulkFolderOpen.set(!this.bulkFolderOpen());
+  onDropdownKeydown(name: DropdownName, e: KeyboardEvent): void {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      this.openDropdown(name, e);
+    } else if (e.key === 'Escape') {
+      this.activeDropdown.set(null);
+    }
   }
 
-  onSortSelect(val: string, e: Event): void {
+  onDropdownSelect(name: DropdownName, val: string, e: Event): void {
     e.stopPropagation();
-    this.sortMode.set(val);
-    this.sortOpen.set(false);
-  }
-
-  onBulkFolderSelect(val: string, e: Event): void {
-    e.stopPropagation();
-    this.bulkFolderId.set(val);
-    this.bulkFolderOpen.set(false);
+    if (name === 'sort') this.sortMode.set(val);
+    else this.bulkFolderId.set(val);
+    this.activeDropdown.set(null);
   }
 
   toggleAvatarSelection(avatarId: string) {
@@ -295,13 +294,24 @@ export class AvatarsViewComponent implements OnInit {
     if (!this.bulkFolderId() || this.selectedAvatarIds().length === 0) return;
     const ids = this.selectedAvatarIds();
     const folderId = this.bulkFolderId();
-    await Promise.all(ids.map(id => this.avatarService.addAvatarToFolder(folderId, id)));
-    this.showSuccess(`${ids.length} 件のアバターをフォルダに追加しました`);
-    this.selectedAvatarIds.set([]);
-    this.bulkFolderId.set('');
+    const results = await Promise.allSettled(
+      ids.map(id => this.avatarService.addAvatarToFolder(folderId, id))
+    );
+    const rejectedIds = ids.filter((_, i) => results[i].status === 'rejected');
+    const failed = rejectedIds.length;
+    if (failed === 0) {
+      this.showToast(`${ids.length} 件のアバターをフォルダに追加しました`);
+      this.selectedAvatarIds.set([]);
+      this.bulkFolderId.set('');
+    } else {
+      // 失敗したIDのみ選択に残して、ユーザーがそのまま再試行できるようにする
+      this.selectedAvatarIds.set(rejectedIds);
+      this.showToast(`${ids.length - failed} 件追加、${failed} 件失敗しました`, 'error');
+    }
   }
 
-  private showSuccess(msg: string) {
+  private showToast(msg: string, kind: ToastKind = 'success') {
+    this.toastKind.set(kind);
     this.successMessage.set(msg);
     setTimeout(() => this.successMessage.set(null), 2500);
   }
@@ -492,7 +502,7 @@ export class AvatarsViewComponent implements OnInit {
 
       this.detailEditMode.set(false);
       this.detailEditThumbnail.set(null);
-      this.showSuccess('変更を保存しました');
+      this.showToast('変更を保存しました');
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
       this.detailEditError.set(msg || '保存に失敗しました');

@@ -1,7 +1,7 @@
 use anyhow::{anyhow, Result};
 use base64::engine::general_purpose::STANDARD as B64;
 use base64::Engine as _;
-use crate::vrchat::auth::{get_client, USER_AGENT, VRCHAT_API};
+use crate::vrchat::auth::{get_client, send_with_retry, USER_AGENT, VRCHAT_API};
 
 // ─── ヘルパー ──────────────────────────────────────────────────
 
@@ -37,13 +37,18 @@ async fn s3_put(
         .build()
         .map_err(|e| anyhow!("S3 client build error: {}", e))?;
 
-    let resp = s3_client
-        .put(url)
-        .header("Content-Type", content_type)
-        .header("Content-MD5", content_md5)
-        .body(body)
-        .send()
-        .await?;
+    let resp = send_with_retry(
+        || {
+            s3_client
+                .put(url)
+                .header("Content-Type", content_type)
+                .header("Content-MD5", content_md5)
+                .body(body.clone())
+                .send()
+        },
+        context,
+    )
+    .await?;
 
     let status = resp.status();
     let text = resp.text().await.unwrap_or_default();
@@ -57,6 +62,28 @@ async fn s3_put(
         ));
     }
     Ok(())
+}
+
+/// 失敗時に VRChat 側に残ったゴミ file エンティティを削除する（ベストエフォート）。
+/// ネットワーク失敗や権限不足で削除できなくても元のエラーを優先したいので、
+/// 結果はログのみに残す。
+async fn cleanup_file(file_id: &str) {
+    let client = get_client();
+    match client
+        .delete(format!("{}/file/{}", VRCHAT_API, file_id))
+        .send()
+        .await
+    {
+        Ok(r) if r.status().is_success() => {
+            log::info!("アップロード失敗のため file {} を削除しました。", file_id);
+        }
+        Ok(r) => {
+            log::warn!("file {} の cleanup に失敗しました: {}", file_id, r.status());
+        }
+        Err(e) => {
+            log::warn!("file {} の cleanup で通信エラー: {}", file_id, e);
+        }
+    }
 }
 
 // ─── メイン処理 ────────────────────────────────────────────────
@@ -88,17 +115,23 @@ pub async fn upload_image(data_url: &str) -> Result<String> {
     let client = get_client();
 
     // ── 1. ファイルエンティティ作成 ──────────────────────────
+    let create_body = serde_json::json!({
+        "name":      format!("avatar_image{}", extension),
+        "mimeType":  mime_type,
+        "extension": extension,
+        "tags":      []
+    });
     let body = resp_json(
-        client
-            .post(format!("{}/file", VRCHAT_API))
-            .json(&serde_json::json!({
-                "name":      format!("avatar_image{}", extension),
-                "mimeType":  mime_type,
-                "extension": extension,
-                "tags":      []
-            }))
-            .send()
-            .await?,
+        send_with_retry(
+            || {
+                client
+                    .post(format!("{}/file", VRCHAT_API))
+                    .json(&create_body)
+                    .send()
+            },
+            "POST /file",
+        )
+        .await?,
         "POST /file",
     )
     .await?;
@@ -108,18 +141,58 @@ pub async fn upload_image(data_url: &str) -> Result<String> {
         .ok_or_else(|| anyhow!("POST /file: 'id' not found in: {}", body))?
         .to_string();
 
+    // file_id 取得後の失敗は VRChat 側にゴミを残すので必ず cleanup する。
+    let result = upload_after_create(
+        &file_id,
+        mime_type,
+        &file_md5_b64,
+        &sig_md5_b64,
+        file_size,
+        raw_bytes,
+        file_digest.0,
+    )
+    .await;
+
+    match result {
+        Ok(version_id) => Ok(format!("{}/file/{}/{}/file", VRCHAT_API, file_id, version_id)),
+        Err(e) => {
+            cleanup_file(&file_id).await;
+            Err(e)
+        }
+    }
+}
+
+/// ステップ 2 以降を担当。`file_id` 取得後の失敗時に呼び出し側で cleanup させるため、
+/// 独立した関数に分離している。
+async fn upload_after_create(
+    file_id: &str,
+    mime_type: &'static str,
+    file_md5_b64: &str,
+    sig_md5_b64: &str,
+    file_size: u64,
+    raw_bytes: Vec<u8>,
+    file_digest: [u8; 16],
+) -> Result<u32> {
+    let client = get_client();
+
     // ── 2. バージョン作成 ────────────────────────────────────
+    let version_body = serde_json::json!({
+        "signatureMd5":         sig_md5_b64,
+        "signatureSizeInBytes": 16,
+        "fileMd5":              file_md5_b64,
+        "fileSizeInBytes":      file_size
+    });
     let body = resp_json(
-        client
-            .post(format!("{}/file/{}", VRCHAT_API, file_id))
-            .json(&serde_json::json!({
-                "signatureMd5":         sig_md5_b64,
-                "signatureSizeInBytes": 16,
-                "fileMd5":              file_md5_b64,
-                "fileSizeInBytes":      file_size
-            }))
-            .send()
-            .await?,
+        send_with_retry(
+            || {
+                client
+                    .post(format!("{}/file/{}", VRCHAT_API, file_id))
+                    .json(&version_body)
+                    .send()
+            },
+            "POST /file/{id}",
+        )
+        .await?,
         "POST /file/{id}",
     )
     .await?;
@@ -136,13 +209,18 @@ pub async fn upload_image(data_url: &str) -> Result<String> {
 
     // ── 3. ファイルアップロード用 S3 presigned URL を取得 ────
     let start = resp_json(
-        client
-            .put(format!(
-                "{}/file/{}/{}/file/start?partNumber=1",
-                VRCHAT_API, file_id, version_id
-            ))
-            .send()
-            .await?,
+        send_with_retry(
+            || {
+                client
+                    .put(format!(
+                        "{}/file/{}/{}/file/start?partNumber=1",
+                        VRCHAT_API, file_id, version_id
+                    ))
+                    .send()
+            },
+            "PUT file/start",
+        )
+        .await?,
         "PUT file/start",
     )
     .await?;
@@ -155,35 +233,49 @@ pub async fn upload_image(data_url: &str) -> Result<String> {
     s3_put(
         &file_upload_url,
         mime_type,
-        &file_md5_b64,
-        raw_bytes.clone(),
+        file_md5_b64,
+        raw_bytes,
         "S3 PUT file",
     )
     .await?;
 
     // ── 5. ファイルアップロード完了通知（etags なし: VRCX 準拠）
+    let finish_body = serde_json::json!({
+        "nextPartNumber": 0,
+        "maxParts":       0
+    });
     resp_json(
-        client
-            .put(format!("{}/file/{}/{}/file/finish", VRCHAT_API, file_id, version_id))
-            .json(&serde_json::json!({
-                "nextPartNumber": 0,
-                "maxParts":       0
-            }))
-            .send()
-            .await?,
+        send_with_retry(
+            || {
+                client
+                    .put(format!(
+                        "{}/file/{}/{}/file/finish",
+                        VRCHAT_API, file_id, version_id
+                    ))
+                    .json(&finish_body)
+                    .send()
+            },
+            "PUT file/finish",
+        )
+        .await?,
         "PUT file/finish",
     )
     .await?;
 
     // ── 6. シグネチャアップロード用 S3 presigned URL を取得 ─
     let start = resp_json(
-        client
-            .put(format!(
-                "{}/file/{}/{}/signature/start?partNumber=1",
-                VRCHAT_API, file_id, version_id
-            ))
-            .send()
-            .await?,
+        send_with_retry(
+            || {
+                client
+                    .put(format!(
+                        "{}/file/{}/{}/signature/start?partNumber=1",
+                        VRCHAT_API, file_id, version_id
+                    ))
+                    .send()
+            },
+            "PUT signature/start",
+        )
+        .await?,
         "PUT signature/start",
     )
     .await?;
@@ -197,30 +289,35 @@ pub async fn upload_image(data_url: &str) -> Result<String> {
     s3_put(
         &sig_upload_url,
         "application/x-rsync-signature",
-        &sig_md5_b64,
-        file_digest.0.to_vec(),
+        sig_md5_b64,
+        file_digest.to_vec(),
         "S3 PUT signature",
     )
     .await?;
 
     // ── 8. シグネチャアップロード完了通知（etags なし: VRCX 準拠）
     resp_json(
-        client
-            .put(format!("{}/file/{}/{}/signature/finish", VRCHAT_API, file_id, version_id))
-            .json(&serde_json::json!({
-                "nextPartNumber": 0,
-                "maxParts":       0
-            }))
-            .send()
-            .await?,
+        send_with_retry(
+            || {
+                client
+                    .put(format!(
+                        "{}/file/{}/{}/signature/finish",
+                        VRCHAT_API, file_id, version_id
+                    ))
+                    .json(&finish_body)
+                    .send()
+            },
+            "PUT signature/finish",
+        )
+        .await?,
         "PUT signature/finish",
     )
     .await?;
 
-    // ── 9. VRChat 側処理完了をポーリング（最大 20 秒）────────
-    poll_until_complete(&file_id, version_id).await?;
+    // ── 9. VRChat 側処理完了をポーリング（指数バックオフ、合計 ~60 秒）─
+    poll_until_complete(file_id, version_id).await?;
 
-    Ok(format!("{}/file/{}/{}/file", VRCHAT_API, file_id, version_id))
+    Ok(version_id)
 }
 
 // ─── ユーティリティ ────────────────────────────────────────────
@@ -251,30 +348,61 @@ fn parse_data_url(data_url: &str) -> Result<(&'static str, Vec<u8>)> {
     Ok((mime, raw))
 }
 
+/// VRChat 側でファイル処理が `complete` になるまで指数バックオフでポーリング。
+///
+/// 旧実装は 2 秒固定 × 15 回 (=30 秒) だった。サイズの大きい画像や VRChat 側の
+/// バックエンド遅延に対して取りこぼしが発生していた。`error` ステータスは即座に
+/// 中断、それ以外は 1s → 2s → 4s → 8s → 16s → 30s の指数バックオフで最大 ~60 秒待つ。
 async fn poll_until_complete(file_id: &str, version_id: u32) -> Result<()> {
     let client = get_client();
-    for _ in 0..15u32 {
-        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+    let mut delay_ms: u64 = 1000;
+    let mut elapsed_ms: u64 = 0;
+    const TIMEOUT_MS: u64 = 60_000;
+
+    loop {
+        tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
+        elapsed_ms = elapsed_ms.saturating_add(delay_ms);
+
         let body: serde_json::Value = match client
             .get(format!("{}/file/{}", VRCHAT_API, file_id))
             .send()
             .await
         {
-            Ok(r)  => match r.json().await { Ok(v) => v, Err(_) => continue },
-            Err(_) => continue,
+            Ok(r) => match r.json().await {
+                Ok(v) => v,
+                Err(_) => {
+                    if elapsed_ms >= TIMEOUT_MS {
+                        break;
+                    }
+                    delay_ms = (delay_ms * 2).min(30_000);
+                    continue;
+                }
+            },
+            Err(_) => {
+                if elapsed_ms >= TIMEOUT_MS {
+                    break;
+                }
+                delay_ms = (delay_ms * 2).min(30_000);
+                continue;
+            }
         };
 
         let status = body["versions"]
             .as_array()
-            .and_then(|vs| {
-                vs.iter().find(|v| v["version"].as_u64() == Some(version_id as u64))
-            })
+            .and_then(|vs| vs.iter().find(|v| v["version"].as_u64() == Some(version_id as u64)))
             .and_then(|v| v["file"]["status"].as_str());
 
         match status {
             Some("complete") => return Ok(()),
-            Some("error") => return Err(anyhow!("VRChat 側でファイルの処理中にエラーが発生しました。")),
-            _ => continue,
+            Some("error") => {
+                return Err(anyhow!("VRChat 側でファイルの処理中にエラーが発生しました。"))
+            }
+            _ => {
+                if elapsed_ms >= TIMEOUT_MS {
+                    break;
+                }
+                delay_ms = (delay_ms * 2).min(30_000);
+            }
         }
     }
     Err(anyhow!("VRChat 側でのファイル処理がタイムアウトしました。"))

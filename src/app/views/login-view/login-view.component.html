@@ -52,18 +52,26 @@
         <div class="twofa-info">
           @if (twoFactorMethod() === 'emailOtp') {
             <p>登録メールアドレスに送信されたコードを入力してください</p>
+          } @else if (twoFactorMethod() === 'otp') {
+            <p>登録時に保存したリカバリーコード（1個）を入力してください</p>
           } @else {
             <p>認証アプリの6桁のコードを入力してください</p>
           }
         </div>
         <div class="form-group">
-          <label class="form-label">認証コード</label>
+          <label class="form-label">
+            @if (twoFactorMethod() === 'otp') {
+              リカバリーコード
+            } @else {
+              認証コード
+            }
+          </label>
           <input
             class="form-input form-input--code"
             type="text"
             [(ngModel)]="twoFactorCode"
-            placeholder="000000"
-            maxlength="6"
+            [placeholder]="twoFactorMethod() === 'otp' ? 'xxxx-xxxx' : '000000'"
+            [maxlength]="twoFactorMethod() === 'otp' ? 20 : 6"
             [disabled]="loading()"
             (keyup.enter)="onVerify2fa()"
           />
@@ -71,6 +79,16 @@
 
         @if (error()) {
           <div class="form-error">⚠ {{ error() }}</div>
+        }
+
+        @if (twoFactorMethod() === 'totp') {
+          <button class="btn-link" type="button" (click)="useRecoveryCode()">
+            認証アプリが使えない場合（リカバリーコードを使う）
+          </button>
+        } @else if (twoFactorMethod() === 'otp') {
+          <button class="btn-link" type="button" (click)="backToTotp()">
+            ← 認証アプリのコードに戻る
+          </button>
         }
 
         <div class="twofa-actions">

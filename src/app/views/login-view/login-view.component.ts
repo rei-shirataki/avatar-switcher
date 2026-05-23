@@ -73,4 +73,21 @@ export class LoginViewComponent {
     this.twoFactorCode = '';
     this.error.set(null);
   }
+
+  /**
+   * TOTP 認証アプリを紛失した場合のフォールバックとしてリカバリーコード
+   * (`/auth/twofactorauth/otp/verify`) を使う。
+   * emailOtp は固定で受信メールが必要なので切替対象外。
+   */
+  useRecoveryCode() {
+    this.twoFactorMethod.set('otp');
+    this.twoFactorCode = '';
+    this.error.set(null);
+  }
+
+  backToTotp() {
+    this.twoFactorMethod.set('totp');
+    this.twoFactorCode = '';
+    this.error.set(null);
+  }
 }

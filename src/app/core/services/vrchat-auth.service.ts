@@ -49,4 +49,14 @@ export class VRChatAuthService {
     await this.tauri.invoke('vrchat_logout');
     this._currentUser.set(null);
   }
+
+  /**
+   * アバター切替直後にサイドバー等の「装着中アバター画像」を即時更新する。
+   * VRChat API へ再問い合わせせずローカルシグナルだけ更新する軽量パス。
+   */
+  updateCurrentAvatarImage(imageUrl: string): void {
+    const user = this._currentUser();
+    if (!user || !imageUrl || user.currentAvatarImageUrl === imageUrl) return;
+    this._currentUser.set({ ...user, currentAvatarImageUrl: imageUrl });
+  }
 }

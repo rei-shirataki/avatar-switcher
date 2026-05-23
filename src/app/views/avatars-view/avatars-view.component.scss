@@ -60,8 +60,87 @@
 }
 
 .cselect {
+  position: relative;
+  display: inline-block;
+  min-width: 130px;
   flex-shrink: 0;
+  user-select: none;
+
   &--sort { min-width: 175px; }
+
+  &__trigger {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    height: 34px;
+    padding: 0 10px 0 12px;
+    box-sizing: border-box;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--color-surface-3);
+    background: var(--color-surface-3);
+    color: var(--color-text-1);
+    font-size: 12px;
+    font-family: var(--font-sans);
+    cursor: pointer;
+    transition: border-color 0.15s;
+
+    &:hover { border-color: var(--color-text-3); }
+    &:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 1px; }
+  }
+
+  &__placeholder { color: var(--color-text-4); }
+
+  &__chevron {
+    flex-shrink: 0;
+    width: 0;
+    height: 0;
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-top: 5px solid var(--color-text-3);
+    transition: transform 0.15s;
+  }
+
+  &__list {
+    display: none;
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    right: 0;
+    z-index: 200;
+    margin: 0;
+    padding: 4px 0;
+    list-style: none;
+    background: var(--color-surface-2);
+    border: 1px solid var(--color-surface-3);
+    border-radius: var(--radius-md);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
+    overflow: hidden;
+  }
+
+  &__item {
+    padding: 8px 12px;
+    font-size: 12px;
+    color: var(--color-text-2);
+    cursor: pointer;
+    transition: background 0.1s, color 0.1s;
+
+    &:hover {
+      background: var(--color-surface-3);
+      color: var(--color-text-1);
+    }
+
+    &--active {
+      color: var(--color-primary);
+      background: var(--color-primary-dim);
+    }
+  }
+
+  &--open {
+    .cselect__trigger { border-color: var(--color-primary); }
+    .cselect__list    { display: block; }
+    .cselect__chevron { transform: rotate(180deg); }
+  }
 }
 
 .btn-icon {
@@ -321,6 +400,13 @@
     background: #1a3d24;
     border: 1px solid rgba(86, 201, 110, 0.6);
     color: #6edc8a;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6);
+  }
+
+  &--error {
+    background: #3d1a1f;
+    border: 1px solid rgba(220, 90, 110, 0.6);
+    color: #ef8a98;
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6);
   }
 }

@@ -77,40 +77,22 @@ pub fn send_avatar_change(avatar_id: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// アバターパラメータ名として安全な文字のみを許可する。
-/// 不正な制御文字や OSC アドレス区切り (`/`) の埋め込みを防ぐ。
-fn is_valid_parameter_name(name: &str) -> bool {
-    !name.is_empty()
-        && name.len() <= 64
-        && name
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
-}
-
-/// VRChat の `/avatar/parameters/{name}` に Float 値を送信する。
-/// アバター側で対応するパラメータ (例: `Height`, `Scale`) を float として
-/// 受けるよう実装してある場合のみ反映される。
-pub fn send_avatar_parameter_float(name: &str, value: f32) -> anyhow::Result<()> {
-    if !is_valid_parameter_name(name) {
-        return Err(anyhow::anyhow!(
-            "パラメータ名が不正です (英数字・アンダースコア・ハイフンのみ、1〜64 文字)"
-        ));
+/// VRChat の `/avatar/eyeheight` に Float 値（メートル）を送信する。
+/// VRChat 側で Avatar Scaling 機能が有効な場合に視点の高さに反映される。
+pub fn send_avatar_eye_height(value: f32) -> anyhow::Result<()> {
+    if !value.is_finite() {
+        return Err(anyhow::anyhow!("値が不正です (NaN/Infinity)"));
     }
     let Some(socket) = OSC_SOCKET.as_ref() else {
         return Err(anyhow::anyhow!("OSC ソケットが初期化されていません"));
     };
     let packet = OscPacket::Message(OscMessage {
-        addr: format!("/avatar/parameters/{}", name),
+        addr: "/avatar/eyeheight".to_string(),
         args: vec![OscType::Float(value)],
     });
     let encoded = encoder::encode(&packet)?;
     let addr = get_osc_addr();
-    log::debug!(
-        "OSC /avatar/parameters/{} → {} (value: {})",
-        name,
-        addr,
-        value
-    );
+    log::debug!("OSC /avatar/eyeheight → {} (value: {})", addr, value);
     socket.send_to(&encoded, &addr)?;
     Ok(())
 }

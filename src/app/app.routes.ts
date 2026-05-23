@@ -14,6 +14,12 @@ export const routes: Routes = [
       import('./views/avatars-view/avatars-view.component').then(m => m.AvatarsViewComponent),
   },
   {
+    path: 'height',
+    canActivate: [authGuard],
+    loadComponent: () =>
+      import('./views/height-view/height-view.component').then(m => m.HeightViewComponent),
+  },
+  {
     path: 'settings',
     canActivate: [authGuard],
     loadComponent: () =>

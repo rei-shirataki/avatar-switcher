@@ -323,9 +323,9 @@ fn build_host_info(osc_port: u16) -> Value {
 
 /// OSCQuery のルートノード。CONTENTS は意図的に空。
 ///
-/// 本アプリは `/avatar/change` を VRChat へ「送信」するだけで、現状は受信ハンドラを
-/// 持たないため、受信エンドポイントを広告しない。将来 Avatar Parameter / Avatar
-/// Scaling 等の受信を実装したらここに該当アドレスを足す。
+/// VRChat の OSCQuery 経由ブロードキャスト機構は、mDNS でリスナーを発見すると
+/// `/avatar/parameters/*` を自動送出するため、個別アドレスを CONTENTS に列挙する
+/// 必要はない（mDNS と HOST_INFO の OSC_PORT があれば届く）。
 fn build_root_node() -> Value {
     json!({
         "DESCRIPTION": "root node",

@@ -1,13 +1,13 @@
-import { Component, OnInit, signal } from '@angular/core';
+import { Component, ElementRef, OnInit, ViewChild, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { TauriService } from '../../core/services/tauri.service';
+import {
+  EyeHeightService,
+  EYE_HEIGHT_DEFAULT,
+  EYE_HEIGHT_MAX,
+  EYE_HEIGHT_MIN,
+} from '../../core/services/eye-height.service';
 
-const STORAGE_KEY_VALUE = 'avatar-switcher.eyeheight.value';
 const STORAGE_KEY_PRESETS = 'avatar-switcher.eyeheight.presets';
-
-const DEFAULT_VALUE = 1.6;
-const MIN_VALUE = 0.2;
-const MAX_VALUE = 5.0;
 const STEPS = [0.01, 0.1, 0.5, 1.0] as const;
 
 interface Preset {
@@ -34,7 +34,7 @@ interface Preset {
               [min]="minValue"
               [max]="maxValue"
               step="0.01"
-              [ngModel]="value()"
+              [ngModel]="eyeHeight.value()"
               (ngModelChange)="onValueChange($event)"
             />
             <span class="unit">m</span>
@@ -55,7 +55,8 @@ interface Preset {
           </div>
 
           <p class="hint">
-            <code>/avatar/eyeheight</code> に Float (m) を送信します。
+            <code>/avatar/eyeheight</code> に Float (m) を送信／
+            <code>/avatar/parameters/EyeHeightAsMeters</code> を受信して同期。
             範囲: {{ minValue }} 〜 {{ maxValue }} m
           </p>
         </div>
@@ -64,7 +65,7 @@ interface Preset {
       <div class="settings-section">
         <div class="section-head">
           <h3 class="section-title">プリセット</h3>
-          <button class="btn-add-preset" (click)="addPreset()">
+          <button class="btn-add-preset" (click)="openSaveDialog()">
             + 現在値を保存
           </button>
         </div>
@@ -90,8 +91,70 @@ interface Preset {
         </div>
       </div>
 
-      @if (lastError()) {
-        <div class="error-box">{{ lastError() }}</div>
+      @if (eyeHeight.lastError(); as err) {
+        <div class="error-box">{{ err }}</div>
+      }
+
+      @if (dialogOpen()) {
+        <div class="dialog-backdrop" (click)="closeDialog()">
+          <div
+            class="dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="preset-dialog-title"
+            (click)="$event.stopPropagation()"
+            (keydown.escape)="closeDialog()"
+          >
+            <h3 id="preset-dialog-title" class="dialog-title">プリセット保存</h3>
+
+            <label class="dialog-field">
+              <span class="dialog-label">名前</span>
+              <input
+                #nameInput
+                type="text"
+                class="dialog-input"
+                [ngModel]="draftName()"
+                (ngModelChange)="draftName.set($event)"
+                (keydown.enter)="confirmSave()"
+                maxlength="40"
+                spellcheck="false"
+                autocomplete="off"
+                placeholder="例: 標準, 小柄, 高め"
+              />
+            </label>
+
+            <label class="dialog-field">
+              <span class="dialog-label">身長 (m)</span>
+              <div class="dialog-value-row">
+                <input
+                  type="number"
+                  class="dialog-input dialog-input--value"
+                  [min]="minValue"
+                  [max]="maxValue"
+                  step="0.01"
+                  [ngModel]="draftValue()"
+                  (ngModelChange)="draftValue.set($event)"
+                  (keydown.enter)="confirmSave()"
+                />
+                <span class="unit">m</span>
+              </div>
+              <span class="dialog-hint">{{ minValue }} 〜 {{ maxValue }} m</span>
+            </label>
+
+            @if (dialogError()) {
+              <p class="dialog-error">{{ dialogError() }}</p>
+            }
+
+            <div class="dialog-actions">
+              <button class="dialog-btn dialog-btn--ghost" (click)="closeDialog()">
+                キャンセル
+              </button>
+              <button class="dialog-btn dialog-btn--primary" (click)="confirmSave()">
+                保存
+              </button>
+            </div>
+          </div>
+        </div>
       }
     </div>
   `,
@@ -133,6 +196,20 @@ interface Preset {
       align-items: center;
       gap: 10px;
     }
+
+    /* number 型のネイティブスピナー（上下矢印）を非表示。
+       増減操作は独自の step ボタン群で行うため不要。 */
+    input[type="number"] {
+      -moz-appearance: textfield;
+      appearance: textfield;
+    }
+    input[type="number"]::-webkit-inner-spin-button,
+    input[type="number"]::-webkit-outer-spin-button {
+      -webkit-appearance: none;
+      appearance: none;
+      margin: 0;
+    }
+
     .value-input {
       flex: 1;
       background: var(--color-surface-1);
@@ -280,90 +357,207 @@ interface Preset {
       font-size: 12px;
       color: var(--color-error);
     }
+
+    /* ---- Custom modal dialog ---- */
+    .dialog-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.55);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      animation: dialog-fade-in 0.12s ease-out;
+    }
+    @keyframes dialog-fade-in {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+    .dialog {
+      width: min(360px, calc(100vw - 48px));
+      background: var(--color-surface-2);
+      border: 1px solid var(--color-surface-3);
+      border-radius: var(--radius-lg);
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
+      animation: dialog-slide-in 0.15s ease-out;
+    }
+    @keyframes dialog-slide-in {
+      from { transform: translateY(8px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+    .dialog-title {
+      margin: 0;
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--color-text-1);
+    }
+    .dialog-field {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .dialog-label {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--color-text-3);
+    }
+    .dialog-input {
+      background: var(--color-surface-1);
+      border: 1px solid var(--color-surface-3);
+      border-radius: var(--radius-md);
+      padding: 9px 12px;
+      font-size: 13px;
+      color: var(--color-text-1);
+      font-family: var(--font-sans);
+      outline: none;
+      transition: border-color 0.15s;
+      width: 100%;
+      box-sizing: border-box;
+    }
+    .dialog-input:focus { border-color: var(--color-primary); }
+    .dialog-input--value {
+      font-family: var(--font-mono);
+      text-align: right;
+      font-weight: 600;
+    }
+    .dialog-value-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .dialog-hint {
+      font-size: 10px;
+      color: var(--color-text-4);
+    }
+    .dialog-error {
+      margin: 0;
+      font-size: 11px;
+      color: var(--color-error);
+    }
+    .dialog-actions {
+      display: flex;
+      gap: 8px;
+      justify-content: flex-end;
+      margin-top: 4px;
+    }
+    .dialog-btn {
+      padding: 8px 18px;
+      border-radius: var(--radius-md);
+      font-size: 12px;
+      font-weight: 600;
+      font-family: var(--font-sans);
+      cursor: pointer;
+      transition: all 0.12s;
+      border: 1px solid var(--color-surface-3);
+    }
+    .dialog-btn--ghost {
+      background: var(--color-surface-3);
+      color: var(--color-text-2);
+    }
+    .dialog-btn--ghost:hover { background: var(--color-surface-1); }
+    .dialog-btn--primary {
+      background: var(--color-primary);
+      border-color: var(--color-primary);
+      color: var(--color-bg, #fff);
+    }
+    .dialog-btn--primary:hover { filter: brightness(1.08); }
   `],
 })
 export class HeightViewComponent implements OnInit {
-  readonly value = signal<number>(DEFAULT_VALUE);
   readonly presets = signal<Preset[]>([]);
-  readonly lastError = signal<string | null>(null);
-
   readonly steps = STEPS;
-  readonly minValue = MIN_VALUE;
-  readonly maxValue = MAX_VALUE;
+  readonly minValue = EYE_HEIGHT_MIN;
+  readonly maxValue = EYE_HEIGHT_MAX;
 
-  constructor(private tauri: TauriService) {}
+  // ---- Dialog state ----
+  readonly dialogOpen = signal(false);
+  readonly draftName = signal('');
+  readonly draftValue = signal<number>(EYE_HEIGHT_DEFAULT);
+  readonly dialogError = signal<string | null>(null);
+
+  @ViewChild('nameInput') nameInput?: ElementRef<HTMLInputElement>;
+
+  constructor(public eyeHeight: EyeHeightService) {}
 
   ngOnInit(): void {
-    const savedValue = parseFloat(localStorage.getItem(STORAGE_KEY_VALUE) ?? '');
-    if (Number.isFinite(savedValue)) {
-      this.value.set(this.clamp(savedValue));
-    }
     this.loadPresets();
   }
 
   onValueChange(raw: number | string): void {
     const v = typeof raw === 'number' ? raw : parseFloat(raw);
     if (!Number.isFinite(v)) return;
-    this.setValue(v);
+    this.eyeHeight.setValue(v);
   }
 
   adjust(delta: number): void {
-    // 浮動小数の累積誤差を抑えるため小数点 2 桁で丸める
-    const next = Math.round((this.value() + delta) * 100) / 100;
-    this.setValue(next);
+    this.eyeHeight.adjust(delta);
   }
 
   reset(): void {
-    this.setValue(DEFAULT_VALUE);
+    this.eyeHeight.setValue(EYE_HEIGHT_DEFAULT);
   }
 
   applyPreset(preset: Preset): void {
-    this.setValue(preset.value);
+    this.eyeHeight.setValue(preset.value);
   }
 
-  addPreset(): void {
-    const current = this.value();
-    const name = prompt(
-      `プリセット名を入力 (現在値: ${current.toFixed(2)} m)`,
-      `${current.toFixed(2)} m`,
-    );
-    if (name === null) return;
-    const trimmed = name.trim();
-    if (!trimmed) return;
+  openSaveDialog(): void {
+    const current = this.eyeHeight.value();
+    this.draftName.set(`${current.toFixed(2)} m`);
+    this.draftValue.set(current);
+    this.dialogError.set(null);
+    this.dialogOpen.set(true);
+    // ダイアログ描画後にフォーカスして全文選択
+    queueMicrotask(() => {
+      const el = this.nameInput?.nativeElement;
+      if (el) {
+        el.focus();
+        el.select();
+      }
+    });
+  }
+
+  closeDialog(): void {
+    this.dialogOpen.set(false);
+  }
+
+  confirmSave(): void {
+    const name = this.draftName().trim();
+    if (!name) {
+      this.dialogError.set('名前を入力してください');
+      return;
+    }
+    const raw = this.draftValue();
+    const value = typeof raw === 'number' ? raw : parseFloat(String(raw));
+    if (!Number.isFinite(value)) {
+      this.dialogError.set('身長は数値で入力してください');
+      return;
+    }
+    if (value < this.minValue || value > this.maxValue) {
+      this.dialogError.set(`身長は ${this.minValue} 〜 ${this.maxValue} m の範囲で指定してください`);
+      return;
+    }
     const preset: Preset = {
       id: this.generateId(),
-      name: trimmed.slice(0, 40),
-      value: current,
+      name: name.slice(0, 40),
+      value,
     };
     const next = [...this.presets(), preset];
     this.presets.set(next);
     this.savePresets(next);
+    this.dialogOpen.set(false);
   }
 
   deletePreset(id: string): void {
     const next = this.presets().filter(p => p.id !== id);
     this.presets.set(next);
     this.savePresets(next);
-  }
-
-  private setValue(v: number): void {
-    const clamped = this.clamp(v);
-    this.value.set(clamped);
-    localStorage.setItem(STORAGE_KEY_VALUE, String(clamped));
-    this.sendOsc(clamped);
-  }
-
-  private clamp(v: number): number {
-    return Math.max(MIN_VALUE, Math.min(MAX_VALUE, v));
-  }
-
-  private async sendOsc(value: number): Promise<void> {
-    try {
-      await this.tauri.invoke('osc_set_avatar_eye_height', { value });
-      this.lastError.set(null);
-    } catch (e) {
-      this.lastError.set(`OSC 送信失敗: ${String(e)}`);
-    }
   }
 
   private loadPresets(): void {

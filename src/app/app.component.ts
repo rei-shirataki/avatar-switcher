@@ -1,6 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { Router, RouterOutlet } from '@angular/router';
 import { VRChatAuthService } from './core/services/vrchat-auth.service';
+import { EyeHeightService } from './core/services/eye-height.service';
 import { TitleBarComponent } from './shared/components/title-bar/title-bar.component';
 import { SidebarComponent } from './shared/components/sidebar/sidebar.component';
 import { CommonModule } from '@angular/common';
@@ -25,7 +26,13 @@ import { CommonModule } from '@angular/common';
   styleUrl: './app.component.scss',
 })
 export class AppComponent implements OnInit {
-  constructor(public auth: VRChatAuthService, private router: Router) {}
+  constructor(
+    public auth: VRChatAuthService,
+    private router: Router,
+    // EyeHeightService をここでインジェクトして起動時に常駐させ、
+    // 別ビュー閲覧中でも OSC からの EyeHeightAsMeters を取り逃さないようにする。
+    private _eyeHeight: EyeHeightService,
+  ) {}
 
   async ngOnInit() {
     await this.auth.ensureInitialized();

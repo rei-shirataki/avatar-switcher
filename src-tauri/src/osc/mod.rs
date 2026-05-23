@@ -1,39 +1,68 @@
 pub mod commands;
+pub mod oscquery;
 
 use once_cell::sync::Lazy;
 use rosc::{encoder, OscMessage, OscPacket, OscType};
 use std::net::UdpSocket;
 
-/// VRChat の標準 OSC 受信ポート。
 const DEFAULT_OSC_HOST: &str = "127.0.0.1";
-const DEFAULT_OSC_PORT: u16 = 9000;
 
 /// 送信用 UDP ソケット。プロセス全体で 1 つだけ bind して再利用する。
-/// bind 失敗時は `None` を返し、OSC 送信は no-op にする（REST 経由の
-/// アバター切替は影響を受けない）。
+/// 0.0.0.0 でバインドするのは VRChat が別マシンにいるケース
+/// （`AVATAR_SWITCHER_OSC_HOST=<LAN IP>` 構成）でも送信できるようにするため。
 static OSC_SOCKET: Lazy<Option<UdpSocket>> = Lazy::new(|| {
     match UdpSocket::bind("0.0.0.0:0") {
         Ok(s) => Some(s),
         Err(e) => {
-            log::error!("OSC ソケットの bind に失敗しました: {}", e);
+            log::error!("OSC 送信ソケットの bind に失敗しました: {}", e);
             None
         }
     }
 });
 
-/// 送信先アドレス。`AVATAR_SWITCHER_OSC_HOST` / `AVATAR_SWITCHER_OSC_PORT` で
-/// 上書きできる（VRChat を `--osc=` でポート変更しているユーザー向け）。
-/// 起動時に 1 回だけ評価し、以降のプロセス生存期間中は固定。
-static OSC_ADDR: Lazy<String> = Lazy::new(|| {
-    let host = std::env::var("AVATAR_SWITCHER_OSC_HOST")
-        .unwrap_or_else(|_| DEFAULT_OSC_HOST.to_string());
-    let port = std::env::var("AVATAR_SWITCHER_OSC_PORT")
+/// OSC 受信用ソケット。OSCQuery で広告する自アプリの受信ポート確保用。
+/// 将来 Avatar Parameter / Scaling 等の受信機能を実装するための土台。
+static OSC_RECEIVE_SOCKET: Lazy<Option<UdpSocket>> = Lazy::new(|| {
+    match UdpSocket::bind("127.0.0.1:0") {
+        Ok(s) => Some(s),
+        Err(e) => {
+            log::error!("OSC 受信ソケットの bind に失敗しました: {}", e);
+            None
+        }
+    }
+});
+
+static OSC_HOST_OVERRIDE: Lazy<Option<String>> =
+    Lazy::new(|| std::env::var("AVATAR_SWITCHER_OSC_HOST").ok());
+static OSC_PORT_OVERRIDE: Lazy<Option<u16>> = Lazy::new(|| {
+    std::env::var("AVATAR_SWITCHER_OSC_PORT")
         .ok()
         .and_then(|s| s.parse::<u16>().ok())
-        .unwrap_or(DEFAULT_OSC_PORT);
-    log::info!("OSC 送信先: {}:{}", host, port);
-    format!("{}:{}", host, port)
 });
+
+/// OSCQuery に広告する自アプリの OSC 受信ポートを返す。
+pub fn get_osc_receive_port() -> u16 {
+    OSC_RECEIVE_SOCKET
+        .as_ref()
+        .and_then(|s| s.local_addr().ok())
+        .map(|a| a.port())
+        .unwrap_or(0)
+}
+
+/// VRChat への OSC 送信先アドレスを返す。
+///
+/// 優先順位（host / port は独立に解決）:
+/// 1. 環境変数 `AVATAR_SWITCHER_OSC_HOST` / `AVATAR_SWITCHER_OSC_PORT`
+/// 2. OSCQuery で発見した VRChat の IP / ポート
+/// 3. デフォルト (127.0.0.1:9000)
+fn get_osc_addr() -> String {
+    let host = OSC_HOST_OVERRIDE
+        .clone()
+        .or_else(oscquery::get_vrchat_osc_ip)
+        .unwrap_or_else(|| DEFAULT_OSC_HOST.to_string());
+    let port = OSC_PORT_OVERRIDE.unwrap_or_else(oscquery::get_vrchat_osc_port);
+    format!("{}:{}", host, port)
+}
 
 pub fn send_avatar_change(avatar_id: &str) -> anyhow::Result<()> {
     let Some(socket) = OSC_SOCKET.as_ref() else {
@@ -44,6 +73,8 @@ pub fn send_avatar_change(avatar_id: &str) -> anyhow::Result<()> {
         args: vec![OscType::String(avatar_id.to_string())],
     });
     let encoded = encoder::encode(&packet)?;
-    socket.send_to(&encoded, OSC_ADDR.as_str())?;
+    let addr = get_osc_addr();
+    log::debug!("OSC /avatar/change → {} (id: {})", addr, avatar_id);
+    socket.send_to(&encoded, &addr)?;
     Ok(())
 }

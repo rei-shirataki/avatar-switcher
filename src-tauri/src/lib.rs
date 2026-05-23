@@ -65,6 +65,14 @@ pub fn run() {
                 vrchat::init(&app_handle).await;
             });
 
+            // --- OSCQuery init ---
+            tauri::async_runtime::spawn(async move {
+                let osc_receive_port = osc::get_osc_receive_port();
+                if let Err(e) = osc::oscquery::start(osc_receive_port).await {
+                    log::error!("OSCQuery 起動失敗: {}", e);
+                }
+            });
+
             Ok(())
         })
         // ウィンドウの×ボタンでトレイに最小化

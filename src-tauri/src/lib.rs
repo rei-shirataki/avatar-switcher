@@ -65,9 +65,16 @@ pub fn run() {
                 vrchat::init(&app_handle).await;
             });
 
-            // --- OSCQuery init ---
+            // --- OSC 受信 + OSCQuery init ---
+            let app_handle_osc = app.handle().clone();
             tauri::async_runtime::spawn(async move {
-                let osc_receive_port = osc::get_osc_receive_port();
+                let osc_receive_port = match osc::init_receiver(app_handle_osc).await {
+                    Ok(p) => p,
+                    Err(e) => {
+                        log::error!("OSC 受信ソケット初期化失敗: {}", e);
+                        0
+                    }
+                };
                 if let Err(e) = osc::oscquery::start(osc_receive_port).await {
                     log::error!("OSCQuery 起動失敗: {}", e);
                 }

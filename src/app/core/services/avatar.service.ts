@@ -1,4 +1,5 @@
-import { Injectable, signal, computed } from '@angular/core';
+import { DestroyRef, Injectable, computed, inject, signal } from '@angular/core';
+import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { TauriService } from './tauri.service';
 import { VRChatAuthService } from './vrchat-auth.service';
 import { VRCAvatar, AvatarFolder, AvatarOverride } from '../models/avatar.model';
@@ -57,8 +58,34 @@ export class AvatarService {
 
   private _initPromise: Promise<void> | null = null;
   private _loadedAt = 0;
+  private _unlistenAvatarChange: UnlistenFn | null = null;
 
-  constructor(private tauri: TauriService, private auth: VRChatAuthService) {}
+  constructor(private tauri: TauriService, private auth: VRChatAuthService) {
+    // VRChat 側でアバターが切り替わったら（クイックメニュー操作・別端末経由など）
+    // サイドバーの装着中アバター画像を即時更新する。avatars / favorites リストに
+    // 未ロードの ID が来た場合は何もしない（次回 refresh で同期される）。
+    listen<string>('osc:avatar-change', e => this.applyExternalAvatarChange(e.payload))
+      .then(un => { this._unlistenAvatarChange = un; })
+      .catch(err => {
+        console.warn('osc:avatar-change の購読に失敗しました:', err);
+      });
+
+    inject(DestroyRef).onDestroy(() => {
+      this._unlistenAvatarChange?.();
+      this._unlistenAvatarChange = null;
+    });
+  }
+
+  private applyExternalAvatarChange(avatarId: unknown): void {
+    if (typeof avatarId !== 'string' || !avatarId) return;
+    const found = this.allAvatars().find(a => a.id === avatarId);
+    if (!found) return;
+    const override = this._overrides()[avatarId];
+    const imageUrl = override?.customThumbnail ?? found.thumbnailImageUrl ?? found.imageUrl;
+    if (imageUrl) {
+      this.auth.updateCurrentAvatarImage(imageUrl);
+    }
+  }
 
   /**
    * 初回のみ全データをフェッチし、2回目以降はキャッシュ済みの Promise を返す。

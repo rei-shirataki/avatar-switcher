@@ -1,4 +1,4 @@
-import { Component, ElementRef, OnInit, ViewChild, signal } from '@angular/core';
+import { Component, ElementRef, OnInit, ViewChild, computed, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import {
   EyeHeightService,
@@ -28,14 +28,31 @@ interface Preset {
         <h3 class="section-title">アイハイト (m)</h3>
         <div class="card">
           <div class="value-row">
+            <div
+              class="mode-toggle"
+              role="group"
+              aria-label="送信モード"
+              title="スムーズ: 補間して滑らかに変化 / 普通: 即時反映"
+            >
+              <button
+                type="button"
+                class="mode-btn"
+                [class.active]="eyeHeight.mode() === 'instant'"
+                (click)="eyeHeight.setMode('instant')"
+              >普通</button>
+              <button
+                type="button"
+                class="mode-btn"
+                [class.active]="eyeHeight.mode() === 'smooth'"
+                (click)="eyeHeight.setMode('smooth')"
+              >スムーズ</button>
+            </div>
             <input
-              type="number"
+              type="text"
+              inputmode="decimal"
               class="value-input"
-              [min]="minValue"
-              [max]="maxValue"
-              step="0.01"
-              [ngModel]="eyeHeight.value()"
-              (ngModelChange)="onValueChange($event)"
+              [value]="displayValue()"
+              (change)="onValueChange($any($event.target).value)"
             />
             <span class="unit">m</span>
             <button class="btn-reset" (click)="reset()">リセット</button>
@@ -54,11 +71,6 @@ interface Preset {
             }
           </div>
 
-          <p class="hint">
-            <code>/avatar/eyeheight</code> に Float (m) を送信／
-            <code>/avatar/parameters/EyeHeightAsMeters</code> を受信して同期。
-            範囲: {{ minValue }} 〜 {{ maxValue }} m
-          </p>
         </div>
       </div>
 
@@ -210,6 +222,34 @@ interface Preset {
       margin: 0;
     }
 
+    /* 送信モード切替トグル（普通 / スムーズ） */
+    .mode-toggle {
+      display: inline-flex;
+      background: var(--color-surface-1);
+      border: 1px solid var(--color-surface-3);
+      border-radius: var(--radius-md);
+      padding: 2px;
+      gap: 2px;
+    }
+    .mode-btn {
+      padding: 6px 10px;
+      background: transparent;
+      border: none;
+      border-radius: calc(var(--radius-md) - 2px);
+      color: var(--color-text-3);
+      font-size: 11px;
+      font-weight: 600;
+      font-family: var(--font-sans);
+      cursor: pointer;
+      transition: all 0.12s;
+      white-space: nowrap;
+    }
+    .mode-btn:hover { color: var(--color-text-1); }
+    .mode-btn.active {
+      background: var(--color-primary);
+      color: var(--color-bg, #fff);
+    }
+
     .value-input {
       flex: 1;
       background: var(--color-surface-1);
@@ -271,14 +311,6 @@ interface Preset {
       color: var(--color-text-1);
     }
     .step-btn:active { transform: translateY(1px); }
-
-    .hint { margin: 0; font-size: 11px; color: var(--color-text-4); }
-    .hint code {
-      font-family: var(--font-mono);
-      background: var(--color-surface-3);
-      padding: 1px 5px;
-      border-radius: var(--radius-sm);
-    }
 
     .btn-add-preset {
       padding: 6px 12px;
@@ -474,6 +506,13 @@ export class HeightViewComponent implements OnInit {
   readonly steps = STEPS;
   readonly minValue = EYE_HEIGHT_MIN;
   readonly maxValue = EYE_HEIGHT_MAX;
+  /** 入力欄表示用：常に 2 桁固定。
+   *  スムーズ補間中は中間値ではなく目標値（target）を表示することで、
+   *  「これからどこへ動くか」がユーザに明確に伝わるようにする。 */
+  readonly displayValue = computed(() => {
+    const v = this.eyeHeight.isSmoothing() ? this.eyeHeight.target() : this.eyeHeight.value();
+    return v.toFixed(2);
+  });
 
   // ---- Dialog state ----
   readonly dialogOpen = signal(false);

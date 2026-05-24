@@ -60,6 +60,17 @@ pub fn run() {
                 .build(app)?;
 
             // --- VRChat init ---
+            // SWR キャッシュは setup の同期セクションで先に初期化する。
+            // フロントが起動直後に vrchat_get_cached_* を呼んだとき、
+            // vrchat::init の async spawn 完了を待たずに CACHE_DIR が
+            // 解決できるようにするため。
+            let app_data_dir = app
+                .path()
+                .app_data_dir()
+                .unwrap_or_else(|_| std::path::PathBuf::from("."));
+            std::fs::create_dir_all(&app_data_dir).ok();
+            vrchat::cache::init(app_data_dir);
+
             let app_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 vrchat::init(&app_handle).await;
@@ -98,12 +109,15 @@ pub fn run() {
             // VRChat avatars
             vrchat::commands::vrchat_get_my_avatars,
             vrchat::commands::vrchat_get_favorite_avatars,
+            vrchat::commands::vrchat_get_cached_avatars,
+            vrchat::commands::vrchat_get_cached_favorites,
             vrchat::commands::vrchat_select_avatar,
             vrchat::commands::vrchat_update_avatar,
             vrchat::commands::vrchat_update_avatar_image,
             // OSC
             osc::commands::osc_change_avatar,
             osc::commands::osc_set_avatar_eye_height,
+            osc::commands::osc_get_status,
             // Storage (folders)
             storage::commands::folders_get_all,
             storage::commands::folders_create,

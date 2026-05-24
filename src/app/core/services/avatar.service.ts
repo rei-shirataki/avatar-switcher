@@ -4,12 +4,7 @@ import { TauriService } from './tauri.service';
 import { VRChatAuthService } from './vrchat-auth.service';
 import { VRCAvatar, AvatarFolder, AvatarOverride } from '../models/avatar.model';
 
-/// アバター取得時の安全上限。1 ページ 100 件 × 100 ページ = 10,000 件まで。
-/// 通常ユーザーは数十〜数百件なのでこの上限は実質的に到達しない。
-/// API バグや想定外の挙動で無限ループに陥らないための保険。
-const MAX_AVATAR_PAGES = 100;
-
-/// アバター・お気に入り一覧のキャッシュ有効期限（ミリ秒）。
+/// アバター・お気に入り一覧のメモリキャッシュ有効期限（ミリ秒）。
 /// 長時間起動でも別端末からのアバター追加・削除を反映できるようにする。
 const CACHE_TTL_MS = 10 * 60 * 1000; // 10 分
 
@@ -57,7 +52,12 @@ export class AvatarService {
   });
 
   private _initPromise: Promise<void> | null = null;
+  /** 直近で初期化が完了した時刻 (ms)。0 は「まだ一度も完了していない」。 */
   private _loadedAt = 0;
+  /** 初期化が in-flight 中かどうか。TTL 判定が in-flight 中に走ると
+   *  Date.now() - 0 が常に TTL 超過扱いになり二重ロードしてしまうので、
+   *  明示フラグでガードする。 */
+  private _inFlight = false;
   private _unlistenAvatarChange: UnlistenFn | null = null;
 
   constructor(private tauri: TauriService, private auth: VRChatAuthService) {
@@ -88,41 +88,119 @@ export class AvatarService {
   }
 
   /**
-   * 初回のみ全データをフェッチし、2回目以降はキャッシュ済みの Promise を返す。
-   * タブ切り替え時に不要な再フェッチを防ぐ。
-   * 最終ロードから CACHE_TTL_MS 以上経過していたら自動で再フェッチする。
-   * エラー時は _initPromise をリセットし、次回再試行できるようにする。
+   * 初回起動時はディスクキャッシュ（SWR）→ fresh フェッチで即時表示を実現する。
+   * セッション内 TTL 経過後の自動再フェッチではディスクキャッシュ表示はスキップし、
+   * fresh フェッチのみ実行する（メモリキャッシュが既にあるので二度手間を避ける）。
    *
-   * `_loadedAt === 0` の間（= in-flight）は TTL を評価せず必ず同じ Promise を返す。
-   * 評価すると Date.now()-0 が常に TTL 超過と判定され、二重ロードが発生する。
+   * エラー時は _initPromise をリセットして次回再試行可能にする。
    */
   ensureLoaded(): Promise<void> {
     if (this._initPromise) {
-      // _loadedAt が未設定（=0）の場合は in-flight。TTL 判定をスキップして共有 Promise を返す。
-      const expired = this._loadedAt !== 0 && Date.now() - this._loadedAt > CACHE_TTL_MS;
+      // in-flight 中は TTL 判定をスキップ（二重ロード回避）。
+      if (this._inFlight) return this._initPromise;
+      const expired = Date.now() - this._loadedAt > CACHE_TTL_MS;
       if (!expired) return this._initPromise;
       this._initPromise = null;
     }
 
+    // セッション内で既に一度ロード済み（=_loadedAt > 0）なら fresh のみ。
+    // 初回（_loadedAt === 0）は SWR（ディスクキャッシュ即読み → 並列再フェッチ）。
+    const isFirstLoad = this._loadedAt === 0;
+    this._inFlight = true;
+    this._initPromise = (isFirstLoad ? this._initWithSwr() : this._initFresh())
+      .then(() => {
+        this._loadedAt = Date.now();
+      })
+      .catch((e) => {
+        this._initPromise = null;
+        throw e;
+      })
+      .finally(() => {
+        this._inFlight = false;
+      });
+    return this._initPromise;
+  }
+
+  /**
+   * SWR で初期化する（初回起動・全リセット時）：
+   * 1. ディスクキャッシュを即時ロード（あればスピナーを出さず即表示）。
+   * 2. API への fresh フェッチを並列実行し、成功したらシグナルを更新。
+   * フォルダ・オーバーライドはローカルのみなので素直に load する。
+   */
+  private async _initWithSwr(): Promise<void> {
+    // ─ stale 部分（ディスクキャッシュ即読み） ─
+    const [cachedAv, cachedFav] = await Promise.all([
+      this.tauri.invoke<VRCAvatar[]>('vrchat_get_cached_avatars').catch(() => [] as VRCAvatar[]),
+      this.tauri.invoke<VRCAvatar[]>('vrchat_get_cached_favorites').catch(() => [] as VRCAvatar[]),
+    ]);
+    // 自前 / お気に入りそれぞれ独立にキャッシュ有無を判定する。
+    // 片方だけある状態（例: 初回お気に入り取得失敗）でも、ある方は stale 表示
+    // して即時 UX を維持し、無い方だけスピナー付きで loadXxx() する。
+    const hadAvCache = cachedAv.length > 0;
+    const hadFavCache = cachedFav.length > 0;
+    if (hadAvCache) this._avatars.set(cachedAv);
+    if (hadFavCache) this._favorites.set(cachedFav);
+
+    // ─ revalidate 部分（並列フェッチ） ─
+    await Promise.all([
+      hadAvCache ? this._fetchAvatarsBg() : this.loadAvatars(),
+      hadFavCache ? this._fetchFavoritesBg() : this.loadFavorites(),
+      this.loadFolders(),
+      this.loadOverrides(),
+    ]);
+  }
+
+  /**
+   * TTL 経過時の自動再フェッチ用。ディスクキャッシュは読まず、API への fresh フェッチのみ。
+   * メモリ上の avatars/favorites は表示維持され、フェッチ完了後に上書きされる。
+   */
+  private async _initFresh(): Promise<void> {
+    await Promise.all([
+      this._fetchAvatarsBg(),
+      this._fetchFavoritesBg(),
+      this.loadFolders(),
+      this.loadOverrides(),
+    ]);
+  }
+
+  /** バックグラウンド再フェッチ。失敗しても stale データを残し、ユーザー操作を妨げない。 */
+  private async _fetchAvatarsBg(): Promise<void> {
+    try {
+      const avatars = await this.tauri.invoke<VRCAvatar[]>('vrchat_get_my_avatars');
+      this._avatars.set(avatars);
+    } catch (e) {
+      console.warn('自前アバターの再フェッチに失敗（キャッシュ表示を維持）:', e);
+    }
+  }
+
+  private async _fetchFavoritesBg(): Promise<void> {
+    try {
+      const favs = await this.tauri.invoke<VRCAvatar[]>('vrchat_get_favorite_avatars');
+      this._favorites.set(favs);
+    } catch (e) {
+      console.warn('お気に入りの再フェッチに失敗（キャッシュ表示を維持）:', e);
+    }
+  }
+
+  /**
+   * データを強制的に再フェッチする（手動更新ボタン用）。
+   * SWR の stale キャッシュ表示はバイパスし、loading フラグを立てて fresh フェッチする
+   * （ユーザー操作の即時フィードバックのため）。
+   */
+  async refresh(): Promise<void> {
+    this._initPromise = null;
+    this._loadedAt = 0;
+    this._inFlight = true;
     this._initPromise = Promise.all([
       this.loadAvatars(),
       this.loadFavorites(),
       this.loadFolders(),
       this.loadOverrides(),
-    ]).then(() => {
-      this._loadedAt = Date.now();
-    }).catch((e) => {
-      this._initPromise = null;
-      throw e;
-    });
-    return this._initPromise;
-  }
-
-  /** データを強制的に再フェッチする（手動更新ボタン用）。 */
-  async refresh(): Promise<void> {
-    this._initPromise = null;
-    this._loadedAt = 0;
-    await this.ensureLoaded();
+    ])
+      .then(() => { this._loadedAt = Date.now(); })
+      .catch((e) => { this._initPromise = null; throw e; })
+      .finally(() => { this._inFlight = false; });
+    await this._initPromise;
   }
 
   async loadFavorites(): Promise<void> {
@@ -135,24 +213,15 @@ export class AvatarService {
     }
   }
 
+  /**
+   * 自前アバターを全件取得する。
+   * バックエンド側でページングを投機的並列化しているため、フロントは 1 回呼ぶだけ。
+   */
   async loadAvatars(): Promise<void> {
     this._loading.set(true);
-    // 先にクリアして古いデータをリセット
-    this._avatars.set([]);
     try {
-      let offset = 0;
-      // MAX_AVATAR_PAGES を上限とする安全策。API バグで常に 100 件返り続けても
-      // UI ハングを起こさず、警告ログを残してループを抜ける。
-      for (let page = 0; page < MAX_AVATAR_PAGES; page++) {
-        const items = await this.tauri.invoke<VRCAvatar[]>('vrchat_get_my_avatars', { offset });
-        // ページ単位で即時反映し、最初の 100 件をすぐに表示する
-        this._avatars.update(current => [...current, ...items]);
-        if (items.length < 100) return;
-        offset += 100;
-      }
-      console.warn(
-        `loadAvatars: ${MAX_AVATAR_PAGES} ページ取得しても終端に達しませんでした。打ち切りました。`,
-      );
+      const avatars = await this.tauri.invoke<VRCAvatar[]>('vrchat_get_my_avatars');
+      this._avatars.set(avatars);
     } finally {
       this._loading.set(false);
     }

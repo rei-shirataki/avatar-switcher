@@ -1,4 +1,4 @@
-import { Component, ElementRef, OnInit, ViewChild, computed, signal } from '@angular/core';
+import { Component, ElementRef, HostListener, OnInit, ViewChild, computed, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import {
   EyeHeightService,
@@ -60,18 +60,19 @@ interface Preset {
 
           <div class="step-grid">
             @for (step of steps; track step) {
-              <div class="step-pair">
-                <button class="step-btn step-btn--minus" (click)="adjust(-step)">
-                  − {{ step.toFixed(2) }}
-                </button>
-                <button class="step-btn step-btn--plus" (click)="adjust(step)">
-                  + {{ step.toFixed(2) }}
-                </button>
-              </div>
+              <button class="step-btn step-btn--plus" (click)="adjust(step)">
+                + {{ step.toFixed(2) }}
+              </button>
+            }
+            @for (step of steps; track step) {
+              <button class="step-btn step-btn--minus" (click)="adjust(-step)">
+                − {{ step.toFixed(2) }}
+              </button>
             }
           </div>
 
         </div>
+        <p class="info-box">ワールド移動・アバター変更時は VRChat 側の身長がリセットされます。変更後は再度適用してください。</p>
       </div>
 
       <div class="settings-section">
@@ -87,7 +88,11 @@ interface Preset {
           } @else {
             @for (preset of presets(); track preset.id) {
               <div class="preset-row">
-                <button class="preset-apply" (click)="applyPreset(preset)">
+                <button
+                  class="preset-apply"
+                  (click)="applyPreset(preset)"
+                  (contextmenu)="openContextMenu(preset, $event)"
+                >
                   <span class="preset-name">{{ preset.name }}</span>
                   <span class="preset-value">{{ preset.value.toFixed(2) }} m</span>
                 </button>
@@ -107,6 +112,13 @@ interface Preset {
         <div class="error-box">{{ err }}</div>
       }
 
+      @if (contextMenu(); as menu) {
+        <div class="ctx-menu" [style.left.px]="menu.x" [style.top.px]="menu.y" (click)="$event.stopPropagation()">
+          <button class="ctx-item" (click)="openEditDialog(menu.preset); closeContextMenu()">編集</button>
+          <button class="ctx-item ctx-item--danger" (click)="deletePreset(menu.preset.id); closeContextMenu()">削除</button>
+        </div>
+      }
+
       @if (dialogOpen()) {
         <div class="dialog-backdrop" (click)="closeDialog()">
           <div
@@ -117,7 +129,7 @@ interface Preset {
             (click)="$event.stopPropagation()"
             (keydown.escape)="closeDialog()"
           >
-            <h3 id="preset-dialog-title" class="dialog-title">プリセット保存</h3>
+            <h3 id="preset-dialog-title" class="dialog-title">{{ dialogMode() === 'edit' ? 'プリセット編集' : 'プリセット保存' }}</h3>
 
             <label class="dialog-field">
               <span class="dialog-label">名前</span>
@@ -286,11 +298,7 @@ interface Preset {
 
     .step-grid {
       display: grid;
-      grid-template-columns: repeat(2, 1fr);
-      gap: 8px;
-    }
-    .step-pair {
-      display: flex;
+      grid-template-columns: repeat(4, 1fr);
       gap: 6px;
     }
     .step-btn {
@@ -379,6 +387,17 @@ interface Preset {
       background: rgba(245, 108, 108, 0.1);
       border-color: rgba(245, 108, 108, 0.3);
       color: var(--color-error);
+    }
+
+    .info-box {
+      margin: 8px 0 0;
+      padding: 10px 14px;
+      background: rgba(245, 166, 35, 0.08);
+      border: 1px solid rgba(245, 166, 35, 0.25);
+      border-radius: var(--radius-md);
+      font-size: 11px;
+      color: var(--color-warning);
+      line-height: 1.6;
     }
 
     .error-box {
@@ -499,6 +518,36 @@ interface Preset {
       color: var(--color-bg, #fff);
     }
     .dialog-btn--primary:hover { filter: brightness(1.08); }
+
+    /* ---- Context menu ---- */
+    .ctx-menu {
+      position: fixed;
+      z-index: 901;
+      background: var(--color-surface-2);
+      border: 1px solid var(--color-surface-3);
+      border-radius: var(--radius-md);
+      padding: 4px;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+      min-width: 120px;
+    }
+    .ctx-item {
+      display: block;
+      width: 100%;
+      padding: 8px 12px;
+      background: transparent;
+      border: none;
+      border-radius: calc(var(--radius-md) - 4px);
+      color: var(--color-text-1);
+      font-size: 12px;
+      font-family: var(--font-sans);
+      text-align: left;
+      cursor: pointer;
+      &:hover { background: var(--color-surface-3); }
+    }
+    .ctx-item--danger {
+      color: var(--color-error);
+      &:hover { background: rgba(245, 108, 108, 0.1); }
+    }
   `],
 })
 export class HeightViewComponent implements OnInit {
@@ -514,8 +563,13 @@ export class HeightViewComponent implements OnInit {
     return v.toFixed(2);
   });
 
+  // ---- Context menu state ----
+  readonly contextMenu = signal<{ x: number; y: number; preset: Preset } | null>(null);
+
   // ---- Dialog state ----
   readonly dialogOpen = signal(false);
+  readonly dialogMode = signal<'save' | 'edit'>('save');
+  readonly editingPresetId = signal<string | null>(null);
   readonly draftName = signal('');
   readonly draftValue = signal<number>(EYE_HEIGHT_DEFAULT);
   readonly dialogError = signal<string | null>(null);
@@ -548,22 +602,72 @@ export class HeightViewComponent implements OnInit {
 
   openSaveDialog(): void {
     const current = this.eyeHeight.value();
+    this.dialogMode.set('save');
+    this.editingPresetId.set(null);
     this.draftName.set(`${current.toFixed(2)} m`);
     this.draftValue.set(current);
     this.dialogError.set(null);
     this.dialogOpen.set(true);
-    // ダイアログ描画後にフォーカスして全文選択
     queueMicrotask(() => {
       const el = this.nameInput?.nativeElement;
-      if (el) {
-        el.focus();
-        el.select();
-      }
+      if (el) { el.focus(); el.select(); }
+    });
+  }
+
+  @HostListener('document:click')
+  onDocumentClick(): void {
+    this.contextMenu.set(null);
+  }
+
+  /** ESC で開いているコンテキストメニューを閉じる（ダイアログとの一貫性のため）。 */
+  @HostListener('document:keydown.escape')
+  onDocumentEscape(): void {
+    if (this.contextMenu()) this.contextMenu.set(null);
+  }
+
+  /** スクロール / ホイールでもメニューを閉じる。position:fixed のため
+   *  プリセット側だけスクロールしてメニューだけ空中に残るのを防ぐ。 */
+  @HostListener('window:scroll')
+  @HostListener('window:wheel')
+  onScrollOrWheel(): void {
+    if (this.contextMenu()) this.contextMenu.set(null);
+  }
+
+  /** 右クリック位置がビューポート右端・下端を超えないように clamp する。
+   *  メニューサイズは概算（min-width 120 / 高さ ~80）。実測値に厳密に合わせなくても、
+   *  画面外にはみ出さないことが目的。 */
+  openContextMenu(preset: Preset, event: MouseEvent): void {
+    event.preventDefault();
+    const MENU_W = 140;
+    const MENU_H = 88;
+    const MARGIN = 4;
+    const maxX = window.innerWidth - MENU_W - MARGIN;
+    const maxY = window.innerHeight - MENU_H - MARGIN;
+    const x = Math.max(MARGIN, Math.min(event.clientX, maxX));
+    const y = Math.max(MARGIN, Math.min(event.clientY, maxY));
+    this.contextMenu.set({ x, y, preset });
+  }
+
+  closeContextMenu(): void {
+    this.contextMenu.set(null);
+  }
+
+  openEditDialog(preset: Preset): void {
+    this.dialogMode.set('edit');
+    this.editingPresetId.set(preset.id);
+    this.draftName.set(preset.name);
+    this.draftValue.set(preset.value);
+    this.dialogError.set(null);
+    this.dialogOpen.set(true);
+    queueMicrotask(() => {
+      const el = this.nameInput?.nativeElement;
+      if (el) { el.focus(); el.select(); }
     });
   }
 
   closeDialog(): void {
     this.dialogOpen.set(false);
+    this.editingPresetId.set(null);
   }
 
   confirmSave(): void {
@@ -582,15 +686,19 @@ export class HeightViewComponent implements OnInit {
       this.dialogError.set(`身長は ${this.minValue} 〜 ${this.maxValue} m の範囲で指定してください`);
       return;
     }
-    const preset: Preset = {
-      id: this.generateId(),
-      name: name.slice(0, 40),
-      value,
-    };
-    const next = [...this.presets(), preset];
+    const editId = this.editingPresetId();
+    let next: Preset[];
+    if (editId) {
+      next = this.presets().map(p =>
+        p.id === editId ? { ...p, name: name.slice(0, 40), value } : p,
+      );
+    } else {
+      next = [...this.presets(), { id: this.generateId(), name: name.slice(0, 40), value }];
+    }
     this.presets.set(next);
     this.savePresets(next);
     this.dialogOpen.set(false);
+    this.editingPresetId.set(null);
   }
 
   deletePreset(id: string): void {

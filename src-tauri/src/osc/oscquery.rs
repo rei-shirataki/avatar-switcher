@@ -27,6 +27,13 @@ pub fn get_vrchat_osc_port() -> u16 {
     VRCHAT_OSC_PORT.load(Ordering::Relaxed)
 }
 
+pub fn is_vrchat_detected() -> bool {
+    CURRENT_VRCHAT_FULLNAME
+        .lock()
+        .map(|g| g.is_some())
+        .unwrap_or(false)
+}
+
 /// OSCQuery を初期化する。
 ///
 /// - `_oscjson._tcp` として自アプリを mDNS 広告

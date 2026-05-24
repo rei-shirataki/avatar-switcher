@@ -35,31 +35,32 @@
   gap: 16px;
 }
 
+.account-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  background: var(--color-surface-3);
+
+  // 画像読み込み失敗時 (onAvatarError) に付与される。
+  // src を外しても要素サイズと背景色だけ残し、broken icon は表示しない。
+  &--placeholder {
+    object-fit: initial;
+  }
+}
+
+.account-info {
+  flex: 1;
+  min-width: 0;
+}
+
 .account-name {
   font-size: 15px;
   font-weight: 600;
   color: var(--color-text-1);
-  margin-bottom: 2px;
 }
 
-.account-id {
-  font-size: 10px;
-  color: var(--color-text-3);
-  font-family: var(--font-mono);
-  margin-bottom: 6px;
-}
-
-.account-status {
-  font-size: 11px;
-  padding: 2px 8px;
-  border-radius: var(--radius-sm);
-  display: inline-block;
-
-  &.status-active { background: rgba(86, 201, 110, 0.1); color: var(--color-success); }
-  &.status-join\ me { background: rgba(0, 170, 255, 0.1); color: #00aaff; }
-  &.status-ask\ me { background: rgba(245, 166, 35, 0.1); color: var(--color-warning); }
-  &.status-busy { background: rgba(245, 108, 108, 0.1); color: var(--color-error); }
-}
 
 .btn-logout {
   padding: 8px 16px;
@@ -105,8 +106,6 @@
 .setting-label {
   font-size: 13px;
   color: var(--color-text-2);
-  display: flex;
-  justify-content: space-between;
 }
 
 .setting-value {

@@ -58,9 +58,10 @@ interface Preset {
             <span class="unit">m</span>
             <button
               class="btn-reset"
+              [disabled]="eyeHeight.fetchingDefault()"
               (click)="reset()"
               title="アバター本来の身長に戻す（取得できなければ 1.6m）"
-            >リセット</button>
+            >{{ eyeHeight.fetchingDefault() ? '取得中…' : 'リセット' }}</button>
           </div>
 
           <div class="step-grid">
@@ -300,6 +301,11 @@ interface Preset {
       white-space: nowrap;
     }
     .btn-reset:hover { background: var(--color-surface-1); }
+    .btn-reset:disabled {
+      opacity: 0.6;
+      cursor: default;
+    }
+    .btn-reset:disabled:hover { background: var(--color-surface-3); }
 
     .step-grid {
       display: grid;
@@ -597,8 +603,9 @@ export class HeightViewComponent implements OnInit {
     this.eyeHeight.adjust(delta);
   }
 
-  reset(): void {
-    this.eyeHeight.setValue(this.eyeHeight.getAvatarDefault());
+  async reset(): Promise<void> {
+    const target = await this.eyeHeight.getAvatarDefault();
+    await this.eyeHeight.setValue(target);
   }
 
   applyPreset(preset: Preset): void {

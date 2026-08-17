@@ -7,6 +7,10 @@ dist/
 src-tauri/target/
 .cargo/
 
+# .NET (overlay-sidecar)
+overlay-sidecar/bin/
+overlay-sidecar/obj/
+
 # Tauri
 src-tauri/gen/
 src-tauri/gen/schemas/

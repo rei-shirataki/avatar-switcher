@@ -22,11 +22,20 @@ const OSC_ADDR_SCALE_FACTOR: &str = "/avatar/parameters/ScaleFactor";
 const OSC_ADDR_SCALE_MODIFIED: &str = "/avatar/parameters/ScaleModified";
 /// VRChat からのアバター切替通知。
 const OSC_ADDR_AVATAR_CHANGE: &str = "/avatar/change";
+/// Udon が設定するアイハイトのスライダー選択可能範囲・書き込み許可。
+/// 読み取り専用（Output）。公式仕様上、`/avatar/eyeheight` への OSC 書き込み
+/// 自体はこの範囲・許可の制限を受けないため、UI 上の目安表示にのみ使う。
+const OSC_ADDR_EYE_HEIGHT_MIN: &str = "/avatar/eyeheightmin";
+const OSC_ADDR_EYE_HEIGHT_MAX: &str = "/avatar/eyeheightmax";
+const OSC_ADDR_EYE_HEIGHT_SCALING_ALLOWED: &str = "/avatar/eyeheightscalingallowed";
 
 const EVENT_EYE_HEIGHT: &str = "osc:eye-height";
 const EVENT_SCALE_FACTOR: &str = "osc:scale-factor";
 const EVENT_SCALE_MODIFIED: &str = "osc:scale-modified";
 const EVENT_AVATAR_CHANGE: &str = "osc:avatar-change";
+const EVENT_EYE_HEIGHT_MIN: &str = "osc:eye-height-min";
+const EVENT_EYE_HEIGHT_MAX: &str = "osc:eye-height-max";
+const EVENT_EYE_HEIGHT_SCALING_ALLOWED: &str = "osc:eye-height-scaling-allowed";
 
 /// 送信用 UDP ソケット。プロセス全体で 1 つだけ bind して再利用する。
 /// 同一マシン上の VRChat に向けて送るだけなので 127.0.0.1 に bind する。
@@ -199,6 +208,26 @@ fn dispatch_message(msg: OscMessage, app: &AppHandle) {
             if let Some(OscType::String(id)) = msg.args.first() {
                 let _ = app.emit(EVENT_AVATAR_CHANGE, id.clone());
             }
+        }
+        OSC_ADDR_EYE_HEIGHT_MIN => {
+            if let Some(OscType::Float(v)) = msg.args.first() {
+                let _ = app.emit(EVENT_EYE_HEIGHT_MIN, *v);
+            }
+        }
+        OSC_ADDR_EYE_HEIGHT_MAX => {
+            if let Some(OscType::Float(v)) = msg.args.first() {
+                let _ = app.emit(EVENT_EYE_HEIGHT_MAX, *v);
+            }
+        }
+        OSC_ADDR_EYE_HEIGHT_SCALING_ALLOWED => {
+            // ScaleModified と同様、型タグの変種に寛容に対応する。
+            let b = match msg.args.first() {
+                Some(OscType::Bool(b)) => *b,
+                Some(OscType::Int(i)) => *i != 0,
+                Some(OscType::Float(f)) => *f != 0.0,
+                _ => return,
+            };
+            let _ = app.emit(EVENT_EYE_HEIGHT_SCALING_ALLOWED, b);
         }
         _ => {}
     }

@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>true</SelfContained>
+    <Nullable>enable</Nullable>
+    <RootNamespace>AvatarSwitcher.OverlaySidecar</RootNamespace>
+    <AssemblyName>overlay-sidecar</AssemblyName>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- ValveSoftware/openvr の公式配布物をそのままベンダリングしている。
+         自動生成ファイルのため手動編集しない（OpenVR/VENDORING.md 参照）。 -->
+    <Compile Include="OpenVR\openvr_api.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- openvr_api.cs 側の [DllImport("openvr_api")] は実行ファイルと同じ
+         ディレクトリで openvr_api.dll を解決するため、出力ルートへ
+         Link でフラット配置する。 -->
+    <None Include="OpenVR\openvr_api.dll">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>openvr_api.dll</Link>
+    </None>
+  </ItemGroup>
+
+</Project>

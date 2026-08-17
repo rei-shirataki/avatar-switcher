@@ -1,6 +1,7 @@
 mod vrchat;
 mod osc;
 mod storage;
+mod steamvr;
 
 use tauri::{
     menu::{Menu, MenuItem, PredefinedMenuItem},
@@ -91,6 +92,14 @@ pub fn run() {
                 }
             });
 
+            // --- SteamVR オーバーレイ (overlay-sidecar 起動 + WSブリッジ) ---
+            // SteamVR / .NET ランタイム未導入環境でも本体アプリの起動を妨げないよう、
+            // 失敗は steamvr::init 内部で吸収してログのみに留める。
+            let app_handle_steamvr = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                steamvr::init(&app_handle_steamvr).await;
+            });
+
             Ok(())
         })
         // ウィンドウの×ボタンでトレイに最小化
@@ -131,6 +140,13 @@ pub fn run() {
             storage::commands::avatar_overrides_set,
             storage::commands::avatar_overrides_delete,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|_app_handle, event| {
+            // overlay-sidecar は app.exit() 経由の即時終了だと kill_on_drop に
+            // 頼れない（Drop が走らない）ため、ここで明示的に kill する。
+            if let tauri::RunEvent::Exit = event {
+                steamvr::shutdown();
+            }
+        });
 }

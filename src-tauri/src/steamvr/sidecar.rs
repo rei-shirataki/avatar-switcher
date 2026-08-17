@@ -52,23 +52,36 @@ fn log_file_path(app: &AppHandle) -> Option<PathBuf> {
 }
 
 /// サイドカーを起動し、異常終了時はバックオフしつつ再起動を繰り返す監視タスクを spawn する。
+///
+/// 実行ファイルパスの解決はループの毎回試みる（起動時1回だけではない）。
+/// 開発時は「アプリを起動 → `dotnet publish` → `AVATAR_SWITCHER_OVERLAY_SIDECAR_PATH`
+/// を設定」という順序になりがちで、起動時点ではまだ publish 成果物が存在しないことが
+/// 多い。ここで恒久的に諦めてしまうと、後から exe が現れても一生ピックアップされない。
 pub(crate) async fn spawn(app: AppHandle, ws_port: u16, token: String) {
-    let Some(path) = resolve_sidecar_path(&app) else {
-        log::warn!(
-            "[steamvr] overlay-sidecar 実行ファイルが見つかりません。SteamVRオーバーレイは無効化されます。"
-        );
-        return;
-    };
     let log_path = log_file_path(&app);
     if let Some(ref p) = log_path {
         log::info!("[steamvr] overlay-sidecar のログ出力先: {}", p.display());
     }
     tokio::spawn(async move {
         let mut attempt = 0usize;
+        let mut warned_missing = false;
         loop {
             if SHUTTING_DOWN.load(Ordering::SeqCst) {
                 break;
             }
+
+            let Some(path) = resolve_sidecar_path(&app) else {
+                if !warned_missing {
+                    log::warn!(
+                        "[steamvr] overlay-sidecar 実行ファイルが見つかりません。見つかり次第自動的に起動します。"
+                    );
+                    warned_missing = true;
+                }
+                tokio::time::sleep(Duration::from_secs(3)).await;
+                continue;
+            };
+            warned_missing = false;
+
             match launch(&path, ws_port, &token, log_path.as_deref()).await {
                 Ok(mut child) => {
                     attempt = 0;

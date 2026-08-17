@@ -180,7 +180,19 @@ internal sealed class OverlayManager
             if (_active)
             {
                 timer.TickStart();
-                _panel?.UpdateFrame();
+                try
+                {
+                    // MainLoop 側の Deactivate()（OpenVR.Shutdown 呼び出し）と競合し、
+                    // このスレッドが解放済みの OpenVR インターフェースに触れる可能性が
+                    // ある（参照実装 OyasumiVR も同じ構造で同じレースを許容している）。
+                    // クラッシュさせず次ティックへ回復させるだけの安全網。
+                    _panel?.UpdateFrame();
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($"[steamvr] フレーム更新中に例外: {ex.Message}");
+                }
+
                 timer.SleepUntilNextTick();
             }
             else

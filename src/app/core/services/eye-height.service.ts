@@ -1,6 +1,7 @@
 import { DestroyRef, Injectable, inject, signal } from '@angular/core';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { TauriService } from './tauri.service';
+import { coerceFiniteNumber } from '../utils/number.util';
 
 const STORAGE_KEY_VALUE = 'avatar-switcher.eyeheight.value';
 const STORAGE_KEY_MODE = 'avatar-switcher.eyeheight.mode';
@@ -14,6 +15,12 @@ export const EYE_HEIGHT_MAX = 5.0;
  *  巻き戻すレースを潰す。VRChat 側の echo 遅延 (~50–200ms) と SMOOTH_DURATION_MS の
  *  どちらも余裕で覆える値にしてある。 */
 const ECHO_SUPPRESS_MS = 800;
+
+/** アバター切替通知（/avatar/change）の直後、この期間内に届く Scale 系メッセージは
+ *  旧アバターの送信残り（UDP バッファ遅延）の可能性があるため、プレハブ身長の
+ *  計算入力としては捨てる。新アバターのパラメータダンプはロード完了後
+ *  （通常 1 秒以上先）に届くので、この窓で取りこぼすことはまずない。 */
+const AVATAR_SETTLE_MS = 300;
 
 /** 送信モード。どちらも公式 `/avatar/eyeheight` に Float(m) を送る。
  *  - `instant`: 目標値を 1 発で送る。VRChat 側で即座に反映。
@@ -74,11 +81,39 @@ export class EyeHeightService {
   readonly mode = this._mode.asReadonly();
   readonly lastError = this._lastError.asReadonly();
 
-  private unlisten: UnlistenFn | null = null;
+  /** 登録済み Tauri イベントリスナーの解放関数。onDestroy で一括解放する。 */
+  private readonly unlisteners: UnlistenFn[] = [];
   /** 進行中のスムージング interval ハンドル。null なら未進行。 */
   private smoothTimer: ReturnType<typeof setInterval> | null = null;
   /** 直近で sendOsc を呼んだ performance.now() 時刻。エコー抑止の起点。 */
   private _lastSelfSendAt = 0;
+
+  // ── アバター本来の身長（プレハブ Eye Height）の逆算用 ──
+  //
+  // VRChat の Built-in Parameters `ScaleFactor` / `ScaleModified` がアバターの
+  // Animator Playable Layer に登録されている場合に限り送られてくる。
+  // 揃えば `EyeHeightAsMeters / ScaleFactor = PrefabHeight`、
+  // または `ScaleModified === false` なら EyeHeight 自身がプレハブ身長。
+  //
+  // EyeHeight と ScaleFactor は独立した OSC ストリームで届くため、「最新値同士」を
+  // その場で除算すると異なる時点の値をペアにしてしまい誤った身長を返し得る
+  // （スムーズ補間中のエコーと遅延した ScaleFactor の組み合わせ等）。そこで
+  // 計算入力は isSteadyState()（自前送信の影響もアバター切替の残響もない状態）で
+  // 受信したものに限定し、整合の取れたペアから _prefabHeight を事前計算して
+  // キャッシュする。プレハブ身長はアバター毎に一定なので、一度正しく求まれば
+  // 以後のユーザ操作中もそのまま使い回せる。
+  //
+  // アバター切替時は全状態をクリアする（古いアバターの ScaleFactor が新アバターで
+  // 残ると誤計算する）。非対応アバターでは null のままなので EYE_HEIGHT_DEFAULT に
+  // fallback する。
+  private _scaleFactor: number | null = null;
+  private _scaleModified: boolean | null = null;
+  /** 定常状態で観測した VRChat 由来の最新 EyeHeight。プレハブ身長の計算入力。 */
+  private _lastEcho: number | null = null;
+  /** 整合ペアから逆算したプレハブ身長のキャッシュ。未確定なら null。 */
+  private _prefabHeight: number | null = null;
+  /** 直近の /avatar/change 受信時刻。AVATAR_SETTLE_MS の起点。 */
+  private _lastAvatarChangeAt = Number.NEGATIVE_INFINITY;
 
   constructor(private tauri: TauriService) {
     const saved = parseFloat(localStorage.getItem(STORAGE_KEY_VALUE) ?? '');
@@ -94,17 +129,35 @@ export class EyeHeightService {
     // サービスは providedIn: 'root' で常駐するため、別ビューにいてアバター切替された
     // 場合でも EyeHeightAsMeters を取りこぼさずに最新値を保持できる。
     listen<number>('osc:eye-height', e => this.applyExternalValue(e.payload))
-      .then(un => { this.unlisten = un; })
+      .then(un => { this.unlisteners.push(un); })
       .catch(err => {
         this._lastError.set(`OSC受信購読失敗: ${String(err)}`);
+      });
+
+    // Avatar Scaling Built-in Parameters。届かないアバターも多いが、
+    // 届いている間はプレハブ身長を正確に逆算できる。
+    // この 2 つは取れなくても EYE_HEIGHT_DEFAULT への fallback で動くので握り潰す。
+    listen<number>('osc:scale-factor', e => this.applyScaleFactor(e.payload))
+      .then(un => { this.unlisteners.push(un); })
+      .catch(() => {});
+    listen<boolean>('osc:scale-modified', e => this.applyScaleModified(e.payload))
+      .then(un => { this.unlisteners.push(un); })
+      .catch(() => {});
+
+    // アバター切替時はスケール状態を必ずリセットする。新アバターが ScaleFactor を
+    // 公開していない場合、古い値を引きずると別アバターの倍率で誤計算してしまう。
+    // この購読が失敗するとリセット漏れ＝誤計算に直結するため、エラーは UI に出す。
+    listen<string>('osc:avatar-change', () => this.onAvatarChange())
+      .then(un => { this.unlisteners.push(un); })
+      .catch(err => {
+        this._lastError.set(`OSC受信購読失敗 (avatar-change): ${String(err)}`);
       });
 
     // dev HMR 等でサービスが再構築される際にリスナーと interval を確実に解放する。
     // providedIn:'root' でも DestroyRef は機能する。
     inject(DestroyRef).onDestroy(() => {
       this.cancelSmooth();
-      this.unlisten?.();
-      this.unlisten = null;
+      for (const un of this.unlisteners.splice(0)) un();
     });
   }
 
@@ -208,16 +261,83 @@ export class EyeHeightService {
    *  「自分が投げた値が戻ってきただけ」とみなして無視する。スムーズ終端直後の
    *  遅延エコーで _target が中間値に巻き戻る race を防ぐ。 */
   private applyExternalValue(raw: unknown): void {
+    const v = coerceFiniteNumber(raw);
+    if (v === null) return;
     if (this._isSmoothing()) return;
     if (performance.now() - this._lastSelfSendAt < ECHO_SUPPRESS_MS) return;
-    const v = typeof raw === 'number' ? raw : parseFloat(String(raw));
-    if (!Number.isFinite(v)) return;
     const normalized = this.normalize(v);
+    // ここまで来た時点で自前送信の影響はないが、アバター切替直後の残響だけは
+    // 別途除外してプレハブ身長の計算入力に採用する。
+    if (this.isSteadyState()) {
+      this._lastEcho = normalized;
+      this.recomputePrefabHeight();
+    }
     this._value.set(normalized);
     // VRC 側で身長を変えた直後にユーザがボタンを押した時、その新しい値を
     // 起点にして増減できるよう _target も同期しておく。
     this._target.set(normalized);
-    localStorage.setItem(STORAGE_KEY_VALUE, String(normalized));
+    this.persistValue(normalized);
+  }
+
+  private applyScaleFactor(raw: unknown): void {
+    const v = coerceFiniteNumber(raw);
+    if (v === null || v <= 0) return;
+    // スムーズ補間中・エコー抑止中に届く ScaleFactor は自前送信による変化の途中値で、
+    // 抑止されている _lastEcho とペアが揃わないため捨てる。最後に観測した整合ペア
+    // から計算済みの _prefabHeight がそのまま有効（プレハブ身長は不変）。
+    if (!this.isSteadyState()) return;
+    this._scaleFactor = v;
+    this.recomputePrefabHeight();
+  }
+
+  private applyScaleModified(raw: unknown): void {
+    if (typeof raw !== 'boolean') return;
+    if (!this.isSteadyState()) return;
+    this._scaleModified = raw;
+    this.recomputePrefabHeight();
+  }
+
+  private onAvatarChange(): void {
+    this._scaleFactor = null;
+    this._scaleModified = null;
+    this._lastEcho = null;
+    this._prefabHeight = null;
+    this._lastAvatarChangeAt = performance.now();
+  }
+
+  /** プレハブ身長の計算入力を受け入れてよい「定常状態」かどうか。
+   *  自前送信の影響（スムーズ補間・エコー抑止窓）と、アバター切替直後の
+   *  旧アバター由来メッセージの残響期間を除外する。_lastEcho / _scaleFactor /
+   *  _scaleModified がすべて同じ条件で更新されることで、互いに整合の取れた
+   *  ペアであることが保証される。 */
+  private isSteadyState(): boolean {
+    if (this._isSmoothing()) return false;
+    const now = performance.now();
+    if (now - this._lastSelfSendAt < ECHO_SUPPRESS_MS) return false;
+    if (now - this._lastAvatarChangeAt < AVATAR_SETTLE_MS) return false;
+    return true;
+  }
+
+  /** 定常状態で観測した整合ペアからプレハブ身長を再計算してキャッシュする。
+   *
+   *  優先順位:
+   *  1. ScaleFactor が届いていれば `EyeHeight / ScaleFactor` で逆算（最も正確）
+   *  2. ScaleModified が明示的に false なら現在 EyeHeight 自身がプレハブ身長
+   *  3. どちらも未取得なら計算不能（キャッシュ据え置き） */
+  private recomputePrefabHeight(): void {
+    if (this._lastEcho == null) return;
+    if (this._scaleFactor != null) {
+      this._prefabHeight = this.normalize(this._lastEcho / this._scaleFactor);
+    } else if (this._scaleModified === false) {
+      this._prefabHeight = this.normalize(this._lastEcho);
+    }
+  }
+
+  /** アバター本来のプレハブ身長を返す。リセットボタンが使用する。
+   *  未確定（Avatar Scaling 非対応アバター・受信前）なら EYE_HEIGHT_DEFAULT。
+   *  キャッシュは normalize 済みなので [EYE_HEIGHT_MIN, EYE_HEIGHT_MAX] に収まる。 */
+  getAvatarDefault(): number {
+    return this._prefabHeight ?? EYE_HEIGHT_DEFAULT;
   }
 
   /** 範囲クランプ＋0.01 桁丸めを 1 箇所に集約。

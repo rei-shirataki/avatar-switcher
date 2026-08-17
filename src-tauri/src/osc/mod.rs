@@ -15,10 +15,17 @@ const DEFAULT_OSC_HOST: &str = "127.0.0.1";
 /// 購読する。どちらが先に来るかは VRChat のバージョン・設定により異なる。
 const OSC_ADDR_EYE_HEIGHT_PARAM: &str = "/avatar/parameters/EyeHeightAsMeters";
 const OSC_ADDR_EYE_HEIGHT_DIRECT: &str = "/avatar/eyeheight";
+/// Avatar Scaling の Built-in Parameters。アバター作成者が Animator の
+/// Playable Layer に登録している場合のみ送信されてくる。これらが揃えば
+/// `EyeHeightAsMeters / ScaleFactor` でアバター本来のプレハブ身長を逆算できる。
+const OSC_ADDR_SCALE_FACTOR: &str = "/avatar/parameters/ScaleFactor";
+const OSC_ADDR_SCALE_MODIFIED: &str = "/avatar/parameters/ScaleModified";
 /// VRChat からのアバター切替通知。
 const OSC_ADDR_AVATAR_CHANGE: &str = "/avatar/change";
 
 const EVENT_EYE_HEIGHT: &str = "osc:eye-height";
+const EVENT_SCALE_FACTOR: &str = "osc:scale-factor";
+const EVENT_SCALE_MODIFIED: &str = "osc:scale-modified";
 const EVENT_AVATAR_CHANGE: &str = "osc:avatar-change";
 
 /// 送信用 UDP ソケット。プロセス全体で 1 つだけ bind して再利用する。
@@ -169,6 +176,24 @@ fn dispatch_message(msg: OscMessage, app: &AppHandle) {
             if let Some(OscType::Float(v)) = msg.args.first() {
                 let _ = app.emit(EVENT_EYE_HEIGHT, *v);
             }
+        }
+        OSC_ADDR_SCALE_FACTOR => {
+            if let Some(OscType::Float(v)) = msg.args.first() {
+                let _ = app.emit(EVENT_SCALE_FACTOR, *v);
+            }
+        }
+        OSC_ADDR_SCALE_MODIFIED => {
+            // VRChat は bool を OSC True/False 型タグで送るのが原則だが、
+            // バージョン・経路によって Int(0/1) / Float(0.0/1.0) で届く変種に
+            // 備えて寛容に受ける。取りこぼすと TS 側の ScaleModified===false
+            // フォールバックが無言で死ぬため、ここの厳格さに価値はない。
+            let b = match msg.args.first() {
+                Some(OscType::Bool(b)) => *b,
+                Some(OscType::Int(i)) => *i != 0,
+                Some(OscType::Float(f)) => *f != 0.0,
+                _ => return,
+            };
+            let _ = app.emit(EVENT_SCALE_MODIFIED, b);
         }
         OSC_ADDR_AVATAR_CHANGE => {
             if let Some(OscType::String(id)) = msg.args.first() {

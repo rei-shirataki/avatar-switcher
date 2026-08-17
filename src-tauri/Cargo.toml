@@ -2,7 +2,7 @@
 name = "avatar-switcher"
 version = "0.1.0"
 description = "VRChat Avatar Switcher"
-authors = ["rei0932"]
+authors = ["rei-shirataki"]
 edition = "2021"
 
 [lib]

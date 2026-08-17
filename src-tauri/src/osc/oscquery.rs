@@ -69,7 +69,11 @@ pub async fn start(our_osc_port: u16) -> anyhow::Result<()> {
 
 fn register_service(mdns: &ServiceDaemon, http_port: u16, our_osc_port: u16) {
     let instance_name = format!("{}-{}", APP_NAME, std::process::id());
-    let host_name = get_hostname();
+    // OS のマシン名 (COMPUTERNAME.local.) は使わない。Windows 標準の mDNS
+    // レスポンダー (Dnscache) が同じホスト名に全インターフェース分の
+    // アドレスで応答してくるため、レコードが混ざり合い解決アドレス集合が
+    // 数十秒おきに変化し続けてしまう。
+    let host_name = format!("{}.local.", instance_name);
     let props: &[(String, String)] = &[("oscPort".to_string(), our_osc_port.to_string())];
 
     // mDNS の A レコードには実 LAN IP + ループバックの両方を載せる。
@@ -368,15 +372,6 @@ async fn handle_http_request(mut stream: tokio::net::TcpStream, osc_port: u16) {
 }
 
 // ── ユーティリティ ────────────────────────────────────────────────────────────
-
-fn get_hostname() -> String {
-    let raw = std::env::var("COMPUTERNAME")
-        .ok()
-        .or_else(|| std::env::var("HOSTNAME").ok())
-        .filter(|s| !s.is_empty())
-        .unwrap_or_else(|| "localhost".to_string());
-    format!("{}.local.", raw)
-}
 
 /// OSCQuery ツリーから path (例: "/avatar/parameters/EyeHeightAsMeters") に
 /// 対応するノードを引き出す。見つからなければ None。

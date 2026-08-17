@@ -42,6 +42,15 @@ fn resolve_sidecar_path(app: &AppHandle) -> Option<PathBuf> {
     resource_path.exists().then_some(resource_path)
 }
 
+/// overlay-sidecar の stdout/stderr を書き出すログファイルのパスを返す。
+/// サイドカーはGUIアプリでコンソールを持たないため、ここに書き出さないと
+/// ユーザーが動作確認する手段が無くなる。
+fn log_file_path(app: &AppHandle) -> Option<PathBuf> {
+    let dir = app.path().app_data_dir().ok()?;
+    std::fs::create_dir_all(&dir).ok()?;
+    Some(dir.join("overlay-sidecar.log"))
+}
+
 /// サイドカーを起動し、異常終了時はバックオフしつつ再起動を繰り返す監視タスクを spawn する。
 pub(crate) async fn spawn(app: AppHandle, ws_port: u16, token: String) {
     let Some(path) = resolve_sidecar_path(&app) else {
@@ -50,13 +59,17 @@ pub(crate) async fn spawn(app: AppHandle, ws_port: u16, token: String) {
         );
         return;
     };
+    let log_path = log_file_path(&app);
+    if let Some(ref p) = log_path {
+        log::info!("[steamvr] overlay-sidecar のログ出力先: {}", p.display());
+    }
     tokio::spawn(async move {
         let mut attempt = 0usize;
         loop {
             if SHUTTING_DOWN.load(Ordering::SeqCst) {
                 break;
             }
-            match launch(&path, ws_port, &token).await {
+            match launch(&path, ws_port, &token, log_path.as_deref()).await {
                 Ok(mut child) => {
                     attempt = 0;
                     SIDECAR_PID.store(child.id().unwrap_or(0), Ordering::SeqCst);
@@ -85,16 +98,37 @@ async fn launch(
     path: &PathBuf,
     ws_port: u16,
     token: &str,
+    log_path: Option<&std::path::Path>,
 ) -> std::io::Result<tokio::process::Child> {
-    Command::new(path)
-        .arg("--ws-port")
+    let mut cmd = Command::new(path);
+    cmd.arg("--ws-port")
         .arg(ws_port.to_string())
         .arg("--token")
         .arg(token)
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .kill_on_drop(true)
-        .spawn()
+        .kill_on_drop(true);
+
+    // stdout/stderr は同じログファイルに追記する。起動のたびに個別ハンドルを
+    // 開き直す（tokio::process::Command は Stdio を Clone できないため）。
+    match log_path.map(open_log_append) {
+        Some(Ok((out, err))) => {
+            cmd.stdout(Stdio::from(out)).stderr(Stdio::from(err));
+        }
+        Some(Err(e)) => {
+            log::warn!("[steamvr] overlay-sidecar ログファイルを開けませんでした: {}", e);
+            cmd.stdout(Stdio::null()).stderr(Stdio::null());
+        }
+        None => {
+            cmd.stdout(Stdio::null()).stderr(Stdio::null());
+        }
+    }
+
+    cmd.spawn()
+}
+
+fn open_log_append(path: &std::path::Path) -> std::io::Result<(std::fs::File, std::fs::File)> {
+    let out = std::fs::OpenOptions::new().create(true).append(true).open(path)?;
+    let err = out.try_clone()?;
+    Ok((out, err))
 }
 
 /// アプリ終了時にサイドカープロセスを確実に終了させる。

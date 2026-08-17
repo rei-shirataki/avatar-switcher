@@ -2,9 +2,14 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net8.0-windows</TargetFramework>
+    <!-- OyasumiVR (github.com/Raphiiko/OyasumiVR、同じCefSharp.OffScreen.NETCore +
+         SharpDX.Direct3D11 の組み合わせを実運用している参照実装) に合わせた
+         ターゲットフレームワーク。この環境には .NET SDK が無くビルド確認できないため、
+         組み合わせの実績があるバージョンにあえて追従している。 -->
+    <TargetFramework>net10.0-windows</TargetFramework>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <SelfContained>true</SelfContained>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
     <Nullable>enable</Nullable>
     <RootNamespace>AvatarSwitcher.OverlaySidecar</RootNamespace>
     <AssemblyName>overlay-sidecar</AssemblyName>
@@ -18,12 +23,23 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="CefSharp.OffScreen.NETCore" Version="150.0.110" />
+    <PackageReference Include="SharpDX.Direct3D11" Version="4.2.0" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- openvr_api.cs 側の [DllImport("openvr_api")] は実行ファイルと同じ
          ディレクトリで openvr_api.dll を解決するため、出力ルートへ
          Link でフラット配置する。 -->
     <None Include="OpenVR\openvr_api.dll">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <Link>openvr_api.dll</Link>
+    </None>
+    <!-- SteamVR Input のアクションマニフェスト。OverlayManager が
+         AppDomain.CurrentDomain.BaseDirectory 基準の絶対パスで参照する。 -->
+    <None Include="input\*.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>input\%(Filename)%(Extension)</Link>
     </None>
   </ItemGroup>
 

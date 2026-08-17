@@ -6,6 +6,7 @@ import {
   EYE_HEIGHT_MAX,
   EYE_HEIGHT_MIN,
 } from '../../core/services/eye-height.service';
+import { coerceFiniteNumber } from '../../core/utils/number.util';
 
 const STORAGE_KEY_PRESETS = 'avatar-switcher.eyeheight.presets';
 const STEPS = [0.01, 0.1, 0.5, 1.0] as const;
@@ -55,7 +56,11 @@ interface Preset {
               (change)="onValueChange($any($event.target).value)"
             />
             <span class="unit">m</span>
-            <button class="btn-reset" (click)="reset()">リセット</button>
+            <button
+              class="btn-reset"
+              (click)="reset()"
+              title="アバター本来の身長に戻す（取得できなければ 1.6m）"
+            >リセット</button>
           </div>
 
           <div class="step-grid">
@@ -583,8 +588,8 @@ export class HeightViewComponent implements OnInit {
   }
 
   onValueChange(raw: number | string): void {
-    const v = typeof raw === 'number' ? raw : parseFloat(raw);
-    if (!Number.isFinite(v)) return;
+    const v = coerceFiniteNumber(raw);
+    if (v === null) return;
     this.eyeHeight.setValue(v);
   }
 
@@ -593,7 +598,7 @@ export class HeightViewComponent implements OnInit {
   }
 
   reset(): void {
-    this.eyeHeight.setValue(EYE_HEIGHT_DEFAULT);
+    this.eyeHeight.setValue(this.eyeHeight.getAvatarDefault());
   }
 
   applyPreset(preset: Preset): void {
@@ -676,9 +681,8 @@ export class HeightViewComponent implements OnInit {
       this.dialogError.set('名前を入力してください');
       return;
     }
-    const raw = this.draftValue();
-    const value = typeof raw === 'number' ? raw : parseFloat(String(raw));
-    if (!Number.isFinite(value)) {
+    const value = coerceFiniteNumber(this.draftValue());
+    if (value === null) {
       this.dialogError.set('身長は数値で入力してください');
       return;
     }

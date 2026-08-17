@@ -1,4 +1,5 @@
 use mdns_sd::{ServiceDaemon, ServiceEvent, ServiceInfo};
+use serde::Serialize;
 use serde_json::{json, Value};
 use std::net::{IpAddr, Ipv4Addr, UdpSocket};
 use std::sync::atomic::{AtomicU16, Ordering};
@@ -18,6 +19,12 @@ const MDNS_RETRY_DELAY: Duration = Duration::from_secs(60);
 /// OSCQuery で発見した VRChat の OSC 受信ポート。
 /// デフォルト 9000。mDNS 探索成功時に動的更新される。
 pub static VRCHAT_OSC_PORT: AtomicU16 = AtomicU16::new(DEFAULT_VRCHAT_OSC_PORT);
+
+/// OSCQuery で発見した VRChat の OSCQuery HTTP サーバーポート（`_oscjson._tcp` の
+/// サービスポート）。0 は「未発見」を表す。VRChat の現在のパラメータ値を能動的に
+/// 取得する際の問い合わせ先として使う（アバターロード時の受動 OSC ダンプを
+/// 取りこぼした場合のフォールバック経路）。
+static VRCHAT_OSCQUERY_HTTP_PORT: AtomicU16 = AtomicU16::new(0);
 
 /// 最後に発見した VRChat の mDNS フルネーム。
 /// `ServiceRemoved` が同じ名前で来たときだけポートをデフォルトに戻す。
@@ -189,6 +196,12 @@ fn on_mdns_event(event: ServiceEvent) {
                 *guard = Some(name.clone());
             }
 
+            // サービスレコード自体のポートは VRChat の OSCQuery HTTP サーバーのポート。
+            // TXT レコードの有無に関わらず必ず取得できるので、先に保存しておく
+            // （能動的なパラメータ値取得で使う）。
+            let http_port = info.get_port();
+            VRCHAT_OSCQUERY_HTTP_PORT.store(http_port, Ordering::Relaxed);
+
             // TXT レコード "oscPort" から直接取得
             if let Some(port_str) = info.get_properties().get_property_val_str("oscPort") {
                 if let Ok(port) = port_str.parse::<u16>() {
@@ -200,7 +213,6 @@ fn on_mdns_event(event: ServiceEvent) {
 
             // TXT になければ HTTP HOST_INFO を問い合わせる
             // 同一マシン前提のため宛先は 127.0.0.1 固定。
-            let http_port = info.get_port();
             let expected_name = name.clone();
 
             tokio::spawn(async move {
@@ -251,6 +263,7 @@ fn on_mdns_event(event: ServiceEvent) {
                     name, DEFAULT_VRCHAT_OSC_PORT
                 );
                 VRCHAT_OSC_PORT.store(DEFAULT_VRCHAT_OSC_PORT, Ordering::Relaxed);
+                VRCHAT_OSCQUERY_HTTP_PORT.store(0, Ordering::Relaxed);
             }
         }
         _ => {}
@@ -277,6 +290,81 @@ async fn query_vrchat_osc_port(ip: &str, http_port: u16) -> anyhow::Result<u16> 
         .as_u64()
         .ok_or_else(|| anyhow::anyhow!("HOST_INFO に OSC_PORT が存在しません"))? as u16;
     Ok(port)
+}
+
+// ── アバター身長スナップショットの能動取得 ──────────────────────────────────
+//
+// EyeHeightAsMeters / ScaleFactor / ScaleModified は VRChat から受動的に届く
+// OSC イベントに頼ると、アバターロード時の一瞬のダンプを取りこぼした場合
+// 二度と手に入らない（TS 側の prefab height 逆算キャッシュが永遠に null のまま
+// になる）。VRChat の OSCQuery HTTP サーバーは EXTENSIONS.VALUE=true を返して
+// おり、`GET /avatar/parameters/{name}`（クエリ文字列なし）でノード全体の JSON
+// を問い合わせると "VALUE" 配列に現在値が入って返ってくる
+// （OSCQuery Proposal 仕様: https://github.com/Vidvox/OSCQueryProposal）。
+// これを使って、受動イベントを取りこぼしても現在値を能動的に取得できるように
+// する。
+
+const OSC_PATH_EYE_HEIGHT: &str = "/avatar/parameters/EyeHeightAsMeters";
+const OSC_PATH_SCALE_FACTOR: &str = "/avatar/parameters/ScaleFactor";
+const OSC_PATH_SCALE_MODIFIED: &str = "/avatar/parameters/ScaleModified";
+
+#[derive(Serialize)]
+pub struct AvatarScaleSnapshot {
+    pub eye_height: Option<f32>,
+    pub scale_factor: Option<f32>,
+    pub scale_modified: Option<bool>,
+}
+
+/// 現在のアバターの EyeHeightAsMeters / ScaleFactor / ScaleModified を VRChat の
+/// OSCQuery HTTP サーバーへ問い合わせて取得する。個々の問い合わせは独立して
+/// 失敗し得る（アバターがその built-in パラメータを公開していない等）ため、
+/// 取れたものだけ `Some` で返す。3つとも取れなくても呼び出し側でフォールバック
+/// できるよう、このレベルではエラーにしない。
+///
+/// VRChat 自体が未発見（OSCQuery HTTP ポート不明）の場合のみエラーを返す。
+pub async fn query_avatar_scale_snapshot() -> anyhow::Result<AvatarScaleSnapshot> {
+    let http_port = VRCHAT_OSCQUERY_HTTP_PORT.load(Ordering::Relaxed);
+    if http_port == 0 {
+        anyhow::bail!("VRChat の OSCQuery サーバーが未検出です");
+    }
+    let (eye_height, scale_factor, scale_modified) = tokio::join!(
+        query_param_f32(http_port, OSC_PATH_EYE_HEIGHT),
+        query_param_f32(http_port, OSC_PATH_SCALE_FACTOR),
+        query_param_bool(http_port, OSC_PATH_SCALE_MODIFIED),
+    );
+    Ok(AvatarScaleSnapshot { eye_height, scale_factor, scale_modified })
+}
+
+/// OSCQuery ノードの "VALUE" 配列先頭要素を取得する。
+/// 404（アバターがこのパラメータを公開していない）・タイムアウト・不正な JSON
+/// など、あらゆる失敗を握り潰して None を返す（呼び出し側は「取れなかった」
+/// として扱えばよく、個別のエラー種別は区別する価値がないため）。
+async fn query_param_value(http_port: u16, path: &str) -> Option<Value> {
+    let url = format!("http://127.0.0.1:{}{}", http_port, path);
+    let client = reqwest::Client::builder().timeout(HTTP_QUERY_TIMEOUT).build().ok()?;
+    let resp = client.get(&url).send().await.ok()?;
+    if !resp.status().is_success() {
+        return None;
+    }
+    if let Some(len) = resp.content_length() {
+        if len > HTTP_BODY_LIMIT_BYTES {
+            return None;
+        }
+    }
+    let bytes = resp.bytes().await.ok()?;
+    if bytes.len() as u64 > HTTP_BODY_LIMIT_BYTES {
+        return None;
+    }
+    let v: Value = serde_json::from_slice(&bytes).ok()?;
+    v.get("VALUE")?.get(0).cloned()
+}
+
+async fn query_param_f32(http_port: u16, path: &str) -> Option<f32> {
+    query_param_value(http_port, path).await?.as_f64().map(|f| f as f32)
+}
+
+async fn query_param_bool(http_port: u16, path: &str) -> Option<bool> {
+    query_param_value(http_port, path).await?.as_bool()
 }
 
 // ── HTTP サーバー ────────────────────────────────────────────────────────────

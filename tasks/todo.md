@@ -18,6 +18,21 @@
 - `cargo check` … 成功（Finished dev profile, 1.17s）
 - 付随効果: applyExternalValue のガード順を元に戻したため、抑止中の不要な normalize/localStorage 書き込み懸念も解消
 
+## /code-review 指摘修正（2026-08-17, Issue #1）
+
+`eye-height.service.ts` に対する `/code-review` バックグラウンドエージェントの指摘2件を修正。
+
+### タスク
+
+- [x] 1. `recomputePrefabHeight()` の scale 状態不整合 → `_lastEcho` / `_scaleFactor` / `_scaleModified` それぞれに受信時刻 (`_lastEchoAt` 等) を持たせ、`SCALE_PAIR_WINDOW_MS`(250ms) 以内に届いた組だけを「同一時点の観測ペア」として prefab height の計算に採用するよう変更。ペアが揃わない間は直前の正しいキャッシュ値を据え置く（＝自己修復性を保ったまま、遠く離れた時刻の値同士が誤ってペアリングされるのを防止）
+- [x] 2. コンストラクタの `listen()` unlisten 登録漏れ → `destroyed` フラグ＋ `registerListener()` ヘルパーに統一。`onDestroy` が `listen()` の Promise 解決より先に発火した場合、解決後に unlisten を即座に呼んでリークを防ぐ
+
+### 検証（手動シナリオトレース、レース系のため自動テストなし）
+
+- シナリオ1a（ScaleModifiedのみ登録・VRC本体でリサイズ）: ロード時 `_lastEcho=1.7@t0`, `_scaleModified=false@t0` でペア成立 → `_prefabHeight=1.7`。数秒後リサイズで `_lastEcho=2.5@t1` に更新されるが `_scaleModifiedAt` は依然 `t0`（数秒前）のため `|t1-t0|≥250ms` でペア不成立 → キャッシュは `1.7` のまま据え置き。直後に `ScaleModified=true@t2` が届いても `=== false` を満たさないため何もしない。修正前は誤って `2.5` に上書きされ二度と直らなかった箇所が、修正後は正しい値を維持する。
+- シナリオ1b（ScaleFactor併用・echoが境界を跨いで到着）: 数分前の古い `_lastEcho` に直近の新しい `_scaleFactor` をペアリングしようとしても `250ms` を超えるためスキップ。直後に新しい `EyeHeight` echo が届けば近接時刻で正しくペア成立し自己修復（修正前と同じ自己修復性を維持）。
+- リスナーリーク: `registerListener()` で `destroyed` チェックを追加。`npx tsc --noEmit -p tsconfig.app.json` … エラーなし。`npm run build` … 成功（Application bundle generation complete, 5.81s）。
+
 ## 設計メモ
 
 プレハブ身長はアバター毎に不変。よって「リセット押下時に最新値同士を割る」のではなく、

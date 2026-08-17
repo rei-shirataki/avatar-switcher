@@ -120,6 +120,7 @@ pub fn run() {
             // OSC
             osc::commands::osc_change_avatar,
             osc::commands::osc_set_avatar_eye_height,
+            osc::commands::osc_query_avatar_scale_snapshot,
             osc::commands::osc_get_status,
             // Storage (folders)
             storage::commands::folders_get_all,

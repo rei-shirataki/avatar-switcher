@@ -18,7 +18,7 @@ use tauri::AppHandle;
 /// 呼び出し元 (`lib.rs::setup`) には伝播させない。
 pub(crate) async fn init(app: &AppHandle) {
     let token = uuid::Uuid::new_v4().to_string();
-    match bridge::start(std::sync::Arc::from(token.as_str())).await {
+    match bridge::start(app.clone(), std::sync::Arc::from(token.as_str())).await {
         Ok(port) => {
             log::info!("[steamvr] WSブリッジ起動 (port={})", port);
             sidecar::spawn(app.clone(), port, token).await;

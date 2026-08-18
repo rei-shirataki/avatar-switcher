@@ -27,6 +27,8 @@ internal sealed class AvatarPanelOverlay : IDisposable
     private const float ForwardOffsetMeters = 0.55f;
 
     private readonly D3D11Context _d3D;
+    private readonly int _wsPort;
+    private readonly string _wsToken;
     private ulong _overlayHandle;
     private OffscreenBrowser? _browser;
     private Texture2D? _texture;
@@ -36,9 +38,11 @@ internal sealed class AvatarPanelOverlay : IDisposable
     public ulong OverlayHandle => _overlayHandle;
     public OffscreenBrowser? Browser => _browser;
 
-    public AvatarPanelOverlay(D3D11Context d3D)
+    public AvatarPanelOverlay(D3D11Context d3D, int wsPort, string wsToken)
     {
         _d3D = d3D;
+        _wsPort = wsPort;
+        _wsToken = wsToken;
     }
 
     public async Task OpenAsync()
@@ -60,13 +64,41 @@ internal sealed class AvatarPanelOverlay : IDisposable
         // ページ内容が一切表示されない）。参照実装(OyasumiVR BrowserManager.GetBrowser)
         // に倣い、コンストラクタの address に直接コンテンツを渡して最初のナビゲーション
         // として読み込ませる。
-        var dataUri = "data:text/html;base64," + Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(TestPage.Html));
-        _browser = new OffscreenBrowser(dataUri, Resolution, Resolution);
+        _browser = new OffscreenBrowser(ResolveOverlayUiUrl(), Resolution, Resolution);
         LogBrowserEvents(_browser);
         _browser.SetTextureTarget(_texture);
 
         PlaceInFrontOfHead();
         OpenVR.Overlay.ShowOverlay(_overlayHandle);
+    }
+
+    /// <summary>
+    /// overlay-ui (Angular) の読み込み先URLを決める。優先順位:
+    /// 1. ビルド済み dist が実行ファイル横の overlay-ui/ に配置されていればそれ (本番相当)
+    /// 2. 開発用URL環境変数 (`ng serve --project overlay-ui` を別途起動して指す)
+    /// 3. どちらも無ければ M1 のテストページにフォールバック（overlay-ui未セットアップでも
+    ///    オーバーレイ描画パイプライン自体の疎通確認は引き続きできるようにする）
+    /// いずれも Rust core の WS ブリッジへ接続するための port/token をクエリで渡す。
+    /// </summary>
+    private string ResolveOverlayUiUrl()
+    {
+        var query = $"?port={_wsPort}&token={Uri.EscapeDataString(_wsToken)}";
+
+        var distIndex = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "overlay-ui", "index.html");
+        if (File.Exists(distIndex))
+        {
+            return new Uri(distIndex).AbsoluteUri + query;
+        }
+
+        var devUrl = Environment.GetEnvironmentVariable("AVATAR_SWITCHER_OVERLAY_UI_DEV_URL");
+        if (!string.IsNullOrEmpty(devUrl))
+        {
+            return devUrl.TrimEnd('/') + "/" + query;
+        }
+
+        Console.WriteLine("[steamvr] overlay-ui が見つからないため M1 テストページで代替します" +
+            "（dist/overlay-ui/browser を配置するか AVATAR_SWITCHER_OVERLAY_UI_DEV_URL を設定してください）");
+        return "data:text/html;base64," + Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(TestPage.Html));
     }
 
     /// <summary>

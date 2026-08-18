@@ -150,7 +150,7 @@ internal sealed class OverlayManager
             _d3D = new D3D11Context();
             _d3D.Initialize();
             _pointer = new OverlayPointer();
-            _panel = new AvatarPanelOverlay(_d3D);
+            _panel = new AvatarPanelOverlay(_d3D, _bridge.WsPort, _bridge.Token);
             _panel.OpenAsync().GetAwaiter().GetResult();
             _pointer.SetTarget(_panel);
 

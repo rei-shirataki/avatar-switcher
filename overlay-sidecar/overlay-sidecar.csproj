@@ -43,4 +43,17 @@
     </None>
   </ItemGroup>
 
+  <!-- overlay-ui (Angular) のビルド成果物。事前に
+       npx ng build overlay-ui (configuration=production, base-href=./) を
+       実行して ../dist/overlay-ui/browser を生成しておく必要がある
+       （dotnet publish はAngularのビルドを自動実行しない）。
+       未ビルドの場合は AvatarPanelOverlay.ResolveOverlayUiUrl が
+       M1テストページへフォールバックするため、無くてもビルド自体は通る。 -->
+  <ItemGroup Condition="Exists('..\dist\overlay-ui\browser')">
+    <None Include="..\dist\overlay-ui\browser\**\*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>overlay-ui\%(RecursiveDir)%(Filename)%(Extension)</Link>
+    </None>
+  </ItemGroup>
+
 </Project>

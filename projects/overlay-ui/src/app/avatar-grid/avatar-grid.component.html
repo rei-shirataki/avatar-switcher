@@ -1,0 +1,29 @@
+<div class="grid">
+  @for (avatar of avatars; track avatar.id) {
+    <button
+      type="button"
+      class="card"
+      [class.card--current]="avatar.id === currentAvatarId"
+      [class.card--switching]="avatar.id === switchingId"
+      [disabled]="switchingId !== null"
+      (click)="select.emit(avatar.id)"
+    >
+      <div class="card__thumb">
+        @if (avatar.thumbnailImageUrl) {
+          <img [src]="avatar.thumbnailImageUrl" [alt]="avatar.name" (error)="onImgError($event)" />
+        } @else {
+          <div class="card__thumb-placeholder">{{ avatar.name.charAt(0) }}</div>
+        }
+        @if (avatar.id === currentAvatarId) {
+          <div class="card__current-badge">装着中</div>
+        }
+        @if (avatar.id === switchingId) {
+          <div class="card__spinner"></div>
+        }
+      </div>
+      <div class="card__name" [title]="avatar.name">{{ avatar.name }}</div>
+    </button>
+  } @empty {
+    <div class="empty">アバターがありません</div>
+  }
+</div>

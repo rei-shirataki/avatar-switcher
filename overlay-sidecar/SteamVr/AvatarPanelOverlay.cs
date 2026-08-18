@@ -35,7 +35,9 @@ internal sealed class AvatarPanelOverlay : IDisposable
     private Texture2D? _texture;
     private EVROverlayError _lastTextureError = EVROverlayError.None;
     private bool _disposed;
-    private bool _visible = true;
+    // #24: 起動直後はオーバーレイを表示しない。ユーザーが必要な時だけ
+    // #21のダブルプレスで呼び出す想定。
+    private bool _visible;
 
     public ulong OverlayHandle => _overlayHandle;
     public OffscreenBrowser? Browser => _browser;
@@ -72,8 +74,10 @@ internal sealed class AvatarPanelOverlay : IDisposable
         LogBrowserEvents(_browser);
         _browser.SetTextureTarget(_texture);
 
+        // #24: 起動直後は表示しない。位置だけ先に頭部前方へ合わせておき、
+        // 最初にSetVisible(true)が呼ばれた瞬間に正しい位置で出るようにする。
         PlaceInFrontOfHead();
-        OpenVR.Overlay.ShowOverlay(_overlayHandle);
+        OpenVR.Overlay.HideOverlay(_overlayHandle);
     }
 
     /// <summary>

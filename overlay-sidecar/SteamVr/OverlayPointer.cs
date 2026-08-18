@@ -205,8 +205,13 @@ internal sealed class OverlayPointer : IDisposable
         pointer.Pressed = pressed;
 
         var browser = _target?.Browser;
-        if (browser == null || pointer.LastUv == null) return;
+        if (browser == null || pointer.LastUv == null)
+        {
+            Console.WriteLine($"[steamvr] クリックを無視: browser={(browser == null ? "null" : "ok")} LastUv={(pointer.LastUv == null ? "null(パネルに当たっていない)" : "ok")}");
+            return;
+        }
         var (x, y) = ToBrowserPixels(pointer.LastUv.Value, browser);
+        Console.WriteLine($"[steamvr] クリック送信: role={role} pressed={pressed} x={x} y={y}");
         browser.GetBrowser().GetHost().SendMouseClickEvent(x, y, MouseButtonType.Left, !pressed, 1, CefEventFlags.None);
     }
 

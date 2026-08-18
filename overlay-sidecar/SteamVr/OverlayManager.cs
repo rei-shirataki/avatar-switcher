@@ -180,20 +180,44 @@ internal sealed class OverlayManager
             },
         };
         var updateError = OpenVR.Input.UpdateActionState(activeSets, (uint)Marshal.SizeOf<VRActiveActionSet_t>());
-        if (updateError != EVRInputError.None) return;
+        if (updateError != EVRInputError.None)
+        {
+            LogInteractDiag($"UpdateActionState 失敗: {updateError}");
+            return;
+        }
 
         var actionData = new InputDigitalActionData_t();
         var dataError = OpenVR.Input.GetDigitalActionData(_overlayInteractActionHandle, ref actionData,
             (uint)Marshal.SizeOf<InputDigitalActionData_t>(), OpenVR.k_ulInvalidInputValueHandle);
-        if (dataError != EVRInputError.None || !actionData.bChanged) return;
+        if (dataError != EVRInputError.None)
+        {
+            LogInteractDiag($"GetDigitalActionData 失敗: {dataError}");
+            return;
+        }
+        if (!actionData.bChanged) return;
 
         var originInfo = new InputOriginInfo_t();
         var originError = OpenVR.Input.GetOriginTrackedDeviceInfo(actionData.activeOrigin, ref originInfo,
             (uint)Marshal.SizeOf<InputOriginInfo_t>());
-        if (originError != EVRInputError.None) return;
+        if (originError != EVRInputError.None)
+        {
+            LogInteractDiag($"GetOriginTrackedDeviceInfo 失敗: {originError}");
+            return;
+        }
 
         var role = OpenVR.System.GetControllerRoleForTrackedDeviceIndex(originInfo.trackedDeviceIndex);
+        Console.WriteLine($"[steamvr] OverlayInteract 変化: role={role} bState={actionData.bState}");
         _pointer?.SetPressed(role, actionData.bState);
+    }
+
+    /// <summary>アクション取得系の失敗はバインド未設定など頻発しうるので1回目だけ出す。</summary>
+    private bool _warnedInteractDiag;
+
+    private void LogInteractDiag(string message)
+    {
+        if (_warnedInteractDiag) return;
+        _warnedInteractDiag = true;
+        Console.Error.WriteLine($"[steamvr] {message}");
     }
 
     private void RenderLoop()

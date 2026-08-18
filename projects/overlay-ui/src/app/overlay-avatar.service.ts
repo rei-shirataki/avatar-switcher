@@ -80,10 +80,34 @@ export class OverlayAvatarService {
 
   selectFolder(folderId: string | null): void {
     this._selectedFolderId.set(folderId);
+    this.persistUiState();
   }
 
   async refreshFolders(): Promise<void> {
     this._folders.set(await this.bridge.listFolders());
+  }
+
+  /**
+   * 再起動後もソート/タブ選択を復元する。overlay-sidecarはCEFプロセスごとに
+   * 新しいキャッシュディレクトリを使いlocalStorageが永続化できないため、
+   * Rust側(storage::OverlayUiState)に保存された値を接続直後に取得する。
+   * 未知のsortMode値（設定ファイル破損等）はデフォルトにフォールバックする。
+   */
+  async restoreUiState(): Promise<void> {
+    try {
+      const state = await this.bridge.getUiState();
+      const sortMode = SORT_OPTIONS.some((o) => o.value === state.sortMode)
+        ? state.sortMode
+        : 'updated-desc';
+      this._sortMode.set(sortMode);
+      this._selectedFolderId.set(state.selectedFolderId);
+    } catch (e) {
+      console.warn('[overlay-avatar] UI状態の復元に失敗:', e);
+    }
+  }
+
+  private persistUiState(): void {
+    this.bridge.setUiState({ sortMode: this._sortMode(), selectedFolderId: this._selectedFolderId() });
   }
 
   /** タップのたびに次のソートモードへ循環する。avatars-view.component.tsのドロップダウン選択に相当。 */
@@ -91,6 +115,7 @@ export class OverlayAvatarService {
     const index = SORT_OPTIONS.findIndex((o) => o.value === this._sortMode());
     const next = SORT_OPTIONS[(index + 1) % SORT_OPTIONS.length];
     this._sortMode.set(next.value);
+    this.persistUiState();
   }
 
   /** avatars-view.component.ts::sortAvatars と同一ロジック。 */

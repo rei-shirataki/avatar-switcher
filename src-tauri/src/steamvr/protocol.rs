@@ -60,6 +60,19 @@ pub enum ClientMessage {
     /// ロジックのため引き続き不使用）。
     #[serde(rename = "eyeheight.query")]
     EyeHeightQuery,
+    /// overlay-uiのUI状態（ソートモード・選択中タブ）を取得する。overlay-sidecarは
+    /// CEFプロセスごとに新しいキャッシュディレクトリを使う（`Program.cs::InitCef`の
+    /// コメント参照）ため、ブラウザのlocalStorageは再起動をまたいで永続化できない。
+    /// Rust側の`storage::OverlayUiState`に保存された値を接続直後に取得する。
+    #[serde(rename = "ui-state.get")]
+    UiStateGet,
+    /// ソート/タブ切り替えのたびに送られる。fire-and-forgetで応答不要
+    /// （`eyeheight.set`と同じ、単純な上書き保存のため成否を待つ必要がない）。
+    #[serde(rename = "ui-state.set", rename_all = "camelCase")]
+    UiStateSet {
+        sort_mode: String,
+        selected_folder_id: Option<String>,
+    },
 }
 
 /// Rust core → WS クライアント。overlay-ui (TypeScript) 側が `avatarId` の
@@ -94,6 +107,11 @@ pub enum ServerMessage {
     /// （#27、`AvatarChanged`と同じ仕組み）。
     #[serde(rename = "eyeheight-update", rename_all = "camelCase")]
     EyeHeightUpdate { value: f32 },
+    #[serde(rename = "ui-state.get-result", rename_all = "camelCase")]
+    UiStateGetResult {
+        sort_mode: String,
+        selected_folder_id: Option<String>,
+    },
     #[serde(rename = "error", rename_all = "camelCase")]
     Error { message: String },
 }
@@ -114,6 +132,33 @@ mod tests {
         assert!(json.contains("\"favoriteIds\":[\"a1\"]"), "favoriteIdsがcamelCaseでない: {json}");
         assert!(json.contains("\"uploadedIds\":[\"a2\"]"), "uploadedIdsがcamelCaseでない: {json}");
         assert!(json.contains("\"avatars.list-result\""), "typeタグが不正: {json}");
+    }
+
+    #[test]
+    fn ui_state_roundtrip() {
+        let get_json = r#"{"type":"ui-state.get"}"#;
+        assert!(matches!(
+            serde_json::from_str::<ClientMessage>(get_json),
+            Ok(ClientMessage::UiStateGet)
+        ));
+
+        let set_json = r#"{"type":"ui-state.set","sortMode":"name-asc","selectedFolderId":"__favorites__"}"#;
+        match serde_json::from_str::<ClientMessage>(set_json) {
+            Ok(ClientMessage::UiStateSet { sort_mode, selected_folder_id }) => {
+                assert_eq!(sort_mode, "name-asc");
+                assert_eq!(selected_folder_id.as_deref(), Some("__favorites__"));
+            }
+            other => panic!("デシリアライズ失敗: {other:?}"),
+        }
+
+        let json = serde_json::to_string(&ServerMessage::UiStateGetResult {
+            sort_mode: "updated-desc".into(),
+            selected_folder_id: None,
+        })
+        .unwrap();
+        assert!(json.contains("\"ui-state.get-result\""), "typeタグが不正: {json}");
+        assert!(json.contains("\"sortMode\":\"updated-desc\""), "sortModeがcamelCaseでない: {json}");
+        assert!(json.contains("\"selectedFolderId\":null"), "selectedFolderIdの扱いが不正: {json}");
     }
 
     #[test]

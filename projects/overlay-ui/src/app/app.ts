@@ -27,7 +27,11 @@ export class App implements OnInit {
         // Promise.allには含めない。受動OSCイベント任せだと身長を一度も変更して
         // いない場合に表示が「—」のまま固まるため、接続直後に能動フェッチする。
         this.bridge.queryEyeHeight();
-        return Promise.all([this.avatarService.refresh(), this.avatarService.refreshFolders()]);
+        return Promise.all([
+          this.avatarService.refresh(),
+          this.avatarService.refreshFolders(),
+          this.avatarService.restoreUiState(),
+        ]);
       })
       .catch((e) => console.error('[overlay-ui] 初期化に失敗:', e));
   }

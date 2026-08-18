@@ -51,6 +51,34 @@ pub struct OverlaySettings {
     pub placement_mode: OverlayPlacementMode,
 }
 
+fn default_ui_state_sort_mode() -> String {
+    "updated-desc".to_string()
+}
+
+/// overlay-uiのUI状態（ソートモード・選択中タブ）。overlay-sidecarはCEFプロセスごとに
+/// 新しいキャッシュディレクトリを使う（`Program.cs::InitCef`、複数プロセス起動時の
+/// Chromiumシングルトン衝突回避のため）ため、ブラウザのlocalStorageは再起動を
+/// またいで永続化できない。Rust側の`app-settings.json`に保存する。
+/// `selected_folder_id`は「すべて」タブ選択時はNone、フォルダタブ/お気に入り(`__favorites__`)/
+/// アップロード済み(`__uploaded__`)選択時はそのID文字列（overlay-ui側の名前空間をそのまま保存）。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OverlayUiState {
+    #[serde(default = "default_ui_state_sort_mode")]
+    pub sort_mode: String,
+    #[serde(default)]
+    pub selected_folder_id: Option<String>,
+}
+
+impl Default for OverlayUiState {
+    fn default() -> Self {
+        Self {
+            sort_mode: default_ui_state_sort_mode(),
+            selected_folder_id: None,
+        }
+    }
+}
+
 /// ローカルで管理するアバター表示オーバーライド（名前・サムネイル）
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AvatarOverride {

@@ -111,6 +111,19 @@ internal sealed class OverlayManager
                 return false;
             }
 
+            // アプリを .vrmanifest でSteamVRに登録する。これが無いと、SteamVRの
+            // コントローラーバインディング画面がこのプロセスを「登録済みアプリ」として
+            // 認識できず、表示名が実行ファイル名にフォールバックする上、
+            // バインディングの保存先が定まらず編集・保存ができない
+            // （実機確認で判明。参照実装: OyasumiVR src-core/src/openvr/mod.rs
+            // が同様に起動時 add_application_manifest を呼んでいる）。
+            var vrManifestPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "manifest.vrmanifest");
+            var appManifestError = OpenVR.Applications.AddApplicationManifest(vrManifestPath, false);
+            if (appManifestError != EVRApplicationError.None)
+            {
+                Console.Error.WriteLine($"[steamvr] vrmanifest の登録に失敗: {appManifestError} ({vrManifestPath})");
+            }
+
             var manifestPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "input", "action_manifest.json");
             var manifestError = input.SetActionManifestPath(manifestPath);
             if (manifestError != EVRInputError.None)

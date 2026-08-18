@@ -36,6 +36,11 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <Link>input\%(Filename)%(Extension)</Link>
     </None>
+    <!-- SteamVRへのアプリ登録用マニフェスト。OverlayManager.TryActivate が
+         AppDomain.CurrentDomain.BaseDirectory 基準の絶対パスで参照する。 -->
+    <None Include="manifest.vrmanifest">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 
 </Project>

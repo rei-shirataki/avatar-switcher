@@ -52,7 +52,7 @@ pub async fn vrchat_get_cached_favorites() -> Result<Vec<VRCAvatar>, String> {
 }
 
 #[tauri::command]
-pub async fn vrchat_select_avatar(avatar_id: String) -> Result<VRCAvatar, String> {
+pub async fn vrchat_select_avatar(avatar_id: String) -> Result<(), String> {
     avatars::select_avatar(&avatar_id).await.map_err(|e| e.to_string())
 }
 

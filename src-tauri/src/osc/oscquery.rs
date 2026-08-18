@@ -335,6 +335,32 @@ pub async fn query_avatar_scale_snapshot() -> anyhow::Result<AvatarScaleSnapshot
     Ok(AvatarScaleSnapshot { eye_height, scale_factor, scale_modified })
 }
 
+/// アイハイトのアプリ既定値。メインアプリ`eye-height.service.ts::EYE_HEIGHT_DEFAULT`
+/// と同じ値。プレハブ身長を計算できない（ScaleFactor/ScaleModifiedいずれも
+/// 未公開）アバターでのリセット操作のフォールバック先。
+pub const EYE_HEIGHT_DEFAULT: f32 = 1.6;
+
+/// アバター本来のプレハブ身長を計算する。ScaleFactor優先、次点ScaleModified===false、
+/// どちらの整合も取れなければNone（呼び出し側でEYE_HEIGHT_DEFAULTへフォールバックする）。
+/// メインアプリ`eye-height.service.ts::computePrefabFromSnapshot`と同じ優先順位。
+///
+/// オーバーレイのリセット操作はこの関数への入力を`query_avatar_scale_snapshot`の
+/// `tokio::join!`で3値同時取得するため、デスクトップ側の`EyeHeightService`が持つ
+/// 「独立したOSCストリームで異なる時点に届く値を誤ってペアリングしてしまう」
+/// レース対策（SCALE_PAIR_WINDOW_MS等）は不要（#27での設計判断を踏襲）。
+pub fn compute_prefab_height(snapshot: &AvatarScaleSnapshot) -> Option<f32> {
+    let eye_height = snapshot.eye_height?;
+    if let Some(scale_factor) = snapshot.scale_factor {
+        if scale_factor > 0.0 {
+            return Some(eye_height / scale_factor);
+        }
+    }
+    if snapshot.scale_modified == Some(false) {
+        return Some(eye_height);
+    }
+    None
+}
+
 /// OSCQuery ノードの "VALUE" 配列先頭要素を取得する。
 /// 404（アバターがこのパラメータを公開していない）・タイムアウト・不正な JSON
 /// など、あらゆる失敗を握り潰して None を返す（呼び出し側は「取れなかった」

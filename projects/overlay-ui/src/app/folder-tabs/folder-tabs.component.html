@@ -1,0 +1,36 @@
+<div class="tabs">
+  <button
+    type="button"
+    class="tab"
+    [class.tab--active]="selectedFolderId === null"
+    (click)="select.emit(null)"
+  >
+    すべて
+  </button>
+  <button
+    type="button"
+    class="tab"
+    [class.tab--active]="selectedFolderId === FAVORITES_TAB"
+    (click)="select.emit(FAVORITES_TAB)"
+  >
+    お気に入り
+  </button>
+  <button
+    type="button"
+    class="tab"
+    [class.tab--active]="selectedFolderId === UPLOADED_TAB"
+    (click)="select.emit(UPLOADED_TAB)"
+  >
+    アップロード済み
+  </button>
+  @for (folder of folders; track folder.id) {
+    <button
+      type="button"
+      class="tab"
+      [class.tab--active]="selectedFolderId === folder.id"
+      (click)="select.emit(folder.id)"
+    >
+      {{ folder.name }}
+    </button>
+  }
+</div>

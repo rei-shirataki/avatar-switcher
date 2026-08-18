@@ -3,17 +3,20 @@ use std::collections::HashMap;
 use tauri::AppHandle;
 use tauri_plugin_store::StoreExt;
 use tokio::sync::Mutex;
-use crate::storage::{AvatarFolder, AvatarOverride};
+use crate::storage::{AvatarFolder, AvatarOverride, OverlaySettings, OverlayUiState};
 
 const STORE_PATH: &str = "app-settings.json";
 const FOLDERS_KEY: &str = "avatar_folders";
 const OVERRIDES_KEY: &str = "avatar_overrides";
+const OVERLAY_SETTINGS_KEY: &str = "overlay_settings";
+const OVERLAY_UI_STATE_KEY: &str = "overlay_ui_state";
 
 // 並列 invoke の read-modify-write 競合を防ぐためのプロセス全体ロック。
 // tauri-plugin-store は単一 set/get 単位でしか同期しないため、
 // load → 変更 → save の一連を必ず排他化する。
 static FOLDERS_LOCK: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
 static OVERRIDES_LOCK: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
+static OVERLAY_SETTINGS_LOCK: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
 
 fn load_folders(app: &AppHandle) -> Vec<AvatarFolder> {
     app.store(STORE_PATH)
@@ -199,4 +202,65 @@ pub async fn avatar_overrides_delete(app: AppHandle, avatar_id: String) -> Resul
     map.remove(&avatar_id);
     save_overrides(&app, &map);
     Ok(())
+}
+
+// ── Overlay settings (#28) ────────────────────────────────────────────────────
+
+fn load_overlay_settings(app: &AppHandle) -> OverlaySettings {
+    app.store(STORE_PATH)
+        .ok()
+        .and_then(|store| {
+            store
+                .get(OVERLAY_SETTINGS_KEY)
+                .and_then(|v| serde_json::from_value(v.clone()).ok())
+        })
+        .unwrap_or_default()
+}
+
+fn save_overlay_settings(app: &AppHandle, settings: &OverlaySettings) {
+    if let Ok(store) = app.store(STORE_PATH) {
+        if let Ok(value) = serde_json::to_value(settings) {
+            store.set(OVERLAY_SETTINGS_KEY, value);
+            store.save().ok();
+        }
+    }
+}
+
+#[tauri::command]
+pub async fn overlay_settings_get(app: AppHandle) -> Result<OverlaySettings, String> {
+    Ok(load_overlay_settings(&app))
+}
+
+/// 設定変更はサイドカー起動時のCLI引数(`--placement-mode`)経由でのみ反映されるため、
+/// ここでは保存するだけで良い（サイドカーへの即時反映は行わない。次回起動時に適用される）。
+#[tauri::command]
+pub async fn overlay_settings_set(app: AppHandle, settings: OverlaySettings) -> Result<(), String> {
+    let _guard = OVERLAY_SETTINGS_LOCK.lock().await;
+    save_overlay_settings(&app, &settings);
+    Ok(())
+}
+
+// ── Overlay UI state (ソート/選択タブの永続化) ───────────────────────────────────
+// デスクトップUIからは呼ばれず overlay-sidecar (WSブリッジ、`steamvr::bridge`) からのみ
+// 使うため #[tauri::command] は付けない。単純な上書き保存のためロック不要
+// （read-modify-writeではなくoverlay-ui側が確定させた値をそのまま保存するだけ）。
+
+pub(crate) fn load_overlay_ui_state(app: &AppHandle) -> OverlayUiState {
+    app.store(STORE_PATH)
+        .ok()
+        .and_then(|store| {
+            store
+                .get(OVERLAY_UI_STATE_KEY)
+                .and_then(|v| serde_json::from_value(v.clone()).ok())
+        })
+        .unwrap_or_default()
+}
+
+pub(crate) fn save_overlay_ui_state(app: &AppHandle, state: &OverlayUiState) {
+    if let Ok(store) = app.store(STORE_PATH) {
+        if let Ok(value) = serde_json::to_value(state) {
+            store.set(OVERLAY_UI_STATE_KEY, value);
+            store.save().ok();
+        }
+    }
 }

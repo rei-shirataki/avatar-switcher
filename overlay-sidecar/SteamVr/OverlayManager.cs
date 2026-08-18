@@ -340,7 +340,6 @@ internal sealed class OverlayManager
         }
         if (Math.Abs(analogData.y) < ScrollDeadzone) return;
 
-        Console.WriteLine($"[steamvr] Scroll検知: y={analogData.y:F2}");
         _pointer?.Scroll(analogData.y);
     }
 

@@ -2,10 +2,11 @@ import { Component, OnInit, inject } from '@angular/core';
 import { OverlayBridgeService } from './overlay-bridge.service';
 import { OverlayAvatarService } from './overlay-avatar.service';
 import { AvatarGridComponent } from './avatar-grid/avatar-grid.component';
+import { FolderTabsComponent } from './folder-tabs/folder-tabs.component';
 
 @Component({
   selector: 'app-root',
-  imports: [AvatarGridComponent],
+  imports: [AvatarGridComponent, FolderTabsComponent],
   templateUrl: './app.html',
   styleUrl: './app.scss',
 })
@@ -20,8 +21,12 @@ export class App implements OnInit {
     // 永遠に解決しないまま「読み込み中…」に固まってしまう。
     this.bridge
       .connect()
-      .then(() => this.avatarService.refresh())
+      .then(() => Promise.all([this.avatarService.refresh(), this.avatarService.refreshFolders()]))
       .catch((e) => console.error('[overlay-ui] 初期化に失敗:', e));
+  }
+
+  onSelectFolder(folderId: string | null): void {
+    this.avatarService.selectFolder(folderId);
   }
 
   onSelect(avatarId: string): void {

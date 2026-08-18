@@ -8,6 +8,11 @@
       並び替え: {{ avatarService.sortLabel() }}
     </button>
   </header>
+  <app-folder-tabs
+    [folders]="avatarService.folders()"
+    [selectedFolderId]="avatarService.selectedFolderId()"
+    (select)="onSelectFolder($event)"
+  />
   <app-avatar-grid
     [avatars]="avatarService.sortedAvatars()"
     [currentAvatarId]="avatarService.currentAvatarId()"

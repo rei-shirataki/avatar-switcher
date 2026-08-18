@@ -6,6 +6,7 @@
 //! overlay-ui はアバター一覧取得/切替（`avatars.list` / `avatars.select`）を
 //! 使う。どちらも接続直後に `sidecar.hello` でトークン認証する点は共通。
 
+use crate::storage::AvatarFolder;
 use crate::vrchat::models::VRCAvatar;
 use serde::{Deserialize, Serialize};
 
@@ -35,6 +36,10 @@ pub enum ClientMessage {
     /// アバター一覧（自前+お気に入り、ローカルオーバーライド適用済み）を要求する。
     #[serde(rename = "avatars.list")]
     AvatarsList,
+    /// フォルダ一覧を要求する（#26、フォルダタブ切り替え用）。
+    /// overlay-uiは表示・切り替えのみ行い、作成/編集/削除は行わない。
+    #[serde(rename = "folders.list")]
+    FoldersList,
     /// アバターを装着する（REST + OSC を並行送信）。
     #[serde(rename = "avatars.select", rename_all = "camelCase")]
     AvatarsSelect { avatar_id: String },
@@ -48,6 +53,8 @@ pub enum ClientMessage {
 pub enum ServerMessage {
     #[serde(rename = "avatars.list-result", rename_all = "camelCase")]
     AvatarsListResult { avatars: Vec<VRCAvatar> },
+    #[serde(rename = "folders.list-result", rename_all = "camelCase")]
+    FoldersListResult { folders: Vec<AvatarFolder> },
     /// VRChatの装着APIは「更新後のアバター情報」ではなくユーザープロフィールを
     /// 返す実装のため（`vrchat::avatars::select_avatar`のコメント参照）、
     /// avatar情報は積めない。クライアント側は要求時に渡したavatar_idを
@@ -61,4 +68,32 @@ pub enum ServerMessage {
     AvatarChanged { avatar_id: String },
     #[serde(rename = "error", rename_all = "camelCase")]
     Error { message: String },
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::storage::AvatarFolder;
+
+    #[test]
+    fn folders_list_roundtrip() {
+        let client_json = r#"{"type":"folders.list"}"#;
+        assert!(matches!(
+            serde_json::from_str::<ClientMessage>(client_json),
+            Ok(ClientMessage::FoldersList)
+        ));
+
+        let server_msg = ServerMessage::FoldersListResult {
+            folders: vec![AvatarFolder {
+                id: "f1".into(),
+                name: "テスト".into(),
+                avatar_ids: vec!["a1".into(), "a2".into()],
+                color: None,
+                order: 0,
+            }],
+        };
+        let json = serde_json::to_string(&server_msg).unwrap();
+        assert!(json.contains("\"avatarIds\""), "avatarIdsがcamelCaseでない: {json}");
+        assert!(json.contains("\"folders.list-result\""), "typeタグが不正: {json}");
+    }
 }

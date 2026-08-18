@@ -165,6 +165,7 @@ async fn handle_message(app: &AppHandle, text: &str) -> Option<ServerMessage> {
         Ok(ClientMessage::AvatarsSelect { avatar_id }) => {
             Some(handle_avatars_select(&avatar_id).await)
         }
+        Ok(ClientMessage::FoldersList) => Some(handle_folders_list(app).await),
         Err(e) => {
             log::warn!("[steamvr] 不正なメッセージを受信: {} ({})", e, text);
             Some(ServerMessage::Error {
@@ -208,6 +209,16 @@ async fn handle_avatars_list(app: &AppHandle) -> ServerMessage {
     }
 
     ServerMessage::AvatarsListResult { avatars }
+}
+
+/// フォルダ一覧を返す（#26）。表示・切り替えのみが目的のため
+/// `storage::commands::folders_get_all` をそのまま呼ぶだけで十分（作成/編集/
+/// 削除系のコマンドは公開しない）。
+async fn handle_folders_list(app: &AppHandle) -> ServerMessage {
+    let folders = storage::commands::folders_get_all(app.clone())
+        .await
+        .unwrap_or_default();
+    ServerMessage::FoldersListResult { folders }
 }
 
 /// REST (装着) と OSC (即時反映) を送信する。`avatar.service.ts::switchAvatar` と同じ意図だが、

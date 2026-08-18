@@ -1,0 +1,20 @@
+<div class="tabs">
+  <button
+    type="button"
+    class="tab"
+    [class.tab--active]="selectedFolderId === null"
+    (click)="select.emit(null)"
+  >
+    すべて
+  </button>
+  @for (folder of folders; track folder.id) {
+    <button
+      type="button"
+      class="tab"
+      [class.tab--active]="selectedFolderId === folder.id"
+      (click)="select.emit(folder.id)"
+    >
+      {{ folder.name }}
+    </button>
+  }
+</div>

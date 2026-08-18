@@ -48,6 +48,13 @@
     width: 100%;
     height: 100%;
     object-fit: cover;
+    // <img>はブラウザ既定でドラッグ開始ジェスチャーを持つ。VRコントローラーの
+    // レイキャストはpress/release時の座標がわずかにズレるため、img上での
+    // クリックがドラッグとして処理されクリックが不成立になっていた
+    // （実機確認: サムネイル画像上だけクリックが反応しない）。
+    // pointer-eventsを無効化し、クリックを常に親のbuttonへ通す。
+    pointer-events: none;
+    -webkit-user-drag: none;
   }
 }
 

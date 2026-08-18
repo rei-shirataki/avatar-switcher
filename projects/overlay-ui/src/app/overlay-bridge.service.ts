@@ -108,6 +108,16 @@ export class OverlayBridgeService {
     this.send({ type: 'eyeheight.set', value });
   }
 
+  /**
+   * 接続直後の初回同期用。受動OSCイベント任せだと、アバターロード時の
+   * ダンプを取りこぼした場合に身長変更が一度も起きるまで表示が「—」の
+   * まま固まる。fire-and-forgetで、応答はonEyeHeightUpdate経由で届く
+   * （現在値が取得できなかった場合は何も届かない＝表示は「—」のまま）。
+   */
+  queryEyeHeight(): void {
+    this.send({ type: 'eyeheight.query' });
+  }
+
   async listFolders(): Promise<AvatarFolder[]> {
     this.send({ type: 'folders.list' });
     const reply = await this.waitForOneOf(['folders.list-result', 'error']);

@@ -183,6 +183,19 @@ async fn handle_message(app: &AppHandle, text: &str) -> Option<ServerMessage> {
             // で通知されるため、送信成功時点では応答不要(fire-and-forget)。
             None
         }
+        Ok(ClientMessage::EyeHeightQuery) => {
+            match crate::osc::oscquery::query_avatar_scale_snapshot().await {
+                Ok(snapshot) => match snapshot.eye_height {
+                    Some(value) => {
+                        log::info!("[steamvr] eyeheight.query 応答: value={}", value);
+                        broadcast_eye_height(value);
+                    }
+                    None => log::info!("[steamvr] eyeheight.query: eye_height を取得できませんでした"),
+                },
+                Err(e) => log::warn!("[steamvr] eyeheight.query 失敗: {}", e),
+            }
+            None
+        }
         Err(e) => {
             log::warn!("[steamvr] 不正なメッセージを受信: {} ({})", e, text);
             Some(ServerMessage::Error {

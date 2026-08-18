@@ -51,6 +51,15 @@ pub enum ClientMessage {
     /// `EyeHeightUpdate` broadcastで受け取る。
     #[serde(rename = "eyeheight.set", rename_all = "camelCase")]
     EyeHeightSet { value: f32 },
+    /// 接続直後の初回同期用（#27フォローアップ）。受動OSCイベントは
+    /// アバターロード時の一瞬のダンプを取りこぼすと、身長変更が一度も
+    /// 起きない限り二度と届かず表示が「—」のまま固まってしまう。
+    /// VRChatのOSCQuery HTTPサーバーへ現在値を能動的に問い合わせる
+    /// （`oscquery::query_avatar_scale_snapshot`のeye_heightのみ使用、
+    /// ScaleFactor/ScaleModifiedのペアリングraceはリセット機能専用の
+    /// ロジックのため引き続き不使用）。
+    #[serde(rename = "eyeheight.query")]
+    EyeHeightQuery,
 }
 
 /// Rust core → WS クライアント。overlay-ui (TypeScript) 側が `avatarId` の
@@ -120,5 +129,11 @@ mod tests {
         let json = serde_json::to_string(&ServerMessage::EyeHeightUpdate { value: 1.5 }).unwrap();
         assert!(json.contains("\"eyeheight-update\""), "typeタグが不正: {json}");
         assert!(json.contains("\"value\":1.5"), "valueフィールドが不正: {json}");
+
+        let query_json = r#"{"type":"eyeheight.query"}"#;
+        assert!(matches!(
+            serde_json::from_str::<ClientMessage>(query_json),
+            Ok(ClientMessage::EyeHeightQuery)
+        ));
     }
 }

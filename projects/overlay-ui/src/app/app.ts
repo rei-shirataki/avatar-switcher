@@ -22,6 +22,18 @@ export class App implements OnInit {
       .connect()
       .then(() => this.avatarService.refresh())
       .catch((e) => console.error('[overlay-ui] 初期化に失敗:', e));
+
+    // デバッグ用: 「クリックできない」報告の切り分け。CEFから注入される
+    // マウスクリックがDOMまで届いているか自体を、Angularのイベント
+    // バインディングを経由せず直接確認する（Angular側の(click)束縛が
+    // 発火しない場合と、そもそも座標がカードに当たっていない場合を
+    // 区別するため）。原因判明後に削除する。
+    document.addEventListener('click', (e) => {
+      const target = e.target as HTMLElement | null;
+      console.log(
+        `[overlay-ui debug] raw click x=${e.clientX} y=${e.clientY} target=${target?.tagName}.${target?.className}`,
+      );
+    });
   }
 
   onSelect(avatarId: string): void {

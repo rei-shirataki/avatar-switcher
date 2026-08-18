@@ -1,6 +1,19 @@
-import { Injectable, inject, signal } from '@angular/core';
+import { Injectable, inject, signal, computed } from '@angular/core';
 import { OverlayBridgeService } from './overlay-bridge.service';
 import { VRCAvatar } from './core/models/avatar.model';
+
+/**
+ * avatars-view.component.ts の SORT_OPTIONS と同じ並び。VRコントローラーでの
+ * 操作性を考慮し、ドロップダウンではなく「タップで次のモードへ循環する単一ボタン」
+ * で切り替える(#25)ため、選択中モードのラベル表示にそのまま使う。
+ */
+export const SORT_OPTIONS = [
+  { value: 'updated-desc', label: '更新日時 (新しい順)' },
+  { value: 'updated-asc', label: '更新日時 (古い順)' },
+  { value: 'name-asc', label: '名前 (A → Z)' },
+  { value: 'name-desc', label: '名前 (Z → A)' },
+  { value: 'author-asc', label: '制作者名順' },
+] as const;
 
 /**
  * avatar.service.ts の簡略版。VRChatAuthService や tauri-plugin-store への
@@ -16,14 +29,46 @@ export class OverlayAvatarService {
   private readonly _currentAvatarId = signal<string | null>(null);
   private readonly _switching = signal<string | null>(null);
   private readonly _loading = signal(false);
+  private readonly _sortMode = signal<string>('updated-desc');
 
   readonly avatars = this._avatars.asReadonly();
   readonly currentAvatarId = this._currentAvatarId.asReadonly();
   readonly switching = this._switching.asReadonly();
   readonly loading = this._loading.asReadonly();
+  readonly sortMode = this._sortMode.asReadonly();
+
+  readonly sortLabel = computed(
+    () => SORT_OPTIONS.find((o) => o.value === this._sortMode())?.label ?? '',
+  );
+
+  readonly sortedAvatars = computed(() => this.sortAvatars(this._avatars(), this._sortMode()));
 
   constructor() {
     this.bridge.onAvatarChanged((id) => this._currentAvatarId.set(id));
+  }
+
+  /** タップのたびに次のソートモードへ循環する。avatars-view.component.tsのドロップダウン選択に相当。 */
+  cycleSortMode(): void {
+    const index = SORT_OPTIONS.findIndex((o) => o.value === this._sortMode());
+    const next = SORT_OPTIONS[(index + 1) % SORT_OPTIONS.length];
+    this._sortMode.set(next.value);
+  }
+
+  /** avatars-view.component.ts::sortAvatars と同一ロジック。 */
+  private sortAvatars(avatars: VRCAvatar[], mode: string): VRCAvatar[] {
+    const sorted = [...avatars];
+    switch (mode) {
+      case 'updated-asc':
+        return sorted.sort((a, b) => a.updatedAt.localeCompare(b.updatedAt));
+      case 'name-asc':
+        return sorted.sort((a, b) => a.name.localeCompare(b.name));
+      case 'name-desc':
+        return sorted.sort((a, b) => b.name.localeCompare(a.name));
+      case 'author-asc':
+        return sorted.sort((a, b) => a.authorName.localeCompare(b.authorName));
+      default: // updated-desc
+        return sorted.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    }
   }
 
   async refresh(): Promise<void> {

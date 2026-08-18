@@ -4,9 +4,12 @@
     @if (avatarService.loading()) {
       <span class="panel__status">読み込み中…</span>
     }
+    <button type="button" class="sort-button" (click)="avatarService.cycleSortMode()">
+      並び替え: {{ avatarService.sortLabel() }}
+    </button>
   </header>
   <app-avatar-grid
-    [avatars]="avatarService.avatars()"
+    [avatars]="avatarService.sortedAvatars()"
     [currentAvatarId]="avatarService.currentAvatarId()"
     [switchingId]="avatarService.switching()"
     (select)="onSelect($event)"

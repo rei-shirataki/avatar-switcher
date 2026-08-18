@@ -20,6 +20,11 @@
       "name": "/actions/main/in/OverlayInteract",
       "requirement": "mandatory",
       "type": "boolean"
+    },
+    {
+      "name": "/actions/main/in/OpenOverlay",
+      "requirement": "suggested",
+      "type": "boolean"
     }
   ],
   "action_sets": [
@@ -32,12 +37,14 @@
     {
       "language_tag": "en_us",
       "/actions/main": "AvatarSwitcher Actions",
-      "/actions/main/in/OverlayInteract": "Overlay Interact"
+      "/actions/main/in/OverlayInteract": "Overlay Interact",
+      "/actions/main/in/OpenOverlay": "Toggle Overlay (double-press)"
     },
     {
       "language_tag": "ja_jp",
       "/actions/main": "AvatarSwitcher 操作",
-      "/actions/main/in/OverlayInteract": "オーバーレイ操作"
+      "/actions/main/in/OverlayInteract": "オーバーレイ操作",
+      "/actions/main/in/OpenOverlay": "オーバーレイ表示切替（ダブルプレス）"
     }
   ]
 }

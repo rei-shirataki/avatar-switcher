@@ -32,6 +32,9 @@ internal sealed class OverlayManager
     private OverlayPointer? _pointer;
     private ulong _actionSetHandle;
     private ulong _overlayInteractActionHandle;
+    private ulong _openOverlayActionHandle;
+    private DateTime _lastOpenOverlayPress = DateTime.MinValue;
+    private static readonly TimeSpan OpenOverlayDoublePressWindow = TimeSpan.FromMilliseconds(400);
 
     public OverlayManager(WsBridgeClient bridge, int? uiPort, CancellationToken shutdownToken)
     {
@@ -67,6 +70,7 @@ internal sealed class OverlayManager
             }
 
             DetectOverlayInteract();
+            DetectOpenOverlayToggle();
 
             while (OpenVR.System.PollNextEvent(ref e, (uint)Marshal.SizeOf(e)))
             {
@@ -148,6 +152,16 @@ internal sealed class OverlayManager
             _actionSetHandle = actionSetHandle;
             _overlayInteractActionHandle = actionHandle;
 
+            // OpenOverlayは requirement: suggested のため未バインドでもハンドル自体は
+            // 取得できる想定。取れなければ機能を諦めてログのみ出し、致命的エラーとしては扱わない。
+            ulong openOverlayActionHandle = 0;
+            input.GetActionHandle("/actions/main/in/OpenOverlay", ref openOverlayActionHandle);
+            if (openOverlayActionHandle == 0)
+            {
+                Console.Error.WriteLine("[steamvr] OpenOverlay action handle の取得に失敗しました（表示切替は無効化されます）");
+            }
+            _openOverlayActionHandle = openOverlayActionHandle;
+
             _d3D = new D3D11Context();
             _d3D.Initialize();
             _pointer = new OverlayPointer();
@@ -209,6 +223,41 @@ internal sealed class OverlayManager
         var role = OpenVR.System.GetControllerRoleForTrackedDeviceIndex(originInfo.trackedDeviceIndex);
         Console.WriteLine($"[steamvr] OverlayInteract 変化: role={role} bState={actionData.bState}");
         _pointer?.SetPressed(role, actionData.bState);
+    }
+
+    /// <summary>
+    /// #21: `/actions/main/in/OpenOverlay` の立ち上がりエッジを検知し、
+    /// <see cref="OpenOverlayDoublePressWindow"/> 以内に2回目が来たらパネルの表示/非表示を切り替える。
+    ///
+    /// `/actions/main` は常時アクティブなアクションセットで、割り当てたA/Xボタン等は
+    /// VRChat本体側の操作（ジャンプ等）にも使われている可能性があるため、単押しで
+    /// トグルすると誤爆しうる。ダブルプレス限定にすることで意図的な操作とそうでない
+    /// ものを区別する。左右どちらのコントローラーでの押下も区別せず合算して見る
+    /// （`DetectOverlayInteract` と同じく `GetDigitalActionData` に
+    /// `k_ulInvalidInputValueHandle` を渡し、両手の論理ORを取る）。
+    /// </summary>
+    private void DetectOpenOverlayToggle()
+    {
+        if (_openOverlayActionHandle == 0) return;
+
+        var actionData = new InputDigitalActionData_t();
+        var dataError = OpenVR.Input.GetDigitalActionData(_openOverlayActionHandle, ref actionData,
+            (uint)Marshal.SizeOf<InputDigitalActionData_t>(), OpenVR.k_ulInvalidInputValueHandle);
+        if (dataError != EVRInputError.None) return;
+        if (!actionData.bChanged || !actionData.bState) return;
+
+        var now = DateTime.UtcNow;
+        if (now - _lastOpenOverlayPress <= OpenOverlayDoublePressWindow)
+        {
+            _lastOpenOverlayPress = DateTime.MinValue;
+            var visible = !(_panel?.IsVisible ?? false);
+            Console.WriteLine($"[steamvr] OpenOverlay ダブルプレス検知: visible={visible}");
+            _panel?.SetVisible(visible);
+        }
+        else
+        {
+            _lastOpenOverlayPress = now;
+        }
     }
 
     /// <summary>アクション取得系の失敗はバインド未設定など頻発しうるので1回目だけ出す。</summary>

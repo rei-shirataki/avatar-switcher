@@ -180,8 +180,11 @@ internal sealed class OverlayPointer : IDisposable
         var browser = _target?.Browser;
         if (browser == null || pointer.LastUv == null) return;
         var (x, y) = ToBrowserPixels(pointer.LastUv.Value, browser);
-        browser.GetBrowser().GetHost().SendMouseMoveEvent(x, y, mouseLeave,
-            pointer.Pressed ? CefEventFlags.LeftMouseButton : CefEventFlags.None);
+        // クリックはトリガーを離した瞬間にdown+upをまとめて送る方式(SetPressed参照)
+        // のため、押下中もCEFの認識上は左ボタンを実際には押していない。
+        // LeftMouseButtonフラグを付けるとCEF側の状態と食い違いドラッグ扱いに
+        // なりかねないため常にNoneで送る。
+        browser.GetBrowser().GetHost().SendMouseMoveEvent(x, y, mouseLeave, CefEventFlags.None);
     }
 
     /// <summary>UV原点(左下)とCEFのピクセル原点(左上)でY軸が逆になるため反転する。</summary>
@@ -204,6 +207,16 @@ internal sealed class OverlayPointer : IDisposable
         if (pointer == null || pointer.Pressed == pressed) return;
         pointer.Pressed = pressed;
 
+        // トリガーを離した瞬間のみクリックとして送る。押した瞬間と離した瞬間で
+        // 別々の座標(press時/release時のLastUv)を使っていたところ、トリガーを
+        // 引く動作中の手ブレでdown/upが別ボタンにズレてクリックとして成立しない
+        // ことがあると実機確認で判明（パネルから距離が離れているほど、レイの
+        // 先端座標が同じ角度ブレでも大きく動くため顕著。1回目は不成立、
+        // 手が落ち着いた2回目でようやく成立する、という再現性のある不具合
+        // だった）。down/upを同一座標(離した瞬間の座標)でまとめて送ることで
+        // ズレを無くす。
+        if (pressed) return;
+
         var browser = _target?.Browser;
         if (browser == null || pointer.LastUv == null)
         {
@@ -211,8 +224,10 @@ internal sealed class OverlayPointer : IDisposable
             return;
         }
         var (x, y) = ToBrowserPixels(pointer.LastUv.Value, browser);
-        Console.WriteLine($"[steamvr] クリック送信: role={role} pressed={pressed} x={x} y={y}");
-        browser.GetBrowser().GetHost().SendMouseClickEvent(x, y, MouseButtonType.Left, !pressed, 1, CefEventFlags.None);
+        Console.WriteLine($"[steamvr] クリック送信: role={role} x={x} y={y}");
+        var host = browser.GetBrowser().GetHost();
+        host.SendMouseClickEvent(x, y, MouseButtonType.Left, mouseUp: false, clickCount: 1, CefEventFlags.None);
+        host.SendMouseClickEvent(x, y, MouseButtonType.Left, mouseUp: true, clickCount: 1, CefEventFlags.None);
     }
 
     public void Dispose()

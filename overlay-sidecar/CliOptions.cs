@@ -7,17 +7,22 @@ internal sealed class CliOptions
 {
     public int WsPort { get; }
     public string Token { get; }
+    /// <summary>overlay-ui静的ファイルサーバーのポート。Rust側が起動できなかった
+    /// 場合（overlay-ui未ビルド等）は渡されない。</summary>
+    public int? UiPort { get; }
 
-    private CliOptions(int wsPort, string token)
+    private CliOptions(int wsPort, string token, int? uiPort)
     {
         WsPort = wsPort;
         Token = token;
+        UiPort = uiPort;
     }
 
     public static CliOptions? Parse(string[] args)
     {
         int? wsPort = null;
         string? token = null;
+        int? uiPort = null;
         for (var i = 0; i < args.Length; i++)
         {
             if (args[i] == "--ws-port" && i + 1 < args.Length && int.TryParse(args[i + 1], out var p))
@@ -30,6 +35,11 @@ internal sealed class CliOptions
                 token = args[i + 1];
                 i++;
             }
+            else if (args[i] == "--ui-port" && i + 1 < args.Length && int.TryParse(args[i + 1], out var up))
+            {
+                uiPort = up;
+                i++;
+            }
         }
 
         if (wsPort == null || string.IsNullOrEmpty(token))
@@ -37,6 +47,6 @@ internal sealed class CliOptions
             return null;
         }
 
-        return new CliOptions(wsPort.Value, token);
+        return new CliOptions(wsPort.Value, token, uiPort);
     }
 }

@@ -29,6 +29,7 @@ internal sealed class AvatarPanelOverlay : IDisposable
     private readonly D3D11Context _d3D;
     private readonly int _wsPort;
     private readonly string _wsToken;
+    private readonly int? _uiPort;
     private ulong _overlayHandle;
     private OffscreenBrowser? _browser;
     private Texture2D? _texture;
@@ -38,11 +39,12 @@ internal sealed class AvatarPanelOverlay : IDisposable
     public ulong OverlayHandle => _overlayHandle;
     public OffscreenBrowser? Browser => _browser;
 
-    public AvatarPanelOverlay(D3D11Context d3D, int wsPort, string wsToken)
+    public AvatarPanelOverlay(D3D11Context d3D, int wsPort, string wsToken, int? uiPort)
     {
         _d3D = d3D;
         _wsPort = wsPort;
         _wsToken = wsToken;
+        _uiPort = uiPort;
     }
 
     public async Task OpenAsync()
@@ -76,9 +78,13 @@ internal sealed class AvatarPanelOverlay : IDisposable
     /// overlay-ui (Angular) の読み込み先URLを決める。優先順位:
     /// 1. 開発用URL環境変数 (`ng serve --project overlay-ui` を別途起動して指す。
     ///    sidecar.rs::resolve_sidecar_path と同じく「開発用オーバーライドを
-    ///    最優先」の流儀に揃えている。dist配置後もこれを消さずにイテレーション
-    ///    できるようにする狙い）
-    /// 2. ビルド済み dist が実行ファイル横の overlay-ui/ に配置されていればそれ (本番相当)
+    ///    最優先」の流儀に揃えている)
+    /// 2. Rust core が起動する overlay-ui 静的ファイルサーバー（`--ui-port` で
+    ///    渡される。本番相当。file:// 直読みは Angular esbuild が出力する
+    ///    &lt;script type="module"&gt; がES moduleの仕様上 file:// (origin: null) からの
+    ///    読み込みを常にCORSでブロックするため実機で機能しなかった
+    ///    （Access to script at 'file:///...' ... blocked by CORS policy を確認）。
+    ///    http://127.0.0.1 経由にすることで回避する
     /// 3. どちらも無ければ M1 のテストページにフォールバック（overlay-ui未セットアップでも
     ///    オーバーレイ描画パイプライン自体の疎通確認は引き続きできるようにする）
     /// いずれも Rust core の WS ブリッジへ接続するための port/token をクエリで渡す。
@@ -93,14 +99,13 @@ internal sealed class AvatarPanelOverlay : IDisposable
             return devUrl.TrimEnd('/') + "/" + query;
         }
 
-        var distIndex = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "overlay-ui", "index.html");
-        if (File.Exists(distIndex))
+        if (_uiPort is { } uiPort)
         {
-            return new Uri(distIndex).AbsoluteUri + query;
+            return $"http://127.0.0.1:{uiPort}/index.html{query}";
         }
 
-        Console.WriteLine("[steamvr] overlay-ui が見つからないため M1 テストページで代替します" +
-            "（dist/overlay-ui/browser を配置するか AVATAR_SWITCHER_OVERLAY_UI_DEV_URL を設定してください）");
+        Console.WriteLine("[steamvr] overlay-ui 静的ファイルサーバーが起動していないため M1 テストページで代替します" +
+            "（dist/overlay-ui/browser をビルドするか AVATAR_SWITCHER_OVERLAY_UI_DEV_URL を設定してください）");
         return "data:text/html;base64," + Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(TestPage.Html));
     }
 

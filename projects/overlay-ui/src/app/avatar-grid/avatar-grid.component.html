@@ -10,7 +10,7 @@
     >
       <div class="card__thumb">
         @if (avatar.thumbnailImageUrl) {
-          <img [src]="avatar.thumbnailImageUrl" [alt]="avatar.name" (error)="onImgError($event)" />
+          <img [src]="avatar.thumbnailImageUrl" [alt]="avatar.name" draggable="false" (error)="onImgError($event)" />
         } @else {
           <div class="card__thumb-placeholder">{{ avatar.name.charAt(0) }}</div>
         }

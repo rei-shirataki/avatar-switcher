@@ -7,7 +7,7 @@ const REQUEST_TIMEOUT_MS = 10_000;
 
 type ServerMessage =
   | { type: 'avatars.list-result'; avatars: VRCAvatar[] }
-  | { type: 'avatars.select-result'; avatar: VRCAvatar }
+  | { type: 'avatars.select-result'; avatarId: string }
   | { type: 'avatar-changed'; avatarId: string }
   | { type: 'error'; message: string };
 
@@ -95,11 +95,10 @@ export class OverlayBridgeService {
     return reply.avatars;
   }
 
-  async selectAvatar(avatarId: string): Promise<VRCAvatar> {
+  async selectAvatar(avatarId: string): Promise<void> {
     this.send({ type: 'avatars.select', avatarId });
     const reply = await this.waitForOneOf(['avatars.select-result', 'error']);
     if (reply.type === 'error') throw new Error(reply.message);
-    return reply.avatar;
   }
 
   private waitForOneOf<T extends ServerMessage['type']>(

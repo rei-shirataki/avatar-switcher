@@ -10,17 +10,12 @@
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <SelfContained>true</SelfContained>
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <RootNamespace>AvatarSwitcher.OverlaySidecar</RootNamespace>
     <AssemblyName>overlay-sidecar</AssemblyName>
     <InvariantGlobalization>true</InvariantGlobalization>
   </PropertyGroup>
-
-  <ItemGroup>
-    <!-- ValveSoftware/openvr の公式配布物をそのままベンダリングしている。
-         自動生成ファイルのため手動編集しない（OpenVR/VENDORING.md 参照）。 -->
-    <Compile Include="OpenVR\openvr_api.cs" />
-  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="CefSharp.OffScreen.NETCore" Version="150.0.110" />

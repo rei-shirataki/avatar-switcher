@@ -228,7 +228,19 @@ pub async fn select_avatar(avatar_id: &str) -> Result<VRCAvatar> {
     // select は閲覧系。403 はプライベート/BAN/権限の総合的事由なので
     // 「編集できません」とは表示せず、ステータスのみ伝える。
     let resp = ensure_success(resp, "アバターの装着に失敗しました", None).await?;
-    Ok(resp.json::<VRCAvatar>().await?)
+    // .json() のエラーメッセージ ("error decoding response body") だけでは
+    // VRChat側が実際どんなJSONを返したのか分からず原因調査ができないため、
+    // 生テキストを先に取ってから自前でパースし、失敗時は本文をログに残す
+    // （SteamVRオーバーレイ経由の select で発生を確認、原因未特定）。
+    let text = resp.text().await?;
+    serde_json::from_str::<VRCAvatar>(&text).map_err(|e| {
+        log::warn!(
+            "[vrchat] select_avatar のレスポンスをパースできませんでした: {} (body: {})",
+            e,
+            truncate_for_log(&text, 500)
+        );
+        anyhow!("アバター情報の解析に失敗しました: {}", e)
+    })
 }
 
 /// VRChat API でアバターの画像を更新する。

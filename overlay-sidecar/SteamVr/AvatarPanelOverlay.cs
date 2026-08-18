@@ -28,9 +28,15 @@ internal sealed class AvatarPanelOverlay : IDisposable
     private const string OverlayKey = "com.rei-shirataki.avatar-switcher:AvatarPanel";
     private const string OverlayName = "AvatarSwitcher Panel";
     private const uint Resolution = 1024;
-    private const float WidthMeters = 0.45f;
-    /// <summary>Handモード時の幅（m）。腕に付けるため通常より小さくする（実機での要調整見込み）。</summary>
-    private const float HandWidthMeters = 0.25f;
+    // パネルは1024x1024pxの単一テクスチャとしてレンダリングされ、この幅(m)で
+    // 物理サイズへスケールするだけ（文字サイズ等のCSSはこのテクスチャ内に固定）。
+    // そのためWidthMetersを大きくすると文字・ボタンを含む全要素が一括で拡大される。
+    // 実機確認(#28)で「文字・ボタンが小さい、特にHandモードが顕著」と判明したため、
+    // 初期値(Space: 0.45f, Hand: 0.25f)から引き上げた。
+    private const float WidthMeters = 0.55f;
+    /// <summary>Handモード時の幅（m）。腕に付けるため通常より小さくするが、実機確認で
+    /// 0.25fは読みにくいレベルだったため引き上げた（さらなる要調整の可能性あり）。</summary>
+    private const float HandWidthMeters = 0.4f;
     /// <summary>頭部前方のオフセット（m）。DashboardOverlayのフォールバック配置に合わせた値。</summary>
     private const float ForwardOffsetMeters = 0.55f;
     /// <summary>Space方式（OyasumiVR式）の手元オフセット。座標系はワールド、頭部の向きのみで回転する。</summary>

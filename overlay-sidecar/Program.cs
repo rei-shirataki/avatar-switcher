@@ -17,6 +17,10 @@ internal static class Program
 {
     private static async Task<int> Main(string[] args)
     {
+        // 標準出力はRust側でファイルへリダイレクトされる。既定の出力エンコーディングは
+        // コンソール未接続時にOSごとのコードページに揺れ、ログの日本語が文字化けするため固定する。
+        Console.OutputEncoding = System.Text.Encoding.UTF8;
+
         var options = CliOptions.Parse(args);
         if (options == null)
         {

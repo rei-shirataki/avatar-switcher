@@ -30,7 +30,7 @@
   "action_sets": [
     {
       "name": "/actions/main",
-      "usage": "leftright"
+      "usage": "hidden"
     }
   ],
   "localization": [

@@ -91,7 +91,18 @@ internal sealed class OverlayPointer : IDisposable
 
     /// <summary>
     /// 両コントローラーからパネルへレイキャストし、交点にポインタを表示、
-    /// UV座標からCEFへマウス移動イベントを注入する。メインループから毎ティック呼ぶ。
+    /// UV座標からCEFへマウス移動イベントを注入する。
+    ///
+    /// RenderLoop（HMDリフレッシュレート、90〜144Hz程度）から毎ティック呼ぶ。
+    /// 以前はMainLoop側の32ms固定ティックから呼んでいたが、クリック検知
+    /// (<see cref="SetPressed"/>、こちらは別スレッドのMainLoopで32ms間隔のまま)
+    /// が参照する座標が常に最大32ms古くなり、パネルから距離が離れるほど
+    /// 顕著な「クリック不成立」の原因になっていた。参照実装OyasumiVRの
+    /// OverlayPointer.Startも同様にHMDリフレッシュレートの専用スレッドで
+    /// 座標を更新しており、それに合わせた。二つのスレッドから同じ
+    /// <see cref="PointerState"/> に触れるため、フィールドアクセスは
+    /// pointerインスタンス自体をロックオブジェクトとして保護する
+    /// （OyasumiVRも同じ流儀でPointerDataインスタンスをロックしている）。
     /// </summary>
     public void UpdateRaycast()
     {
@@ -158,33 +169,39 @@ internal sealed class OverlayPointer : IDisposable
             ref transform);
         OpenVR.Overlay.ShowOverlay(pointer.OverlayHandle);
 
-        pointer.LastUv = uv;
-        SendMouseMove(pointer);
+        // RenderLoopスレッドからの書き込みとMainLoopスレッド(SetPressed)からの
+        // 読み書きが競合するため、pointerインスタンス自体をロックする。
+        lock (pointer)
+        {
+            pointer.LastUv = uv;
+            SendMouseMove(pointer);
+        }
     }
 
     private void Hide(PointerState pointer)
     {
         OpenVR.Overlay.HideOverlay(pointer.OverlayHandle);
-        // 交点を失った瞬間のCEF側マウス状態をクリアする(離脱通知)。
-        if (pointer.LastUv.HasValue)
+        lock (pointer)
         {
-            SendMouseMove(pointer, mouseLeave: true);
-        }
+            // 交点を失った瞬間のCEF側マウス状態をクリアする(離脱通知)。
+            if (pointer.LastUv.HasValue)
+            {
+                SendMouseMove(pointer, mouseLeave: true);
+            }
 
-        pointer.LastUv = null;
-        pointer.Pressed = false;
+            pointer.LastUv = null;
+            pointer.Pressed = false;
+        }
     }
 
+    /// <summary>呼び出し元が既にpointerをlockしている前提（UpdateForController/Hide経由のみ）。</summary>
     private void SendMouseMove(PointerState pointer, bool mouseLeave = false)
     {
         var browser = _target?.Browser;
         if (browser == null || pointer.LastUv == null) return;
         var (x, y) = ToBrowserPixels(pointer.LastUv.Value, browser);
-        // クリックはトリガーを離した瞬間にdown+upをまとめて送る方式(SetPressed参照)
-        // のため、押下中もCEFの認識上は左ボタンを実際には押していない。
-        // LeftMouseButtonフラグを付けるとCEF側の状態と食い違いドラッグ扱いに
-        // なりかねないため常にNoneで送る。
-        browser.GetBrowser().GetHost().SendMouseMoveEvent(x, y, mouseLeave, CefEventFlags.None);
+        browser.GetBrowser().GetHost().SendMouseMoveEvent(x, y, mouseLeave,
+            pointer.Pressed ? CefEventFlags.LeftMouseButton : CefEventFlags.None);
     }
 
     /// <summary>UV原点(左下)とCEFのピクセル原点(左上)でY軸が逆になるため反転する。</summary>
@@ -195,7 +212,15 @@ internal sealed class OverlayPointer : IDisposable
         return (x, y);
     }
 
-    /// <summary>SteamVR Inputの `OverlayInteract` アクション状態変化をポインタのクリックに変換する。</summary>
+    /// <summary>
+    /// SteamVR Inputの `OverlayInteract` アクション状態変化をポインタのクリックに変換する。
+    /// 押した瞬間・離した瞬間それぞれで、その時点のLastUvを使ってmousedown/mouseupを
+    /// 送る（参照実装OyasumiVRのOnInteractPress/OnInteractReleaseと同じパターン）。
+    /// UpdateRaycastがHMDリフレッシュレートの専用スレッドで座標を常に新鮮に
+    /// 保っている前提なので、press/releaseで別座標になっても実用上問題ない
+    /// （このパターン自体は不具合の原因ではなく、座標の鮮度がMainLoop側の
+    /// 32ms固定ティックで1ティック分古かったことが原因だった）。
+    /// </summary>
     public void SetPressed(ETrackedControllerRole role, bool pressed)
     {
         var pointer = role switch
@@ -204,30 +229,25 @@ internal sealed class OverlayPointer : IDisposable
             ETrackedControllerRole.RightHand => _right,
             _ => null,
         };
-        if (pointer == null || pointer.Pressed == pressed) return;
-        pointer.Pressed = pressed;
+        if (pointer == null) return;
 
-        // トリガーを離した瞬間のみクリックとして送る。押した瞬間と離した瞬間で
-        // 別々の座標(press時/release時のLastUv)を使っていたところ、トリガーを
-        // 引く動作中の手ブレでdown/upが別ボタンにズレてクリックとして成立しない
-        // ことがあると実機確認で判明（パネルから距離が離れているほど、レイの
-        // 先端座標が同じ角度ブレでも大きく動くため顕著。1回目は不成立、
-        // 手が落ち着いた2回目でようやく成立する、という再現性のある不具合
-        // だった）。down/upを同一座標(離した瞬間の座標)でまとめて送ることで
-        // ズレを無くす。
-        if (pressed) return;
+        Vector2? uv;
+        lock (pointer)
+        {
+            if (pointer.Pressed == pressed) return;
+            pointer.Pressed = pressed;
+            uv = pointer.LastUv;
+        }
 
         var browser = _target?.Browser;
-        if (browser == null || pointer.LastUv == null)
+        if (browser == null || uv == null)
         {
-            Console.WriteLine($"[steamvr] クリックを無視: browser={(browser == null ? "null" : "ok")} LastUv={(pointer.LastUv == null ? "null(パネルに当たっていない)" : "ok")}");
+            Console.WriteLine($"[steamvr] クリックを無視: browser={(browser == null ? "null" : "ok")} LastUv={(uv == null ? "null(パネルに当たっていない)" : "ok")}");
             return;
         }
-        var (x, y) = ToBrowserPixels(pointer.LastUv.Value, browser);
-        Console.WriteLine($"[steamvr] クリック送信: role={role} x={x} y={y}");
-        var host = browser.GetBrowser().GetHost();
-        host.SendMouseClickEvent(x, y, MouseButtonType.Left, mouseUp: false, clickCount: 1, CefEventFlags.None);
-        host.SendMouseClickEvent(x, y, MouseButtonType.Left, mouseUp: true, clickCount: 1, CefEventFlags.None);
+        var (x, y) = ToBrowserPixels(uv.Value, browser);
+        Console.WriteLine($"[steamvr] クリック送信: role={role} pressed={pressed} x={x} y={y}");
+        browser.GetBrowser().GetHost().SendMouseClickEvent(x, y, MouseButtonType.Left, mouseUp: !pressed, clickCount: 1, CefEventFlags.None);
     }
 
     public void Dispose()

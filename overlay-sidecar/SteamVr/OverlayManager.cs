@@ -67,7 +67,6 @@ internal sealed class OverlayManager
             }
 
             DetectOverlayInteract();
-            _pointer?.UpdateRaycast();
 
             while (OpenVR.System.PollNextEvent(ref e, (uint)Marshal.SizeOf(e)))
             {
@@ -236,6 +235,17 @@ internal sealed class OverlayManager
                     // このスレッドが解放済みの OpenVR インターフェースに触れる可能性が
                     // ある（参照実装 OyasumiVR も同じ構造で同じレースを許容している）。
                     // クラッシュさせず次ティックへ回復させるだけの安全網。
+                    //
+                    // レイキャスト/ポインタ座標の更新(UpdateRaycast)もここに置く。
+                    // 以前はMainLoop側の32ms固定ティックでDetectOverlayInteract()の
+                    // 「後」に呼んでいたため、クリック検知時に使う座標が常に最大32ms
+                    // (1ティック分)古い状態だった。パネルから距離が離れるほど同じ
+                    // 角度のブレでもレイ先端の座標変化が大きくなるため、これが
+                    // 「距離が離れると反応しない」「2回目でようやく成立する」の
+                    // 原因だったと判明（参照実装OyasumiVRはOverlayPointer.Startを
+                    // HMDリフレッシュレートの専用スレッドで回し、座標を常に新鮮に
+                    // 保っている。同じ構成に合わせた）。
+                    _pointer?.UpdateRaycast();
                     _panel?.UpdateFrame();
                 }
                 catch (Exception ex)

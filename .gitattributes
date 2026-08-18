@@ -1,0 +1,29 @@
+# Auto detect text files and normalize line endings to LF in the repo,
+# converted to the OS native line ending on checkout (see core.autocrlf).
+* text=auto eol=lf
+
+# Explicit text types
+*.rs text
+*.toml text
+*.ts text
+*.tsx text
+*.html text
+*.scss text
+*.css text
+*.json text
+*.md text
+*.cs text
+*.csproj text
+*.yml text
+*.yaml text
+
+# Windows-only files should always use CRLF
+*.bat text eol=crlf
+*.ps1 text eol=crlf
+
+# Binary files must not be modified by line-ending normalization
+*.dll binary
+*.sig binary
+*.png binary
+*.ico binary
+*.lock text eol=lf

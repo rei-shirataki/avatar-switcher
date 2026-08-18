@@ -31,6 +31,7 @@ internal sealed class OverlayManager
     private AvatarPanelOverlay? _panel;
     private OverlayPointer? _pointer;
     private ulong _actionSetHandle;
+    private ulong _toggleActionSetHandle;
     private ulong _overlayInteractActionHandle;
     private ulong _openOverlayActionHandle;
     private DateTime _lastOpenOverlayPress = DateTime.MinValue;
@@ -69,6 +70,7 @@ internal sealed class OverlayManager
                 _ = _bridge.SendSteamVrStatusAsync(true, _shutdownToken);
             }
 
+            UpdateActionSets();
             DetectOverlayInteract();
             DetectOpenOverlayToggle();
 
@@ -152,14 +154,24 @@ internal sealed class OverlayManager
             _actionSetHandle = actionSetHandle;
             _overlayInteractActionHandle = actionHandle;
 
+            // トリガーの/actions/mainとは別に、表示切替は/actions/toggleというusage: leftrightの
+            // アクションセットに分けている（#21フォローアップ）。usageはアクション単位ではなく
+            // アクションセット単位の設定のため、「トリガーはhidden(自動適用・編集不可)のまま、
+            // 表示切替だけユーザーがSteamVRのバインディング編集画面で変更できるように」という
+            // 要望を満たすには別セットに分割する必要があった。
             // OpenOverlayは requirement: suggested のため未バインドでもハンドル自体は
             // 取得できる想定。取れなければ機能を諦めてログのみ出し、致命的エラーとしては扱わない。
+            ulong toggleActionSetHandle = 0;
+            input.GetActionSetHandle("/actions/toggle", ref toggleActionSetHandle);
             ulong openOverlayActionHandle = 0;
-            input.GetActionHandle("/actions/main/in/OpenOverlay", ref openOverlayActionHandle);
-            if (openOverlayActionHandle == 0)
+            input.GetActionHandle("/actions/toggle/in/OpenOverlay", ref openOverlayActionHandle);
+            if (toggleActionSetHandle == 0 || openOverlayActionHandle == 0)
             {
                 Console.Error.WriteLine("[steamvr] OpenOverlay action handle の取得に失敗しました（表示切替は無効化されます）");
+                toggleActionSetHandle = 0;
+                openOverlayActionHandle = 0;
             }
+            _toggleActionSetHandle = toggleActionSetHandle;
             _openOverlayActionHandle = openOverlayActionHandle;
 
             _d3D = new D3D11Context();
@@ -179,27 +191,47 @@ internal sealed class OverlayManager
         }
     }
 
-    private void DetectOverlayInteract()
+    /// <summary>
+    /// /actions/main（トリガー、hidden）と /actions/toggle（表示切替、leftright）の
+    /// 両方を毎ティックアクティブ化する。トグル用セットが未解決（ハンドル取得失敗）の
+    /// 場合は/actions/mainのみで呼び、致命的エラーにはしない。
+    /// </summary>
+    private void UpdateActionSets()
     {
         if (_actionSetHandle == 0) return;
 
-        var activeSets = new[]
+        var count = _toggleActionSetHandle != 0 ? 2 : 1;
+        var activeSets = new VRActiveActionSet_t[count];
+        activeSets[0] = new VRActiveActionSet_t
         {
-            new VRActiveActionSet_t
+            ulActionSet = _actionSetHandle,
+            ulRestrictedToDevice = OpenVR.k_ulInvalidInputValueHandle,
+            ulSecondaryActionSet = 0,
+            nPriority = 0,
+            unPadding = 0,
+        };
+        if (_toggleActionSetHandle != 0)
+        {
+            activeSets[1] = new VRActiveActionSet_t
             {
-                ulActionSet = _actionSetHandle,
+                ulActionSet = _toggleActionSetHandle,
                 ulRestrictedToDevice = OpenVR.k_ulInvalidInputValueHandle,
                 ulSecondaryActionSet = 0,
                 nPriority = 0,
                 unPadding = 0,
-            },
-        };
+            };
+        }
+
         var updateError = OpenVR.Input.UpdateActionState(activeSets, (uint)Marshal.SizeOf<VRActiveActionSet_t>());
         if (updateError != EVRInputError.None)
         {
             LogInteractDiag($"UpdateActionState 失敗: {updateError}");
-            return;
         }
+    }
+
+    private void DetectOverlayInteract()
+    {
+        if (_actionSetHandle == 0) return;
 
         var actionData = new InputDigitalActionData_t();
         var dataError = OpenVR.Input.GetDigitalActionData(_overlayInteractActionHandle, ref actionData,
@@ -226,14 +258,14 @@ internal sealed class OverlayManager
     }
 
     /// <summary>
-    /// #21: `/actions/main/in/OpenOverlay` の立ち上がりエッジを検知し、
+    /// #21: `/actions/toggle/in/OpenOverlay` の立ち上がりエッジを検知し、
     /// <see cref="OpenOverlayDoublePressWindow"/> 以内に2回目が来たらパネルの表示/非表示を切り替える。
     ///
-    /// `/actions/main` は常時アクティブなアクションセットで、割り当てたA/Xボタン等は
-    /// VRChat本体側の操作（ジャンプ等）にも使われている可能性があるため、単押しで
-    /// トグルすると誤爆しうる。ダブルプレス限定にすることで意図的な操作とそうでない
-    /// ものを区別する。左右どちらのコントローラーでの押下も区別せず合算して見る
-    /// （`DetectOverlayInteract` と同じく `GetDigitalActionData` に
+    /// `/actions/toggle` は`/actions/main`と同じく常時アクティブなアクションセットで、
+    /// 既定バインディングのA/Xボタン等はVRChat本体側の操作（ジャンプ等）にも使われている
+    /// 可能性があるため、単押しでトグルすると誤爆しうる。ダブルプレス限定にすることで
+    /// 意図的な操作とそうでないものを区別する。左右どちらのコントローラーでの押下も
+    /// 区別せず合算して見る（`DetectOverlayInteract` と同じく `GetDigitalActionData` に
     /// `k_ulInvalidInputValueHandle` を渡し、両手の論理ORを取る）。
     /// </summary>
     private void DetectOpenOverlayToggle()

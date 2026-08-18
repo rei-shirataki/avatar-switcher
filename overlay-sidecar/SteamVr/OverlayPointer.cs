@@ -266,31 +266,23 @@ internal sealed class OverlayPointer : IDisposable
     public void Scroll(float deltaY)
     {
         Vector2? uv;
-        string source;
         lock (_right)
         {
             uv = _right.LastUv;
         }
-        source = "right";
         if (uv == null)
         {
             lock (_left)
             {
                 uv = _left.LastUv;
             }
-            source = "left";
         }
 
         var browser = _target?.Browser;
-        if (browser == null || uv == null)
-        {
-            Console.WriteLine($"[steamvr] スクロールを無視: browser={(browser == null ? "null" : "ok")} LastUv=null(どちらのコントローラーもパネルに当たっていない)");
-            return;
-        }
+        if (browser == null || uv == null) return;
 
         var (x, y) = ToBrowserPixels(uv.Value, browser);
         var wheelDeltaY = (int)(deltaY * ScrollPixelsPerUnit);
-        Console.WriteLine($"[steamvr] スクロール送信: aimSource={source} x={x} y={y} wheelDeltaY={wheelDeltaY}");
         browser.GetBrowser().GetHost().SendMouseWheelEvent(x, y, 0, wheelDeltaY, CefEventFlags.None);
     }
 

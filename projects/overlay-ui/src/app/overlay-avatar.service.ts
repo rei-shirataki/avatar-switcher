@@ -15,6 +15,11 @@ export const SORT_OPTIONS = [
   { value: 'author-asc', label: '制作者名順' },
 ] as const;
 
+/** avatars-view.component.ts の FAVORITES_TAB/UPLOADED_TAB と同じ特殊ID。folderIdの名前空間を
+ * 共有するフォルダ選択(selectFolder)経由でお気に入り/アップロード済みタブも切り替える。 */
+export const FAVORITES_TAB = '__favorites__';
+export const UPLOADED_TAB = '__uploaded__';
+
 /**
  * avatar.service.ts の簡略版。VRChatAuthService や tauri-plugin-store への
  * 依存を切り、WS経由でRust coreからアバター一覧取得/切替のみ行う。
@@ -26,12 +31,15 @@ export class OverlayAvatarService {
   private readonly bridge = inject(OverlayBridgeService);
 
   private readonly _avatars = signal<VRCAvatar[]>([]);
+  private readonly _favoriteIds = signal<ReadonlySet<string>>(new Set());
+  private readonly _uploadedIds = signal<ReadonlySet<string>>(new Set());
   private readonly _currentAvatarId = signal<string | null>(null);
   private readonly _switching = signal<string | null>(null);
   private readonly _loading = signal(false);
   private readonly _sortMode = signal<string>('updated-desc');
   private readonly _folders = signal<AvatarFolder[]>([]);
-  /** null = 「すべて」タブ。#26: 作成/編集/削除はメインアプリ側の役割で、ここは表示・切替のみ。 */
+  /** null = 「すべて」タブ。FAVORITES_TAB/UPLOADED_TABも同じ名前空間で扱う。
+   * #26: 作成/編集/削除はメインアプリ側の役割で、ここは表示・切替のみ。 */
   private readonly _selectedFolderId = signal<string | null>(null);
 
   readonly avatars = this._avatars.asReadonly();
@@ -46,8 +54,17 @@ export class OverlayAvatarService {
     () => SORT_OPTIONS.find((o) => o.value === this._sortMode())?.label ?? '',
   );
 
+  /** avatars-view.component.ts::filteredAvatars と同じ分岐（FAVORITES_TAB/UPLOADED_TAB/フォルダ/すべて）。 */
   private readonly filteredAvatars = computed(() => {
     const folderId = this._selectedFolderId();
+    if (folderId === FAVORITES_TAB) {
+      const ids = this._favoriteIds();
+      return this._avatars().filter((a) => ids.has(a.id));
+    }
+    if (folderId === UPLOADED_TAB) {
+      const ids = this._uploadedIds();
+      return this._avatars().filter((a) => ids.has(a.id));
+    }
     if (folderId === null) return this._avatars();
     const folder = this._folders().find((f) => f.id === folderId);
     if (!folder) return this._avatars();
@@ -96,7 +113,10 @@ export class OverlayAvatarService {
   async refresh(): Promise<void> {
     this._loading.set(true);
     try {
-      this._avatars.set(await this.bridge.listAvatars());
+      const result = await this.bridge.listAvatars();
+      this._avatars.set(result.avatars);
+      this._favoriteIds.set(new Set(result.favoriteIds));
+      this._uploadedIds.set(new Set(result.uploadedIds));
     } finally {
       this._loading.set(false);
     }

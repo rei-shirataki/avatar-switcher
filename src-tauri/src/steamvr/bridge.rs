@@ -162,7 +162,7 @@ async fn handle_message(app: &AppHandle, text: &str) -> Option<ServerMessage> {
         }
         Ok(ClientMessage::AvatarsList) => {
             let reply = handle_avatars_list(app).await;
-            if let ServerMessage::AvatarsListResult { avatars } = &reply {
+            if let ServerMessage::AvatarsListResult { avatars, .. } = &reply {
                 log::info!("[steamvr] avatars.list 応答: {}件", avatars.len());
             }
             Some(reply)
@@ -211,9 +211,16 @@ async fn handle_message(app: &AppHandle, text: &str) -> Option<ServerMessage> {
 /// 即座に返せるキャッシュ済みデータのみを使う（本体側の fresh フェッチが
 /// 完了していればそちらが自動的に反映される）。
 async fn handle_avatars_list(app: &AppHandle) -> ServerMessage {
-    let mut avatars: Vec<VRCAvatar> = vrchat::cache::load_avatars();
+    let uploaded = vrchat::cache::load_avatars();
+    let favorites = vrchat::cache::load_favorites();
+    // avatars.service.ts::allAvatars と同じマージ規則（自前優先、重複除去）を適用する前に、
+    // お気に入り/アップロード済みタブフィルタ用の所属元idセットを保持しておく。
+    let uploaded_ids: Vec<String> = uploaded.iter().map(|a| a.id.clone()).collect();
+    let favorite_ids: Vec<String> = favorites.iter().map(|a| a.id.clone()).collect();
+
+    let mut avatars: Vec<VRCAvatar> = uploaded;
     let mut seen: HashSet<String> = avatars.iter().map(|a| a.id.clone()).collect();
-    for fav in vrchat::cache::load_favorites() {
+    for fav in favorites {
         if seen.insert(fav.id.clone()) {
             avatars.push(fav);
         }
@@ -238,7 +245,11 @@ async fn handle_avatars_list(app: &AppHandle) -> ServerMessage {
         }
     }
 
-    ServerMessage::AvatarsListResult { avatars }
+    ServerMessage::AvatarsListResult {
+        avatars,
+        favorite_ids,
+        uploaded_ids,
+    }
 }
 
 /// フォルダ一覧を返す（#26）。表示・切り替えのみが目的のため

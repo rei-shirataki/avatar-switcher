@@ -38,6 +38,12 @@ internal sealed class OverlayManager
     private ulong _scrollActionHandle;
     private DateTime _lastOpenOverlayPress = DateTime.MinValue;
     private static readonly TimeSpan OpenOverlayDoublePressWindow = TimeSpan.FromMilliseconds(400);
+    // 新規: 同じOpenOverlayアクションの長押しでパネルサイズを拡大/縮小トグルする。
+    // ダブルプレス(表示切替)と同じボタンだが、押しっぱなしという別のジェスチャーで
+    // 区別する。
+    private DateTime _openOverlayPressStartedAt = DateTime.MinValue;
+    private bool _openOverlayLongPressFired;
+    private static readonly TimeSpan OpenOverlayLongPressThreshold = TimeSpan.FromMilliseconds(600);
     private const float ScrollDeadzone = 0.15f;
 
     public OverlayManager(WsBridgeClient bridge, int? uiPort, PlacementMode placementMode, CancellationToken shutdownToken)
@@ -276,6 +282,8 @@ internal sealed class OverlayManager
     /// <summary>
     /// #21: `/actions/toggle/in/OpenOverlay` の立ち上がりエッジを検知し、
     /// <see cref="OpenOverlayDoublePressWindow"/> 以内に2回目が来たらパネルの表示/非表示を切り替える。
+    /// 加えて新規: 同じボタンを<see cref="OpenOverlayLongPressThreshold"/>以上押しっぱなしに
+    /// すると、パネルサイズの拡大/縮小をトグルする（<see cref="AvatarPanelOverlay.ToggleSize"/>）。
     ///
     /// `/actions/toggle` は`/actions/main`と同じく常時アクティブなアクションセットで、
     /// 既定バインディングのA/Xボタン等はVRChat本体側の操作（ジャンプ等）にも使われている
@@ -283,6 +291,11 @@ internal sealed class OverlayManager
     /// 意図的な操作とそうでないものを区別する。左右どちらのコントローラーでの押下も
     /// 区別せず合算して見る（`DetectOverlayInteract` と同じく `GetDigitalActionData` に
     /// `k_ulInvalidInputValueHandle` を渡し、両手の論理ORを取る）。
+    ///
+    /// 長押しは押しっぱなし中に毎ティック判定する必要があるため（`bChanged`は立ち上がり/
+    /// 立ち下がりの瞬間しかtrueにならない）、ダブルプレス判定（立ち上がりエッジのみ）とは
+    /// 別に`bState`を見る。長押しが確定した押下は、離した後に別の単押しとダブルプレスとして
+    /// ペアリングされてしまわないよう<see cref="_lastOpenOverlayPress"/>を無効化しておく。
     /// </summary>
     private void DetectOpenOverlayToggle()
     {
@@ -292,22 +305,38 @@ internal sealed class OverlayManager
         var dataError = OpenVR.Input.GetDigitalActionData(_openOverlayActionHandle, ref actionData,
             (uint)Marshal.SizeOf<InputDigitalActionData_t>(), OpenVR.k_ulInvalidInputValueHandle);
         if (dataError != EVRInputError.None) return;
-        if (!actionData.bChanged || !actionData.bState) return;
 
         var now = DateTime.UtcNow;
-        if (now - _lastOpenOverlayPress <= OpenOverlayDoublePressWindow)
+
+        if (actionData.bChanged && actionData.bState)
         {
-            _lastOpenOverlayPress = DateTime.MinValue;
-            var visible = !(_panel?.IsVisible ?? false);
-            // #28: ダブルプレスした手をHand/Space両配置方式の基準にする
-            // （DetectOverlayInteractと同じ origin→role 解決パターン）。
-            var role = ResolveOriginRole(actionData.activeOrigin);
-            Console.WriteLine($"[steamvr] OpenOverlay ダブルプレス検知: visible={visible} role={role}");
-            _panel?.SetVisible(visible, role);
+            // 立ち上がりエッジ: 既存のダブルプレス判定。
+            if (now - _lastOpenOverlayPress <= OpenOverlayDoublePressWindow)
+            {
+                _lastOpenOverlayPress = DateTime.MinValue;
+                var visible = !(_panel?.IsVisible ?? false);
+                // #28: ダブルプレスした手をHand/Space両配置方式の基準にする
+                // （DetectOverlayInteractと同じ origin→role 解決パターン）。
+                var role = ResolveOriginRole(actionData.activeOrigin);
+                Console.WriteLine($"[steamvr] OpenOverlay ダブルプレス検知: visible={visible} role={role}");
+                _panel?.SetVisible(visible, role);
+            }
+            else
+            {
+                _lastOpenOverlayPress = now;
+            }
+
+            // 長押し検知用に押下開始時刻を記録する。
+            _openOverlayPressStartedAt = now;
+            _openOverlayLongPressFired = false;
         }
-        else
+        else if (actionData.bState && !_openOverlayLongPressFired &&
+                 now - _openOverlayPressStartedAt >= OpenOverlayLongPressThreshold)
         {
-            _lastOpenOverlayPress = now;
+            _openOverlayLongPressFired = true;
+            _lastOpenOverlayPress = DateTime.MinValue;
+            Console.WriteLine("[steamvr] OpenOverlay 長押し検知: パネルサイズを切り替えます");
+            _panel?.ToggleSize();
         }
     }
 

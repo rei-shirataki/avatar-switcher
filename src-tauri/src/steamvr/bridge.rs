@@ -40,6 +40,17 @@ pub(crate) fn broadcast_eye_height(value: f32) {
     let _ = PUSH_TX.send(ServerMessage::EyeHeightUpdate { value });
 }
 
+/// `eye-height.service.ts::normalize`と同じ範囲・丸め。`eyeheight.reset`は
+/// `EyeHeight / ScaleFactor`の除算結果をそのまま使うため、範囲外・半端な桁を
+/// 送信前にここで丸める（`eyeheight.set`はoverlay-ui側で既に正規化済みの値を
+/// 送ってくる前提のため、こちらには適用していない）。
+const EYE_HEIGHT_MIN: f32 = 0.2;
+const EYE_HEIGHT_MAX: f32 = 5.0;
+
+fn normalize_eye_height(v: f32) -> f32 {
+    (v.clamp(EYE_HEIGHT_MIN, EYE_HEIGHT_MAX) * 100.0).round() / 100.0
+}
+
 /// hello メッセージの受信を待つ最大時間。これを過ぎたら未認証とみなし切断する。
 const HELLO_TIMEOUT: Duration = Duration::from_secs(5);
 
@@ -194,6 +205,29 @@ async fn handle_message(app: &AppHandle, text: &str) -> Option<ServerMessage> {
                 },
                 Err(e) => log::warn!("[steamvr] eyeheight.query 失敗: {}", e),
             }
+            None
+        }
+        Ok(ClientMessage::EyeHeightReset) => {
+            let value = match crate::osc::oscquery::query_avatar_scale_snapshot().await {
+                Ok(snapshot) => crate::osc::oscquery::compute_prefab_height(&snapshot)
+                    .unwrap_or(crate::osc::oscquery::EYE_HEIGHT_DEFAULT),
+                Err(e) => {
+                    log::warn!(
+                        "[steamvr] eyeheight.reset: OSCQuery取得失敗、既定値にフォールバック: {}",
+                        e
+                    );
+                    crate::osc::oscquery::EYE_HEIGHT_DEFAULT
+                }
+            };
+            let value = normalize_eye_height(value);
+            if let Err(e) = crate::osc::send_avatar_eye_height(value) {
+                log::warn!("[steamvr] eyeheight.reset OSC送信失敗: {}", e);
+                return Some(ServerMessage::Error {
+                    message: e.to_string(),
+                });
+            }
+            log::info!("[steamvr] eyeheight.reset 応答: value={}", value);
+            broadcast_eye_height(value);
             None
         }
         Ok(ClientMessage::UiStateGet) => {

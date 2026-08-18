@@ -23,6 +23,7 @@ internal sealed class OverlayManager
     private static readonly TimeSpan RetryInterval = TimeSpan.FromSeconds(3);
 
     private readonly WsBridgeClient _bridge;
+    private readonly int? _uiPort;
     private readonly CancellationToken _shutdownToken;
 
     private volatile bool _active;
@@ -32,9 +33,10 @@ internal sealed class OverlayManager
     private ulong _actionSetHandle;
     private ulong _overlayInteractActionHandle;
 
-    public OverlayManager(WsBridgeClient bridge, CancellationToken shutdownToken)
+    public OverlayManager(WsBridgeClient bridge, int? uiPort, CancellationToken shutdownToken)
     {
         _bridge = bridge;
+        _uiPort = uiPort;
         _shutdownToken = shutdownToken;
     }
 
@@ -150,7 +152,7 @@ internal sealed class OverlayManager
             _d3D = new D3D11Context();
             _d3D.Initialize();
             _pointer = new OverlayPointer();
-            _panel = new AvatarPanelOverlay(_d3D, _bridge.WsPort, _bridge.Token);
+            _panel = new AvatarPanelOverlay(_d3D, _bridge.WsPort, _bridge.Token, _uiPort);
             _panel.OpenAsync().GetAwaiter().GetResult();
             _pointer.SetTarget(_panel);
 

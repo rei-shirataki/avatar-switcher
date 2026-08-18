@@ -57,7 +57,7 @@ fn log_file_path(app: &AppHandle) -> Option<PathBuf> {
 /// 開発時は「アプリを起動 → `dotnet publish` → `AVATAR_SWITCHER_OVERLAY_SIDECAR_PATH`
 /// を設定」という順序になりがちで、起動時点ではまだ publish 成果物が存在しないことが
 /// 多い。ここで恒久的に諦めてしまうと、後から exe が現れても一生ピックアップされない。
-pub(crate) async fn spawn(app: AppHandle, ws_port: u16, token: String) {
+pub(crate) async fn spawn(app: AppHandle, ws_port: u16, ui_port: Option<u16>, token: String) {
     let log_path = log_file_path(&app);
     if let Some(ref p) = log_path {
         log::info!("[steamvr] overlay-sidecar のログ出力先: {}", p.display());
@@ -82,7 +82,7 @@ pub(crate) async fn spawn(app: AppHandle, ws_port: u16, token: String) {
             };
             warned_missing = false;
 
-            match launch(&path, ws_port, &token, log_path.as_deref()).await {
+            match launch(&path, ws_port, ui_port, &token, log_path.as_deref()).await {
                 Ok(mut child) => {
                     attempt = 0;
                     SIDECAR_PID.store(child.id().unwrap_or(0), Ordering::SeqCst);
@@ -110,6 +110,7 @@ pub(crate) async fn spawn(app: AppHandle, ws_port: u16, token: String) {
 async fn launch(
     path: &PathBuf,
     ws_port: u16,
+    ui_port: Option<u16>,
     token: &str,
     log_path: Option<&std::path::Path>,
 ) -> std::io::Result<tokio::process::Child> {
@@ -119,6 +120,9 @@ async fn launch(
         .arg("--token")
         .arg(token)
         .kill_on_drop(true);
+    if let Some(ui_port) = ui_port {
+        cmd.arg("--ui-port").arg(ui_port.to_string());
+    }
 
     // stdout/stderr は同じログファイルに追記する。起動のたびに個別ハンドルを
     // 開き直す（tokio::process::Command は Stdio を Clone できないため）。

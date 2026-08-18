@@ -34,13 +34,17 @@
               "output": "/actions/main/in/overlayinteract"
             }
           }
-        },
+        }
+      ]
+    },
+    "/actions/toggle": {
+      "sources": [
         {
           "path": "/user/hand/right/input/application_menu",
           "mode": "button",
           "inputs": {
             "click": {
-              "output": "/actions/main/in/openoverlay"
+              "output": "/actions/toggle/in/openoverlay"
             }
           }
         },
@@ -49,7 +53,7 @@
           "mode": "button",
           "inputs": {
             "click": {
-              "output": "/actions/main/in/openoverlay"
+              "output": "/actions/toggle/in/openoverlay"
             }
           }
         }

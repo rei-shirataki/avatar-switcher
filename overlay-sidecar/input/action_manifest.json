@@ -22,7 +22,7 @@
       "type": "boolean"
     },
     {
-      "name": "/actions/main/in/OpenOverlay",
+      "name": "/actions/toggle/in/OpenOverlay",
       "requirement": "suggested",
       "type": "boolean"
     }
@@ -31,6 +31,10 @@
     {
       "name": "/actions/main",
       "usage": "hidden"
+    },
+    {
+      "name": "/actions/toggle",
+      "usage": "leftright"
     }
   ],
   "localization": [
@@ -38,13 +42,15 @@
       "language_tag": "en_us",
       "/actions/main": "AvatarSwitcher Actions",
       "/actions/main/in/OverlayInteract": "Overlay Interact",
-      "/actions/main/in/OpenOverlay": "Toggle Overlay (double-press)"
+      "/actions/toggle": "AvatarSwitcher Overlay Toggle",
+      "/actions/toggle/in/OpenOverlay": "Toggle Overlay (double-press)"
     },
     {
       "language_tag": "ja_jp",
       "/actions/main": "AvatarSwitcher 操作",
       "/actions/main/in/OverlayInteract": "オーバーレイ操作",
-      "/actions/main/in/OpenOverlay": "オーバーレイ表示切替（ダブルプレス）"
+      "/actions/toggle": "AvatarSwitcher オーバーレイ表示切替",
+      "/actions/toggle/in/OpenOverlay": "オーバーレイ表示切替（ダブルプレス）"
     }
   ]
 }

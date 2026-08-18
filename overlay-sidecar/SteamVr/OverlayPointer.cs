@@ -261,7 +261,7 @@ internal sealed class OverlayPointer : IDisposable
     /// 指しているか）は問わない。ユーザー要望により、左手でパネルを狙いながら右スティックで
     /// スクロールする操作も成立させたいため、_right→_leftの順でLastUvが有効な方を使う。
     /// </summary>
-    private const int ScrollPixelsPerUnit = 30;
+    private const int ScrollPixelsPerUnit = 60;
 
     public void Scroll(float deltaY)
     {

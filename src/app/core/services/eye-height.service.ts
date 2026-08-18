@@ -1,10 +1,21 @@
-import { DestroyRef, Injectable, inject, signal } from '@angular/core';
+import { DestroyRef, Injectable, computed, inject, signal } from '@angular/core';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { TauriService } from './tauri.service';
 import { coerceFiniteNumber } from '../utils/number.util';
 
 const STORAGE_KEY_VALUE = 'avatar-switcher.eyeheight.value';
 const STORAGE_KEY_MODE = 'avatar-switcher.eyeheight.mode';
+
+/** Rust `osc_query_avatar_scale_snapshot` の戻り値。VRChat の OSCQuery HTTP
+ *  サーバーへ能動的に問い合わせて取得した EyeHeightAsMeters / ScaleFactor /
+ *  ScaleModified の現在値スナップショット。個々のフィールドは、そのアバターが
+ *  当該 built-in パラメータを公開していない・VRChat が未応答等の理由で
+ *  null になり得る。 */
+interface AvatarScaleSnapshot {
+  eye_height: number | null;
+  scale_factor: number | null;
+  scale_modified: boolean | null;
+}
 
 export const EYE_HEIGHT_DEFAULT = 1.6;
 export const EYE_HEIGHT_MIN = 0.2;
@@ -83,12 +94,34 @@ export class EyeHeightService {
   private readonly _isSmoothing = signal<boolean>(false);
   private readonly _mode = signal<EyeHeightMode>(DEFAULT_MODE);
   private readonly _lastError = signal<string | null>(null);
+  /** getAvatarDefault() が能動フェッチ中かどうか。リセットボタンの連打防止・
+   *  進行状況表示に使う signal。 */
+  private readonly _fetchingDefault = signal<boolean>(false);
+  /** ワールド(Udon)が公開する `/avatar/eyeheightmin` / `max`。未受信ならアプリの
+   *  デフォルト範囲にフォールバックする。公式仕様上 OSC 書き込みはこの範囲の
+   *  制限を受けないため、送信のクランプには使わず UI 上の目安表示にのみ使う。
+   *  ワールド遷移時にリセットする仕組みはない（VRChat が次ワールドでこの
+   *  トリオを再送するかは未確認）。再送されないワールドに移ると前ワールドの
+   *  値が残り続ける既知のトレードオフ。 */
+  private readonly _worldMinHeight = signal<number | null>(null);
+  private readonly _worldMaxHeight = signal<number | null>(null);
+  /** `/avatar/eyeheightscalingallowed`。false のワールドでは OSC 書き込みが
+   *  VRChat 側で無言で無視されるため、送信自体は止めずユーザーに可視化する。 */
+  private readonly _scalingAllowed = signal<boolean | null>(null);
 
   readonly value = this._value.asReadonly();
   readonly target = this._target.asReadonly();
   readonly isSmoothing = this._isSmoothing.asReadonly();
   readonly mode = this._mode.asReadonly();
   readonly lastError = this._lastError.asReadonly();
+  readonly fetchingDefault = this._fetchingDefault.asReadonly();
+  // アプリの静的クランプ(EYE_HEIGHT_MIN/MAX)とワールドの範囲、より厳しい方を
+  // 採用する。normalize() は静的クランプしかかけないため、UI がこれより緩い
+  // 範囲を受理すると「入力は通ったのに送信時に無言で丸められる」ズレが起きる。
+  readonly worldMinHeight = computed(() => Math.max(this._worldMinHeight() ?? EYE_HEIGHT_MIN, EYE_HEIGHT_MIN));
+  readonly worldMaxHeight = computed(() => Math.min(this._worldMaxHeight() ?? EYE_HEIGHT_MAX, EYE_HEIGHT_MAX));
+  /** null = 未受信（不明）。false のときだけ警告表示に使う。 */
+  readonly scalingAllowed = this._scalingAllowed.asReadonly();
 
   /** 登録済み Tauri イベントリスナーの解放関数。onDestroy で一括解放する。 */
   private readonly unlisteners: UnlistenFn[] = [];
@@ -166,6 +199,21 @@ export class EyeHeightService {
       listen<string>('osc:avatar-change', () => this.onAvatarChange()),
       err => this._lastError.set(`OSC受信購読失敗 (avatar-change): ${String(err)}`),
     );
+
+    // ワールド(Udon)が公開する範囲・書き込み許可。届かないワールドも多く、
+    // 未受信でもアプリのデフォルト範囲で動作するため握り潰す。
+    // アバター切替ではリセットしない（ワールド/Udon スコープでありアバタースコープではない）。
+    this.registerListener(listen<number>('osc:eye-height-min', e => {
+      const v = coerceFiniteNumber(e.payload);
+      if (v !== null) this._worldMinHeight.set(v);
+    }));
+    this.registerListener(listen<number>('osc:eye-height-max', e => {
+      const v = coerceFiniteNumber(e.payload);
+      if (v !== null) this._worldMaxHeight.set(v);
+    }));
+    this.registerListener(listen<boolean>('osc:eye-height-scaling-allowed', e => {
+      this._scalingAllowed.set(e.payload);
+    }));
 
     // dev HMR 等でサービスが再構築される際にリスナーと interval を確実に解放する。
     // providedIn:'root' でも DestroyRef は機能する。
@@ -379,10 +427,49 @@ export class EyeHeightService {
   }
 
   /** アバター本来のプレハブ身長を返す。リセットボタンが使用する。
-   *  未確定（Avatar Scaling 非対応アバター・受信前）なら EYE_HEIGHT_DEFAULT。
+   *
+   *  `_prefabHeight` は受動的に届く OSC イベント（EyeHeightAsMeters /
+   *  ScaleFactor / ScaleModified が SCALE_PAIR_WINDOW_MS 以内に揃って届いた
+   *  瞬間）でのみキャッシュされる。これらは基本的にアバターロード時に一度しか
+   *  飛んでこないため、アプリをアバターロード後に起動した場合などはキャッシュが
+   *  永遠に null のままになり、リセットが常に EYE_HEIGHT_DEFAULT にフォール
+   *  バックしてしまう（Issue #19）。そこでキャッシュ未確定時は VRChat の
+   *  OSCQuery HTTP サーバーへ能動的に現在値を問い合わせてから計算する。
+   *  取得できなければ最終的に EYE_HEIGHT_DEFAULT。
    *  キャッシュは normalize 済みなので [EYE_HEIGHT_MIN, EYE_HEIGHT_MAX] に収まる。 */
-  getAvatarDefault(): number {
-    return this._prefabHeight ?? EYE_HEIGHT_DEFAULT;
+  async getAvatarDefault(): Promise<number> {
+    if (this._prefabHeight != null) return this._prefabHeight;
+    this._fetchingDefault.set(true);
+    try {
+      const snapshot = await this.tauri.invoke<AvatarScaleSnapshot>('osc_query_avatar_scale_snapshot');
+      const computed = this.computePrefabFromSnapshot(snapshot);
+      if (computed != null) {
+        this._prefabHeight = computed;
+        return computed;
+      }
+    } catch (e) {
+      // VRChat 未検出・OSCQuery 未応答等。EYE_HEIGHT_DEFAULT へフォールバックする
+      // だけなので致命的ではないが、原因調査できるようエラー欄には出しておく。
+      this._lastError.set(`アバター既定身長の取得に失敗: ${String(e)}`);
+    } finally {
+      this._fetchingDefault.set(false);
+    }
+    return EYE_HEIGHT_DEFAULT;
+  }
+
+  /** OSCQuery スナップショットからプレハブ身長を計算する。優先順位は
+   *  recomputePrefabHeight() と同じ（ScaleFactor 優先、次点 ScaleModified===false）。
+   *  能動フェッチは 3 値を別々の HTTP リクエストで取得するため、受信時刻ペアリング
+   *  の概念はそもそも無い（VRChat 側の「現在値」を都度問い合わせるだけ）。 */
+  private computePrefabFromSnapshot(s: AvatarScaleSnapshot): number | null {
+    if (s.eye_height == null) return null;
+    if (s.scale_factor != null && s.scale_factor > 0) {
+      return this.normalize(s.eye_height / s.scale_factor);
+    }
+    if (s.scale_modified === false) {
+      return this.normalize(s.eye_height);
+    }
+    return null;
   }
 
   /** 範囲クランプ＋0.01 桁丸めを 1 箇所に集約。

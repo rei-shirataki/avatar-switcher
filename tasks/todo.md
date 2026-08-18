@@ -39,3 +39,44 @@
 「整合の取れた瞬間に一度計算してキャッシュし、ユーザ操作中は据え置く」のが根本解。
 `isSteadyState()` が _lastEcho / _scaleFactor / _scaleModified の更新条件を統一することで
 ペアの整合性を構造的に保証する。
+
+## 身長リセットが常に1.6mになる不具合の修正（2026-08-17, Issue #19）
+
+### 症状・原因
+
+リセットを押すと常に 1.60m になり、アバター本来の身長に戻らないと報告された。
+`_prefabHeight` は VRChat から受動的に届く EyeHeightAsMeters / ScaleFactor /
+ScaleModified の OSC イベントが SCALE_PAIR_WINDOW_MS(250ms) 以内に揃って届いた
+瞬間にしかキャッシュされない。これらは基本的にアバターロード時に一度しか
+飛んでこないため、アプリをアバターロード後に起動した場合などはキャッシュが
+永遠に null のままになり、`getAvatarDefault()` が常に EYE_HEIGHT_DEFAULT に
+フォールバックしていた。
+
+### 変更内容
+
+VRChat の OSCQuery HTTP サーバー（EXTENSIONS.VALUE=true を公開）へ
+`GET /avatar/parameters/{name}` を能動的に問い合わせ、現在値を直接取得する経路を追加。
+
+- `src-tauri/src/osc/oscquery.rs`: mDNS 解決時に VRChat の OSCQuery HTTP ポート
+  （サービスレコード自体のポート）を `VRCHAT_OSCQUERY_HTTP_PORT` に保存。
+  `query_avatar_scale_snapshot()` で EyeHeightAsMeters / ScaleFactor /
+  ScaleModified を並行 GET し `AvatarScaleSnapshot` として返す。個々の失敗は
+  握り潰して `None`、VRChat 自体が未発見のときのみ Err。
+- `src-tauri/src/osc/commands.rs` / `lib.rs`: 新規コマンド
+  `osc_query_avatar_scale_snapshot` を追加・登録。
+- `eye-height.service.ts`: `getAvatarDefault()` を async 化。`_prefabHeight`
+  未確定時のみ上記コマンドで能動フェッチし、計算できればキャッシュして返す。
+  既存の受動ペアリング方式（`recomputePrefabHeight`）はオポチュニスティックな
+  高速パスとしてそのまま残す（触っていない）。取得中は `fetchingDefault` signal
+  で UI に反映。
+- `height-view.component.ts`: `reset()` を async 化し、フェッチ中はリセット
+  ボタンを無効化して連打を防止。
+
+### 検証結果
+
+- `cargo check` … 成功（Finished dev profile, 2.33s）
+- `npx tsc --noEmit -p tsconfig.app.json` … エラーなし
+- `npm run build` … 成功（Application bundle generation complete, 8.789s）
+- 実機 VRChat での動作確認は未実施（ビルド確認＋設計トレースのみ）。
+  OSCQuery が現在値を `VALUE` フィールドで返す仕様は
+  `Vidvox/OSCQueryProposal` の README（`gh api` で取得した一次情報）で確認済み。

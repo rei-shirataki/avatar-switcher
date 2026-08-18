@@ -68,8 +68,15 @@ pub enum ClientMessage {
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "type")]
 pub enum ServerMessage {
+    /// `favoriteIds`/`uploadedIds` はoverlay-ui側のお気に入り/アップロード済みタブ
+    /// フィルタ用（#26のフォルダタブと同じ仕組みで判定できるよう、avatarsは
+    /// 自前+お気に入りを重複除去したマージ済み一覧、idセットは所属元の判定に使う）。
     #[serde(rename = "avatars.list-result", rename_all = "camelCase")]
-    AvatarsListResult { avatars: Vec<VRCAvatar> },
+    AvatarsListResult {
+        avatars: Vec<VRCAvatar>,
+        favorite_ids: Vec<String>,
+        uploaded_ids: Vec<String>,
+    },
     #[serde(rename = "folders.list-result", rename_all = "camelCase")]
     FoldersListResult { folders: Vec<AvatarFolder> },
     /// VRChatの装着APIは「更新後のアバター情報」ではなくユーザープロフィールを
@@ -95,6 +102,19 @@ pub enum ServerMessage {
 mod tests {
     use super::*;
     use crate::storage::AvatarFolder;
+
+    #[test]
+    fn avatars_list_result_roundtrip() {
+        let server_msg = ServerMessage::AvatarsListResult {
+            avatars: vec![],
+            favorite_ids: vec!["a1".into()],
+            uploaded_ids: vec!["a2".into()],
+        };
+        let json = serde_json::to_string(&server_msg).unwrap();
+        assert!(json.contains("\"favoriteIds\":[\"a1\"]"), "favoriteIdsがcamelCaseでない: {json}");
+        assert!(json.contains("\"uploadedIds\":[\"a2\"]"), "uploadedIdsがcamelCaseでない: {json}");
+        assert!(json.contains("\"avatars.list-result\""), "typeタグが不正: {json}");
+    }
 
     #[test]
     fn folders_list_roundtrip() {

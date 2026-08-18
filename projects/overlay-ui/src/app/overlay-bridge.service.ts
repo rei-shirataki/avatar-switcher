@@ -5,8 +5,15 @@ import { AvatarFolder, VRCAvatar } from './core/models/avatar.model';
 /** Rust core からの応答が返ってこない異常系（送信ドロップ等）を無限待ちさせないための上限。 */
 const REQUEST_TIMEOUT_MS = 10_000;
 
+/** avatars.list-result の応答。favoriteIds/uploadedIds はお気に入り/アップロード済みタブのフィルタ用。 */
+export interface AvatarsListResult {
+  avatars: VRCAvatar[];
+  favoriteIds: string[];
+  uploadedIds: string[];
+}
+
 type ServerMessage =
-  | { type: 'avatars.list-result'; avatars: VRCAvatar[] }
+  | ({ type: 'avatars.list-result' } & AvatarsListResult)
   | { type: 'avatars.select-result'; avatarId: string }
   | { type: 'avatar-changed'; avatarId: string }
   | { type: 'folders.list-result'; folders: AvatarFolder[] }
@@ -90,11 +97,11 @@ export class OverlayBridgeService {
       .subscribe((m) => handler(m.avatarId));
   }
 
-  async listAvatars(): Promise<VRCAvatar[]> {
+  async listAvatars(): Promise<AvatarsListResult> {
     this.send({ type: 'avatars.list' });
     const reply = await this.waitForOneOf(['avatars.list-result', 'error']);
     if (reply.type === 'error') throw new Error(reply.message);
-    return reply.avatars;
+    return reply;
   }
 
   onEyeHeightUpdate(handler: (value: number) => void): void {

@@ -5,7 +5,9 @@
 .tabs {
   display: flex;
   gap: 12px;
-  padding: 12px 16px 0;
+  // タブ切替ボタン直後にアバター一覧が詰まって見えるとの指摘を受け、
+  // 下方向の余白を広めに確保している（他の要素は12px基調）。
+  padding: 12px 16px 20px;
   overflow-x: auto;
   overflow-y: hidden;
   flex-shrink: 0;

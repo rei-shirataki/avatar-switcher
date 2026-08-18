@@ -23,6 +23,11 @@ internal sealed class WsBridgeClient : IAsyncDisposable
     private readonly ClientWebSocket _socket = new();
     private readonly SemaphoreSlim _sendLock = new(1, 1);
 
+    /// <summary>overlay-ui (CefSharp内のAngular) が自分でRust coreのWSサーバーへ
+    /// 接続する際に必要。URLクエリ (?port=..&amp;token=..) として渡す。</summary>
+    public int WsPort => _wsPort;
+    public string Token => _token;
+
     public WsBridgeClient(int wsPort, string token)
     {
         _wsPort = wsPort;

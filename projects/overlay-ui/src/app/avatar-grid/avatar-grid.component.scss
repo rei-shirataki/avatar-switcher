@@ -1,3 +1,34 @@
+// タブ切替(#26)・アイハイト調整(#27)を常時操作できる位置に固定表示したい
+// というユーザー要望により、スクロール可能領域をこのコンポーネント（アバター
+// 一覧）だけに限定する。app.scssの.panelはoverflow:hiddenにしてあるため、
+// ここがflex:1で残り高さを占め、自前でoverflow-yする（元:app.scss .panel）。
+:host {
+  display: block;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+
+  scrollbar-width: thin;
+  scrollbar-color: #3a3f4c transparent;
+
+  &::-webkit-scrollbar {
+    width: 8px;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: #3a3f4c;
+    border-radius: 4px;
+
+    &:hover {
+      background: #4a5266;
+    }
+  }
+}
+
 // VRオーバーレイはコントローラーのレイキャストで操作するためマウスより
 // 精度が低い。カードを大きめ・タップ領域広め・カード間隔広めにして
 // 隣接カードへの誤タップを減らしている（#23）。auto-fillの列数が

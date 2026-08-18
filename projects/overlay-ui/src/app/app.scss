@@ -9,31 +9,11 @@
   flex-direction: column;
   width: 100%;
   height: 100%;
-  overflow-y: auto;
-
-  // 既定のスクロールバーはダークテーマから浮いて見えるため、細く目立たない
-  // スタイルに変更する。操作自体はコントローラー(#22のスティックスクロール)
-  // が主で、スクロールバーは位置の目安として最小限に見せる。CEFはChromium
-  // エンジンなので-webkit-scrollbar系が効く。
-  scrollbar-width: thin;
-  scrollbar-color: #3a3f4c transparent;
-
-  &::-webkit-scrollbar {
-    width: 8px;
-  }
-
-  &::-webkit-scrollbar-track {
-    background: transparent;
-  }
-
-  &::-webkit-scrollbar-thumb {
-    background: #3a3f4c;
-    border-radius: 4px;
-
-    &:hover {
-      background: #4a5266;
-    }
-  }
+  // タブ切替(#26)・アイハイト調整(#27)は常時操作できる位置に固定表示したい
+  // というユーザー要望に合わせ、パネル自体はスクロールさせない。スクロール
+  // 可能領域はアバター一覧(app-avatar-grid)側だけに限定する
+  // （スクロールバーのスタイルもavatar-grid.component.scssへ移動済み）。
+  overflow: hidden;
 }
 
 .panel__header {
@@ -41,6 +21,7 @@
   align-items: center;
   gap: 12px;
   padding: 16px 16px 0;
+  flex-shrink: 0;
 
   h1 {
     font-size: 22px;

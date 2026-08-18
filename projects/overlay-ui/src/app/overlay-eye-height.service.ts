@@ -136,10 +136,15 @@ export class OverlayEyeHeightService {
     }
     const startTime = performance.now();
     this._isSmoothing.set(true);
-    this.smoothTimer = setInterval(() => {
+    const timer = setInterval(() => {
       const elapsed = performance.now() - startTime;
       const t = Math.min(1, elapsed / SMOOTH_DURATION_MS);
       if (t >= 1) {
+        // clearIntervalを呼ばずにthis.smoothTimerをnullにするだけだと、この
+        // インターバル自体は止まらず33ms毎に発火し続けるゾンビ状態になる
+        // （this.smoothTimerが既にnullなのでcancelSmooth()側からも二度と
+        // 止められない）。以降ずっと同じtargetを送信し続けるバグだった。
+        clearInterval(timer);
         this.smoothTimer = null;
         this._isSmoothing.set(false);
         this._smoothEndedAt = performance.now();
@@ -152,6 +157,7 @@ export class OverlayEyeHeightService {
       this._value.set(raw);
       this.bridge.setEyeHeight(raw);
     }, SMOOTH_STEP_MS);
+    this.smoothTimer = timer;
   }
 
   /**

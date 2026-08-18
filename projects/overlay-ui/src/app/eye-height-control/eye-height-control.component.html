@@ -3,6 +3,32 @@
   <span class="height-bar__value">
     {{ eyeHeight.value() !== null ? (eyeHeight.value()! | number: '1.2-2') + 'm' : '—' }}
   </span>
+  <div class="height-bar__mode" role="group" aria-label="送信モード">
+    <button
+      type="button"
+      class="height-bar__mode-btn"
+      [class.height-bar__mode-btn--active]="eyeHeight.mode() === 'instant'"
+      (click)="eyeHeight.setMode('instant')"
+    >
+      普通
+    </button>
+    <button
+      type="button"
+      class="height-bar__mode-btn"
+      [class.height-bar__mode-btn--active]="eyeHeight.mode() === 'smooth'"
+      (click)="eyeHeight.setMode('smooth')"
+    >
+      スムーズ
+    </button>
+  </div>
+  <button
+    type="button"
+    class="height-bar__reset"
+    [disabled]="eyeHeight.resetting()"
+    (click)="eyeHeight.reset()"
+  >
+    {{ eyeHeight.resetting() ? 'リセット中…' : 'リセット' }}
+  </button>
   <div class="height-bar__steps">
     <button type="button" (click)="eyeHeight.step(-0.1)">-0.1</button>
     <button type="button" (click)="eyeHeight.step(-0.01)">-0.01</button>

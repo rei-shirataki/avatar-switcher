@@ -22,6 +22,50 @@
   min-width: 4.5em;
 }
 
+.height-bar__mode {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  background: #1c1f28;
+  border-radius: 8px;
+}
+
+.height-bar__mode-btn {
+  padding: 8px 14px;
+  border: 2px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: #9099ad;
+  font-size: 14px;
+  font-family: inherit;
+  cursor: pointer;
+
+  &--active {
+    background: #2b6fd6;
+    color: #fff;
+  }
+}
+
+.height-bar__reset {
+  padding: 10px 16px;
+  border: 2px solid transparent;
+  border-radius: 8px;
+  background: #1c1f28;
+  color: #f2f2f5;
+  font-size: 16px;
+  font-family: inherit;
+  cursor: pointer;
+
+  &:hover:not(:disabled) {
+    border-color: #3f82ea;
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+}
+
 .height-bar__steps {
   display: flex;
   gap: 8px;

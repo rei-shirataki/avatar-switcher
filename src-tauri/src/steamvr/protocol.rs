@@ -60,6 +60,14 @@ pub enum ClientMessage {
     /// ロジックのため引き続き不使用）。
     #[serde(rename = "eyeheight.query")]
     EyeHeightQuery,
+    /// アイハイトをアバター本来のプレハブ身長にリセットする（新規、リクエスト機能）。
+    /// `oscquery::compute_prefab_height`で計算し(#27の`EyeHeightQuery`と同じ
+    /// `query_avatar_scale_snapshot`を再利用、3値を`tokio::join!`で同時取得する
+    /// ためデスクトップ側のペアリングrace対策は不要)、計算不能なら
+    /// `oscquery::EYE_HEIGHT_DEFAULT`にフォールバックする。fire-and-forgetで、
+    /// 結果は`EyeHeightUpdate` broadcastで受け取る（`EyeHeightSet`と同じ設計）。
+    #[serde(rename = "eyeheight.reset")]
+    EyeHeightReset,
     /// overlay-uiのUI状態（ソートモード・選択中タブ）を取得する。overlay-sidecarは
     /// CEFプロセスごとに新しいキャッシュディレクトリを使う（`Program.cs::InitCef`の
     /// コメント参照）ため、ブラウザのlocalStorageは再起動をまたいで永続化できない。
@@ -159,6 +167,15 @@ mod tests {
         assert!(json.contains("\"ui-state.get-result\""), "typeタグが不正: {json}");
         assert!(json.contains("\"sortMode\":\"updated-desc\""), "sortModeがcamelCaseでない: {json}");
         assert!(json.contains("\"selectedFolderId\":null"), "selectedFolderIdの扱いが不正: {json}");
+    }
+
+    #[test]
+    fn eye_height_reset_roundtrip() {
+        let json = r#"{"type":"eyeheight.reset"}"#;
+        assert!(matches!(
+            serde_json::from_str::<ClientMessage>(json),
+            Ok(ClientMessage::EyeHeightReset)
+        ));
     }
 
     #[test]

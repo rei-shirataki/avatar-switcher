@@ -123,6 +123,15 @@ export class OverlayBridgeService {
   }
 
   /**
+   * アイハイトをアバター本来のプレハブ身長にリセットする。計算はRust側
+   * （`oscquery::compute_prefab_height`）で行うため、ここではリクエストを送るだけ。
+   * fire-and-forgetで、結果はonEyeHeightUpdateで受け取る。
+   */
+  resetEyeHeight(): void {
+    this.send({ type: 'eyeheight.reset' });
+  }
+
+  /**
    * 接続直後の初回同期用。受動OSCイベント任せだと、アバターロード時の
    * ダンプを取りこぼした場合に身長変更が一度も起きるまで表示が「—」の
    * まま固まる。fire-and-forgetで、応答はonEyeHeightUpdate経由で届く

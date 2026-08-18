@@ -24,6 +24,7 @@ internal sealed class OverlayManager
 
     private readonly WsBridgeClient _bridge;
     private readonly int? _uiPort;
+    private readonly PlacementMode _placementMode;
     private readonly CancellationToken _shutdownToken;
 
     private volatile bool _active;
@@ -39,10 +40,11 @@ internal sealed class OverlayManager
     private static readonly TimeSpan OpenOverlayDoublePressWindow = TimeSpan.FromMilliseconds(400);
     private const float ScrollDeadzone = 0.15f;
 
-    public OverlayManager(WsBridgeClient bridge, int? uiPort, CancellationToken shutdownToken)
+    public OverlayManager(WsBridgeClient bridge, int? uiPort, PlacementMode placementMode, CancellationToken shutdownToken)
     {
         _bridge = bridge;
         _uiPort = uiPort;
+        _placementMode = placementMode;
         _shutdownToken = shutdownToken;
     }
 
@@ -191,7 +193,7 @@ internal sealed class OverlayManager
             _d3D = new D3D11Context();
             _d3D.Initialize();
             _pointer = new OverlayPointer();
-            _panel = new AvatarPanelOverlay(_d3D, _bridge.WsPort, _bridge.Token, _uiPort);
+            _panel = new AvatarPanelOverlay(_d3D, _bridge.WsPort, _bridge.Token, _uiPort, _placementMode);
             _panel.OpenAsync().GetAwaiter().GetResult();
             _pointer.SetTarget(_panel);
 
@@ -297,13 +299,25 @@ internal sealed class OverlayManager
         {
             _lastOpenOverlayPress = DateTime.MinValue;
             var visible = !(_panel?.IsVisible ?? false);
-            Console.WriteLine($"[steamvr] OpenOverlay ダブルプレス検知: visible={visible}");
-            _panel?.SetVisible(visible);
+            // #28: ダブルプレスした手をHand/Space両配置方式の基準にする
+            // （DetectOverlayInteractと同じ origin→role 解決パターン）。
+            var role = ResolveOriginRole(actionData.activeOrigin);
+            Console.WriteLine($"[steamvr] OpenOverlay ダブルプレス検知: visible={visible} role={role}");
+            _panel?.SetVisible(visible, role);
         }
         else
         {
             _lastOpenOverlayPress = now;
         }
+    }
+
+    private static ETrackedControllerRole ResolveOriginRole(ulong origin)
+    {
+        var originInfo = new InputOriginInfo_t();
+        var error = OpenVR.Input.GetOriginTrackedDeviceInfo(origin, ref originInfo,
+            (uint)Marshal.SizeOf<InputOriginInfo_t>());
+        if (error != EVRInputError.None) return ETrackedControllerRole.Invalid;
+        return OpenVR.System.GetControllerRoleForTrackedDeviceIndex(originInfo.trackedDeviceIndex);
     }
 
     /// <summary>

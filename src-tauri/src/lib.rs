@@ -143,6 +143,9 @@ pub fn run() {
             storage::commands::avatar_overrides_get_all,
             storage::commands::avatar_overrides_set,
             storage::commands::avatar_overrides_delete,
+            // Storage (overlay settings, #28)
+            storage::commands::overlay_settings_get,
+            storage::commands::overlay_settings_set,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

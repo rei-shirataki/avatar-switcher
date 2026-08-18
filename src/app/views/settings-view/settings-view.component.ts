@@ -10,6 +10,12 @@ interface OscStatus {
   vrchat_detected: boolean;
 }
 
+type OverlayPlacementMode = 'hand' | 'space';
+
+interface OverlaySettings {
+  placementMode: OverlayPlacementMode;
+}
+
 /// VRChat 起動状態のポーリング間隔。VRChat 後起動時に「未接続」表示のまま
 /// 取り残されないよう、設定画面表示中だけ短めに polling する。
 const OSC_POLL_INTERVAL_MS = 3000;
@@ -67,6 +73,32 @@ const OSC_POLL_INTERVAL_MS = 3000;
       </div>
 
       <div class="settings-section">
+        <h3 class="section-title">SteamVRオーバーレイ</h3>
+        <div class="settings-card">
+          <div class="setting-row setting-row--column">
+            <span class="setting-label">パネルの配置</span>
+            <div class="placement-toggle">
+              <button
+                class="toggle-btn"
+                [class.toggle-btn--on]="placementMode() === 'hand'"
+                (click)="setPlacementMode('hand')"
+              >
+                手に追従
+              </button>
+              <button
+                class="toggle-btn"
+                [class.toggle-btn--on]="placementMode() === 'space'"
+                (click)="setPlacementMode('space')"
+              >
+                空間に固定
+              </button>
+            </div>
+            <p class="setting-hint">変更はオーバーレイの再起動後に反映されます（アプリの再起動が必要です）</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="settings-section">
         <h3 class="section-title">このアプリについて</h3>
         <div class="settings-card">
           <div class="setting-row">
@@ -82,6 +114,7 @@ const OSC_POLL_INTERVAL_MS = 3000;
 export class SettingsViewComponent implements OnInit {
   readonly version = signal<string>('...');
   readonly oscStatus = signal<OscStatus | null>(null);
+  readonly placementMode = signal<OverlayPlacementMode>('hand');
 
   private pollHandle: ReturnType<typeof setInterval> | null = null;
 
@@ -100,14 +133,18 @@ export class SettingsViewComponent implements OnInit {
   }
 
   async ngOnInit(): Promise<void> {
-    // バージョン取得と OSC ステータス取得は独立。
-    // 片方の失敗でもう一方の表示が消えないよう個別 catch する。
-    const [ver, status] = await Promise.all([
+    // バージョン取得と OSC ステータス取得・オーバーレイ設定取得はそれぞれ独立。
+    // 1つの失敗で他の表示が消えないよう個別 catch する。
+    const [ver, status, overlaySettings] = await Promise.all([
       getVersion().catch(() => '?'),
       this.fetchOscStatus(),
+      this.tauri.invoke<OverlaySettings>('overlay_settings_get').catch(() => null),
     ]);
     this.version.set(ver);
     this.oscStatus.set(status);
+    if (overlaySettings) {
+      this.placementMode.set(overlaySettings.placementMode);
+    }
 
     // VRChat の後起動を検知するため、設定画面表示中だけ短い間隔で polling する。
     this.pollHandle = setInterval(async () => {
@@ -122,6 +159,21 @@ export class SettingsViewComponent implements OnInit {
 
   private async fetchOscStatus(): Promise<OscStatus | null> {
     return this.tauri.invoke<OscStatus>('osc_get_status').catch(() => null);
+  }
+
+  /**
+   * オーバーレイパネルの配置方式を切り替える(#28)。overlay-sidecarはCLI引数
+   * (`--placement-mode`)でしか受け取れないため、設定は保存するのみでその場では
+   * 反映されない。次回サイドカー起動（=アプリ再起動）時に適用される。
+   */
+  async setPlacementMode(mode: OverlayPlacementMode): Promise<void> {
+    if (this.placementMode() === mode) return;
+    this.placementMode.set(mode);
+    try {
+      await this.tauri.invoke('overlay_settings_set', { settings: { placementMode: mode } });
+    } catch (e) {
+      console.error('[settings] オーバーレイ配置設定の保存に失敗:', e);
+    }
   }
 
   avatarUrl(user: VRCUser): string {

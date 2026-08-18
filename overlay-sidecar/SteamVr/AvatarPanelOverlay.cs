@@ -10,10 +10,16 @@ namespace AvatarSwitcher.OverlaySidecar.SteamVr;
 /// <summary>
 /// アバター切替パネル本体のオーバーレイ。
 ///
-/// M1時点では OyasumiVR の DashboardOverlay がハンド追従時に使っている
-/// フォールバック分岐（頭部前方に固定配置）だけを実装し、手/頭姿勢を毎フレーム
-/// 追従させる処理はまだ入れていない（次段階の作業）。開閉トグル(#21)は
-/// SteamVR Inputの `OpenOverlay` アクションと組み合わせて実装済み(<see cref="SetVisible"/>)。
+/// 配置方式は2種類（#28、ユーザー設定で選択、既定はHand）:
+/// - Hand: 表示ONの瞬間にダブルプレスした手のコントローラーへ
+///   <see cref="OpenVR.Overlay.SetOverlayTransformTrackedDeviceRelative"/> でアタッチする。
+///   一度アタッチすればSteamVR側が継続的に追従させるため、毎フレームの座標計算は不要
+///   （コントローラーの再接続でデバイスindexが変わりうるため、表示ONのたびに取り直す）。
+/// - Space: OyasumiVR DashboardOverlay.GetTargetTransform と同じ式で表示ONの瞬間だけ
+///   手元付近に配置し、以降は空間に静止させる。ハンドトラッキングが無効な場合は
+///   頭部前方固定にフォールバックする。
+///
+/// 開閉トグル(#21)は SteamVR Inputの `OpenOverlay` アクションと組み合わせて実装済み(<see cref="SetVisible"/>)。
 ///
 /// 参照実装: OyasumiVR src-overlay-sidecar/Overlays/BaseWebOverlay.cs, DashboardOverlay.cs
 /// </summary>
@@ -23,13 +29,22 @@ internal sealed class AvatarPanelOverlay : IDisposable
     private const string OverlayName = "AvatarSwitcher Panel";
     private const uint Resolution = 1024;
     private const float WidthMeters = 0.45f;
+    /// <summary>Handモード時の幅（m）。腕に付けるため通常より小さくする（実機での要調整見込み）。</summary>
+    private const float HandWidthMeters = 0.25f;
     /// <summary>頭部前方のオフセット（m）。DashboardOverlayのフォールバック配置に合わせた値。</summary>
     private const float ForwardOffsetMeters = 0.55f;
+    /// <summary>Space方式（OyasumiVR式）の手元オフセット。座標系はワールド、頭部の向きのみで回転する。</summary>
+    private static readonly Vector3 NearHandOffset = new(0, 0.15f, -0.2f);
+    /// <summary>Handモードのコントローラー相対オフセット（m）。手前上方に置き、見下ろす角度に傾ける。</summary>
+    private static readonly Vector3 HandRelativeOffset = new(0, 0.05f, -0.08f);
+    /// <summary>Handモードのパネル傾き（度）。腕時計のように持ち上げて見下ろす想定。</summary>
+    private const float HandTiltDegrees = -60f;
 
     private readonly D3D11Context _d3D;
     private readonly int _wsPort;
     private readonly string _wsToken;
     private readonly int? _uiPort;
+    private readonly PlacementMode _placementMode;
     private ulong _overlayHandle;
     private OffscreenBrowser? _browser;
     private Texture2D? _texture;
@@ -43,12 +58,13 @@ internal sealed class AvatarPanelOverlay : IDisposable
     public OffscreenBrowser? Browser => _browser;
     public bool IsVisible => _visible;
 
-    public AvatarPanelOverlay(D3D11Context d3D, int wsPort, string wsToken, int? uiPort)
+    public AvatarPanelOverlay(D3D11Context d3D, int wsPort, string wsToken, int? uiPort, PlacementMode placementMode)
     {
         _d3D = d3D;
         _wsPort = wsPort;
         _wsToken = wsToken;
         _uiPort = uiPort;
+        _placementMode = placementMode;
     }
 
     public async Task OpenAsync()
@@ -60,7 +76,7 @@ internal sealed class AvatarPanelOverlay : IDisposable
             return;
         }
 
-        OpenVR.Overlay.SetOverlayWidthInMeters(_overlayHandle, WidthMeters);
+        OpenVR.Overlay.SetOverlayWidthInMeters(_overlayHandle, _placementMode == PlacementMode.Hand ? HandWidthMeters : WidthMeters);
 
         _texture = await _d3D.CreateCpuWritableTextureAsync(Resolution);
 
@@ -133,23 +149,98 @@ internal sealed class AvatarPanelOverlay : IDisposable
     }
 
     /// <summary>
-    /// 表示/非表示を切り替える。#21: `/actions/main/in/OpenOverlay` のダブルプレスから呼ばれる。
-    /// 非表示→表示への切替時は、コントローラーで消してから離れた場所で再度呼び出しても
-    /// 見失わないよう <see cref="PlaceInFrontOfHead"/> で頭部前方に位置を再センタリングする。
+    /// 表示/非表示を切り替える。#21: `/actions/toggle/in/OpenOverlay` のダブルプレスから呼ばれる。
+    /// <paramref name="role"/> はダブルプレスした手（#28、Hand/Space方式どちらの配置にも使う）。
+    /// 取得できなかった場合は <see cref="ETrackedControllerRole.Invalid"/> を渡せば
+    /// 各配置メソッドが頭部前方固定へフォールバックする。
     /// </summary>
-    public void SetVisible(bool visible)
+    public void SetVisible(bool visible, ETrackedControllerRole role = ETrackedControllerRole.Invalid)
     {
         if (_disposed || _visible == visible) return;
         _visible = visible;
         if (visible)
         {
-            PlaceInFrontOfHead();
+            if (_placementMode == PlacementMode.Hand)
+            {
+                AttachToHand(role);
+            }
+            else
+            {
+                PlaceNearHand(role);
+            }
             OpenVR.Overlay.ShowOverlay(_overlayHandle);
         }
         else
         {
             OpenVR.Overlay.HideOverlay(_overlayHandle);
         }
+    }
+
+    /// <summary>
+    /// Handモード（#28）: <paramref name="role"/> のコントローラーへオーバーレイをアタッチする。
+    /// <see cref="OpenVR.Overlay.SetOverlayTransformTrackedDeviceRelative"/> は一度呼べば
+    /// SteamVR側が継続的に追従させるため、毎フレームの座標更新は不要。コントローラーの
+    /// 再接続でデバイスindexが変わりうるため、表示ONのたびに取り直して呼び直す。
+    /// </summary>
+    private void AttachToHand(ETrackedControllerRole role)
+    {
+        var deviceIndex = OpenVR.System.GetTrackedDeviceIndexForControllerRole(role);
+        if (deviceIndex == OpenVR.k_unTrackedDeviceIndexInvalid)
+        {
+            PlaceInFrontOfHead();
+            return;
+        }
+
+        var tilt = Matrix4x4.CreateRotationX(HandTiltDegrees * MathF.PI / 180f);
+        var offset = Matrix4x4.CreateTranslation(HandRelativeOffset);
+        var transform = (tilt * offset).ToHmdMatrix34T();
+        var err = OpenVR.Overlay.SetOverlayTransformTrackedDeviceRelative(_overlayHandle, deviceIndex, ref transform);
+        if (err != EVROverlayError.None)
+        {
+            Console.Error.WriteLine($"[steamvr] SetOverlayTransformTrackedDeviceRelative 失敗: {err}");
+            PlaceInFrontOfHead();
+        }
+    }
+
+    /// <summary>
+    /// Spaceモード（#28）: OyasumiVR DashboardOverlay.GetTargetTransform と同じ式。
+    /// <paramref name="role"/> のコントローラー位置＋頭部の向き（位置は含めない）を使って
+    /// 手元付近に配置し、以降は空間に静止する（毎フレーム追従はしない）。
+    /// ハンドトラッキングが無効な場合は頭部前方固定にフォールバックする。
+    /// </summary>
+    private void PlaceNearHand(ETrackedControllerRole role)
+    {
+        var deviceIndex = OpenVR.System.GetTrackedDeviceIndexForControllerRole(role);
+        if (deviceIndex == OpenVR.k_unTrackedDeviceIndexInvalid)
+        {
+            PlaceInFrontOfHead();
+            return;
+        }
+
+        var poseBuffer = new TrackedDevicePose_t[OpenVR.k_unMaxTrackedDeviceCount];
+        var headPose = OvrUtils.GetHeadPose(poseBuffer);
+        if (headPose.eTrackingResult != ETrackingResult.Running_OK)
+        {
+            PlaceInFrontOfHead();
+            return;
+        }
+
+        var handPose = poseBuffer[deviceIndex];
+        if (!handPose.bPoseIsValid || handPose.eTrackingResult != ETrackingResult.Running_OK)
+        {
+            PlaceInFrontOfHead();
+            return;
+        }
+
+        var headMatrix = headPose.mDeviceToAbsoluteTracking.ToMatrix4X4();
+        var headRotationOnly = Matrix4x4.CreateFromQuaternion(Quaternion.CreateFromRotationMatrix(headMatrix));
+        var handMatrix = handPose.mDeviceToAbsoluteTracking.ToMatrix4X4();
+        var handPositionOnly = Matrix4x4.CreateTranslation(handMatrix.Translation);
+
+        var posOffset = Matrix4x4.CreateTranslation(NearHandOffset);
+        var transform = (posOffset * headRotationOnly * handPositionOnly).ToHmdMatrix34T();
+        OpenVR.Overlay.SetOverlayTransformAbsolute(_overlayHandle, ETrackingUniverseOrigin.TrackingUniverseStanding,
+            ref transform);
     }
 
     /// <summary>

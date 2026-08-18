@@ -341,7 +341,7 @@ internal sealed class OverlayManager
         if (Math.Abs(analogData.y) < ScrollDeadzone) return;
 
         Console.WriteLine($"[steamvr] Scroll検知: y={analogData.y:F2}");
-        _pointer?.Scroll(ETrackedControllerRole.RightHand, analogData.y);
+        _pointer?.Scroll(analogData.y);
     }
 
     /// <summary>アクション取得系の失敗はバインド未設定など頻発しうるので1回目だけ出す。</summary>

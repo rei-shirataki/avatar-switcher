@@ -256,35 +256,41 @@ internal sealed class OverlayPointer : IDisposable
     /// 実機での操作感次第で調整が必要。スティック上方向(y&gt;0)を「上へスクロール」
     /// （コンテンツが下に動き、上側が見える）に対応させている。逆に感じる場合は
     /// 符号を反転する。
+    ///
+    /// スクロール自体の入力は右スティック固定だが、狙っている手（左右どちらでパネルを
+    /// 指しているか）は問わない。ユーザー要望により、左手でパネルを狙いながら右スティックで
+    /// スクロールする操作も成立させたいため、_right→_leftの順でLastUvが有効な方を使う。
     /// </summary>
     private const int ScrollPixelsPerUnit = 30;
 
-    public void Scroll(ETrackedControllerRole role, float deltaY)
+    public void Scroll(float deltaY)
     {
-        var pointer = role switch
-        {
-            ETrackedControllerRole.LeftHand => _left,
-            ETrackedControllerRole.RightHand => _right,
-            _ => null,
-        };
-        if (pointer == null) return;
-
         Vector2? uv;
-        lock (pointer)
+        string source;
+        lock (_right)
         {
-            uv = pointer.LastUv;
+            uv = _right.LastUv;
+        }
+        source = "right";
+        if (uv == null)
+        {
+            lock (_left)
+            {
+                uv = _left.LastUv;
+            }
+            source = "left";
         }
 
         var browser = _target?.Browser;
         if (browser == null || uv == null)
         {
-            Console.WriteLine($"[steamvr] スクロールを無視: browser={(browser == null ? "null" : "ok")} LastUv={(uv == null ? "null(右コントローラーがパネルに当たっていない)" : "ok")}");
+            Console.WriteLine($"[steamvr] スクロールを無視: browser={(browser == null ? "null" : "ok")} LastUv=null(どちらのコントローラーもパネルに当たっていない)");
             return;
         }
 
         var (x, y) = ToBrowserPixels(uv.Value, browser);
         var wheelDeltaY = (int)(deltaY * ScrollPixelsPerUnit);
-        Console.WriteLine($"[steamvr] スクロール送信: x={x} y={y} wheelDeltaY={wheelDeltaY}");
+        Console.WriteLine($"[steamvr] スクロール送信: aimSource={source} x={x} y={y} wheelDeltaY={wheelDeltaY}");
         browser.GetBrowser().GetHost().SendMouseWheelEvent(x, y, 0, wheelDeltaY, CefEventFlags.None);
     }
 

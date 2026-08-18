@@ -23,9 +23,16 @@
   color: #f2f2f5;
   font-family: inherit;
   text-align: left;
+  // メインアプリのavatar-card.component.scssと同じホバー演出(浮き上がり+影)。
+  // ポインタのUV→ピクセル座標(OverlayPointer.UpdateForController)は交点計算
+  // そのものなので、transformでの見た目のズレはクリック判定に影響しない
+  // （CEF側のヒットテストは変形後の実描画位置に対して行われるため）。
+  transition: border-color 0.15s, transform 0.15s, box-shadow 0.15s;
 
   &:hover:not(:disabled) {
     border-color: #3f82ea;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
   }
 
   &:disabled {

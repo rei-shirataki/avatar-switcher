@@ -1,0 +1,60 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <!-- OyasumiVR (github.com/Raphiiko/OyasumiVR、同じCefSharp.OffScreen.NETCore +
+         SharpDX.Direct3D11 の組み合わせを実運用している参照実装) に合わせた
+         ターゲットフレームワーク。この環境には .NET SDK が無くビルド確認できないため、
+         組み合わせの実績があるバージョンにあえて追従している。 -->
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>true</SelfContained>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>AvatarSwitcher.OverlaySidecar</RootNamespace>
+    <AssemblyName>overlay-sidecar</AssemblyName>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CefSharp.OffScreen.NETCore" Version="150.0.110" />
+    <PackageReference Include="SharpDX.Direct3D11" Version="4.2.0" />
+    <!-- ポインタ画像(Resources/pointer.png)のPNGデコード専用。net10.0-windows限定の
+         アプリなのでクロスプラットフォーム非対応は問題にならない。 -->
+    <PackageReference Include="System.Drawing.Common" Version="9.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- OyasumiVR(MIT License)から取得したポインタ画像。Resources/VENDORING.md参照。 -->
+    <EmbeddedResource Include="Resources\pointer.png" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- openvr_api.cs 側の [DllImport("openvr_api")] は実行ファイルと同じ
+         ディレクトリで openvr_api.dll を解決するため、出力ルートへ
+         Link でフラット配置する。 -->
+    <None Include="OpenVR\openvr_api.dll">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>openvr_api.dll</Link>
+    </None>
+    <!-- SteamVR Input のアクションマニフェスト。OverlayManager が
+         AppDomain.CurrentDomain.BaseDirectory 基準の絶対パスで参照する。 -->
+    <None Include="input\*.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>input\%(Filename)%(Extension)</Link>
+    </None>
+    <!-- SteamVRへのアプリ登録用マニフェスト。OverlayManager.TryActivate が
+         AppDomain.CurrentDomain.BaseDirectory 基準の絶対パスで参照する。 -->
+    <None Include="manifest.vrmanifest">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+  <!-- overlay-ui (Angular) は file:// 直読みだとES module (<script type="module">) が
+       CORSでブロックされ動かないため、Rust core側が起動する静的ファイルサーバー
+       (steamvr::static_server、CLI引数 ui port で渡される) 経由の http://127.0.0.1 で
+       読み込む。そのためサイドカー側にビルド成果物をコピーする必要は無い
+       (AvatarPanelOverlay.ResolveOverlayUiUrl 参照)。 -->
+
+</Project>

@@ -1,0 +1,63 @@
+{
+  "version": 1,
+  "minimum_required_version": 1,
+  "default_bindings": [
+    {
+      "controller_type": "knuckles",
+      "binding_url": "default_knuckles.json"
+    },
+    {
+      "controller_type": "vive_controller",
+      "binding_url": "default_vive_controller.json"
+    },
+    {
+      "controller_type": "oculus_touch",
+      "binding_url": "default_oculus_touch.json"
+    }
+  ],
+  "actions": [
+    {
+      "name": "/actions/main/in/OverlayInteract",
+      "requirement": "mandatory",
+      "type": "boolean"
+    },
+    {
+      "name": "/actions/main/in/Scroll",
+      "requirement": "suggested",
+      "type": "vector2"
+    },
+    {
+      "name": "/actions/toggle/in/OpenOverlay",
+      "requirement": "suggested",
+      "type": "boolean"
+    }
+  ],
+  "action_sets": [
+    {
+      "name": "/actions/main",
+      "usage": "hidden"
+    },
+    {
+      "name": "/actions/toggle",
+      "usage": "leftright"
+    }
+  ],
+  "localization": [
+    {
+      "language_tag": "en_us",
+      "/actions/main": "AvatarSwitcher Actions",
+      "/actions/main/in/OverlayInteract": "Overlay Interact",
+      "/actions/main/in/Scroll": "Scroll (right stick)",
+      "/actions/toggle": "AvatarSwitcher Overlay Toggle",
+      "/actions/toggle/in/OpenOverlay": "Toggle Overlay (double-press)"
+    },
+    {
+      "language_tag": "ja_jp",
+      "/actions/main": "AvatarSwitcher 操作",
+      "/actions/main/in/OverlayInteract": "オーバーレイ操作",
+      "/actions/main/in/Scroll": "スクロール（右スティック）",
+      "/actions/toggle": "AvatarSwitcher オーバーレイ表示切替",
+      "/actions/toggle/in/OpenOverlay": "オーバーレイ表示切替（ダブルプレス）"
+    }
+  ]
+}

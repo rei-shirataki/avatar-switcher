@@ -214,7 +214,13 @@ pub async fn get_favorite_avatars() -> Result<Vec<VRCAvatar>> {
     Ok(all_avatars)
 }
 
-pub async fn select_avatar(avatar_id: &str) -> Result<VRCAvatar> {
+/// アバターを装着する。VRChatのこのエンドポイントは「更新後のアバター情報」
+/// ではなく現在のユーザープロフィール(CurrentUser)を返す（実機ログで生の
+/// レスポンス本文を確認して判明。以前は`VRCAvatar`としてパースしようとして
+/// 「missing field `name`」で常に失敗していた）。呼び出し側は既にどの
+/// avatar_idを装着させたか知っているので、レスポンス本文の内容は使わず
+/// 成否のみ返す。
+pub async fn select_avatar(avatar_id: &str) -> Result<()> {
     let client = get_client();
     let resp = send_with_retry(
         || {
@@ -227,8 +233,8 @@ pub async fn select_avatar(avatar_id: &str) -> Result<VRCAvatar> {
     .await?;
     // select は閲覧系。403 はプライベート/BAN/権限の総合的事由なので
     // 「編集できません」とは表示せず、ステータスのみ伝える。
-    let resp = ensure_success(resp, "アバターの装着に失敗しました", None).await?;
-    Ok(resp.json::<VRCAvatar>().await?)
+    ensure_success(resp, "アバターの装着に失敗しました", None).await?;
+    Ok(())
 }
 
 /// VRChat API でアバターの画像を更新する。

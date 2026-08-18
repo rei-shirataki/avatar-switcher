@@ -353,15 +353,19 @@ export class AvatarService {
   async switchAvatar(avatarId: string): Promise<void> {
     this._switching.set(avatarId);
     try {
-      // REST + OSC を並行送信 (OSC は localhost UDP なので即時、REST は ~1秒かかる)
-      const [selected] = await Promise.all([
-        this.tauri.invoke<VRCAvatar>('vrchat_select_avatar', { avatarId }),
+      // REST + OSC を並行送信 (OSC は localhost UDP なので即時、REST は ~1秒かかる)。
+      // VRChatの装着APIは「更新後のアバター情報」ではなくユーザープロフィールを
+      // 返す実装のため、レスポンスは使わず既にローカルに持っているアバター
+      // データ（一覧取得時にキャッシュ済み）からサムネイルを引く。
+      await Promise.all([
+        this.tauri.invoke('vrchat_select_avatar', { avatarId }),
         this.tauri.invoke('osc_change_avatar', { avatarId }).catch(() => {}),
       ]);
       // 装着結果でサイドバーの「現在のアバター」画像を即時更新する。
       // オーバーライドがあればそちらを優先（VRChat に未反映のカスタムサムネ）。
       const override = this._overrides()[avatarId];
-      const imageUrl = override?.customThumbnail ?? selected?.thumbnailImageUrl ?? selected?.imageUrl;
+      const found = this.allAvatars().find(a => a.id === avatarId);
+      const imageUrl = override?.customThumbnail ?? found?.thumbnailImageUrl ?? found?.imageUrl;
       if (imageUrl) {
         this.auth.updateCurrentAvatarImage(imageUrl);
       }

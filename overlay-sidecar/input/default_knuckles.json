@@ -9,7 +9,7 @@
   "alias_info": {},
   "app_key": "com.rei-shirataki.avatar-switcher.overlay",
   "bindings": {
-    "/actions/main": {
+    "/actions/hidden": {
       "sources": [
         {
           "path": "/user/hand/right/input/trigger",
@@ -19,7 +19,7 @@
           },
           "inputs": {
             "click": {
-              "output": "/actions/main/in/overlayinteract"
+              "output": "/actions/hidden/in/overlayinteract"
             }
           }
         },
@@ -31,7 +31,7 @@
           },
           "inputs": {
             "click": {
-              "output": "/actions/main/in/overlayinteract"
+              "output": "/actions/hidden/in/overlayinteract"
             }
           }
         }

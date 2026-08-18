@@ -110,10 +110,14 @@ internal sealed class AvatarPanelOverlay : IDisposable
     private static void LogBrowserEvents(OffscreenBrowser browser)
     {
         browser.ConsoleMessage += (_, e) =>
-            Console.WriteLine($"[overlay-ui console] {e.Level} {e.Message} ({e.Source}:{e.Line})");
+            Console.WriteLine($"[overlay-ui console] {e.Level} {e.Message} ({TruncateSource(e.Source)}:{e.Line})");
         browser.LoadError += (_, e) =>
-            Console.Error.WriteLine($"[overlay-ui] load error: {e.FailedUrl} {e.ErrorCode} {e.ErrorText}");
+            Console.Error.WriteLine($"[overlay-ui] load error: {TruncateSource(e.FailedUrl)} {e.ErrorCode} {e.ErrorText}");
     }
+
+    /// <summary>M1のテストページはdata URIで読み込むため、そのままログに出すと1行が数KBになる。</summary>
+    private static string TruncateSource(string source) =>
+        source.Length > 80 ? source[..80] + "…" : source;
 
     public void Dispose()
     {

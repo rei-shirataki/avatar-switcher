@@ -22,7 +22,13 @@ export class App implements OnInit {
     // 永遠に解決しないまま「読み込み中…」に固まってしまう。
     this.bridge
       .connect()
-      .then(() => Promise.all([this.avatarService.refresh(), this.avatarService.refreshFolders()]))
+      .then(() => {
+        // eyeheight.queryはfire-and-forget(応答はonEyeHeightUpdate経由)なので
+        // Promise.allには含めない。受動OSCイベント任せだと身長を一度も変更して
+        // いない場合に表示が「—」のまま固まるため、接続直後に能動フェッチする。
+        this.bridge.queryEyeHeight();
+        return Promise.all([this.avatarService.refresh(), this.avatarService.refreshFolders()]);
+      })
       .catch((e) => console.error('[overlay-ui] 初期化に失敗:', e));
   }
 

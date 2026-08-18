@@ -74,8 +74,11 @@ internal sealed class AvatarPanelOverlay : IDisposable
 
     /// <summary>
     /// overlay-ui (Angular) の読み込み先URLを決める。優先順位:
-    /// 1. ビルド済み dist が実行ファイル横の overlay-ui/ に配置されていればそれ (本番相当)
-    /// 2. 開発用URL環境変数 (`ng serve --project overlay-ui` を別途起動して指す)
+    /// 1. 開発用URL環境変数 (`ng serve --project overlay-ui` を別途起動して指す。
+    ///    sidecar.rs::resolve_sidecar_path と同じく「開発用オーバーライドを
+    ///    最優先」の流儀に揃えている。dist配置後もこれを消さずにイテレーション
+    ///    できるようにする狙い）
+    /// 2. ビルド済み dist が実行ファイル横の overlay-ui/ に配置されていればそれ (本番相当)
     /// 3. どちらも無ければ M1 のテストページにフォールバック（overlay-ui未セットアップでも
     ///    オーバーレイ描画パイプライン自体の疎通確認は引き続きできるようにする）
     /// いずれも Rust core の WS ブリッジへ接続するための port/token をクエリで渡す。
@@ -84,16 +87,16 @@ internal sealed class AvatarPanelOverlay : IDisposable
     {
         var query = $"?port={_wsPort}&token={Uri.EscapeDataString(_wsToken)}";
 
-        var distIndex = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "overlay-ui", "index.html");
-        if (File.Exists(distIndex))
-        {
-            return new Uri(distIndex).AbsoluteUri + query;
-        }
-
         var devUrl = Environment.GetEnvironmentVariable("AVATAR_SWITCHER_OVERLAY_UI_DEV_URL");
         if (!string.IsNullOrEmpty(devUrl))
         {
             return devUrl.TrimEnd('/') + "/" + query;
+        }
+
+        var distIndex = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "overlay-ui", "index.html");
+        if (File.Exists(distIndex))
+        {
+            return new Uri(distIndex).AbsoluteUri + query;
         }
 
         Console.WriteLine("[steamvr] overlay-ui が見つからないため M1 テストページで代替します" +

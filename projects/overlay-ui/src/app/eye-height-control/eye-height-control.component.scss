@@ -12,11 +12,12 @@
 
 .height-bar__label {
   color: #9ad1ff;
-  font-size: 13px;
+  font-size: 18px;
 }
 
 .height-bar__value {
-  font-size: 16px;
+  font-size: 24px;
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
   min-width: 4.5em;
 }
@@ -32,7 +33,7 @@
     border-radius: 8px;
     background: #1c1f28;
     color: #f2f2f5;
-    font-size: 13px;
+    font-size: 16px;
     font-family: inherit;
     cursor: pointer;
 

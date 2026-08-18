@@ -12,8 +12,8 @@ namespace AvatarSwitcher.OverlaySidecar.SteamVr;
 ///
 /// M1時点では OyasumiVR の DashboardOverlay がハンド追従時に使っている
 /// フォールバック分岐（頭部前方に固定配置）だけを実装し、手/頭姿勢を毎フレーム
-/// 追従させる処理はまだ入れていない（次段階の作業）。開閉トグルもM2以降で
-/// SteamVR Inputの `OpenOverlay` アクションと組み合わせて追加する予定。
+/// 追従させる処理はまだ入れていない（次段階の作業）。開閉トグル(#21)は
+/// SteamVR Inputの `OpenOverlay` アクションと組み合わせて実装済み(<see cref="SetVisible"/>)。
 ///
 /// 参照実装: OyasumiVR src-overlay-sidecar/Overlays/BaseWebOverlay.cs, DashboardOverlay.cs
 /// </summary>
@@ -35,9 +35,11 @@ internal sealed class AvatarPanelOverlay : IDisposable
     private Texture2D? _texture;
     private EVROverlayError _lastTextureError = EVROverlayError.None;
     private bool _disposed;
+    private bool _visible = true;
 
     public ulong OverlayHandle => _overlayHandle;
     public OffscreenBrowser? Browser => _browser;
+    public bool IsVisible => _visible;
 
     public AvatarPanelOverlay(D3D11Context d3D, int wsPort, string wsToken, int? uiPort)
     {
@@ -124,6 +126,26 @@ internal sealed class AvatarPanelOverlay : IDisposable
         var transform = (offset * headMatrix).ToHmdMatrix34T();
         OpenVR.Overlay.SetOverlayTransformAbsolute(_overlayHandle, ETrackingUniverseOrigin.TrackingUniverseStanding,
             ref transform);
+    }
+
+    /// <summary>
+    /// 表示/非表示を切り替える。#21: `/actions/main/in/OpenOverlay` のダブルプレスから呼ばれる。
+    /// 非表示→表示への切替時は、コントローラーで消してから離れた場所で再度呼び出しても
+    /// 見失わないよう <see cref="PlaceInFrontOfHead"/> で頭部前方に位置を再センタリングする。
+    /// </summary>
+    public void SetVisible(bool visible)
+    {
+        if (_disposed || _visible == visible) return;
+        _visible = visible;
+        if (visible)
+        {
+            PlaceInFrontOfHead();
+            OpenVR.Overlay.ShowOverlay(_overlayHandle);
+        }
+        else
+        {
+            OpenVR.Overlay.HideOverlay(_overlayHandle);
+        }
     }
 
     /// <summary>

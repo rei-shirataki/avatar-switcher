@@ -34,6 +34,24 @@
               "output": "/actions/main/in/overlayinteract"
             }
           }
+        },
+        {
+          "path": "/user/hand/right/input/a",
+          "mode": "button",
+          "inputs": {
+            "click": {
+              "output": "/actions/main/in/openoverlay"
+            }
+          }
+        },
+        {
+          "path": "/user/hand/left/input/a",
+          "mode": "button",
+          "inputs": {
+            "click": {
+              "output": "/actions/main/in/openoverlay"
+            }
+          }
         }
       ]
     }

@@ -136,9 +136,9 @@ internal sealed class OverlayManager
             }
 
             ulong actionSetHandle = 0;
-            input.GetActionSetHandle("/actions/hidden", ref actionSetHandle);
+            input.GetActionSetHandle("/actions/main", ref actionSetHandle);
             ulong actionHandle = 0;
-            input.GetActionHandle("/actions/hidden/in/OverlayInteract", ref actionHandle);
+            input.GetActionHandle("/actions/main/in/OverlayInteract", ref actionHandle);
             if (actionSetHandle == 0 || actionHandle == 0)
             {
                 Console.Error.WriteLine("[steamvr] action handle の取得に失敗しました");

@@ -38,7 +38,7 @@
 
 .panel__header {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 12px;
   padding: 16px 16px 0;
 
@@ -51,4 +51,23 @@
 .panel__status {
   color: #9ad1ff;
   font-size: 13px;
+}
+
+// #25: タップで次のソートモードへ循環する単一ボタン。VRコントローラーでは
+// ドロップダウンの開閉2ステップ操作より単一の大きいタップ領域の方が扱いやすい。
+.sort-button {
+  margin-left: auto;
+  padding: 10px 16px;
+  border: 2px solid transparent;
+  border-radius: 8px;
+  background: #1c1f28;
+  color: #f2f2f5;
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+
+  &:hover {
+    border-color: #3f82ea;
+  }
 }

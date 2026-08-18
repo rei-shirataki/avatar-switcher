@@ -311,6 +311,8 @@ internal sealed class OverlayManager
     /// デッドゾーン超過分を<see cref="OverlayPointer.Scroll"/>経由でCEFのホイールイベントに変換する。
     /// 右手にのみバインドしているため、role固定でよい（左手分の判定は不要）。
     /// </summary>
+    private bool _warnedScrollDiag;
+
     private void DetectScroll()
     {
         if (_scrollActionHandle == 0) return;
@@ -318,9 +320,27 @@ internal sealed class OverlayManager
         var analogData = new InputAnalogActionData_t();
         var dataError = OpenVR.Input.GetAnalogActionData(_scrollActionHandle, ref analogData,
             (uint)Marshal.SizeOf<InputAnalogActionData_t>(), OpenVR.k_ulInvalidInputValueHandle);
-        if (dataError != EVRInputError.None || !analogData.bActive) return;
+        if (dataError != EVRInputError.None)
+        {
+            if (!_warnedScrollDiag)
+            {
+                _warnedScrollDiag = true;
+                Console.Error.WriteLine($"[steamvr] Scroll GetAnalogActionData 失敗: {dataError}");
+            }
+            return;
+        }
+        if (!analogData.bActive)
+        {
+            if (!_warnedScrollDiag)
+            {
+                _warnedScrollDiag = true;
+                Console.WriteLine("[steamvr] Scroll action が非アクティブです（バインド未反映の可能性。SteamVR再起動を試してください）");
+            }
+            return;
+        }
         if (Math.Abs(analogData.y) < ScrollDeadzone) return;
 
+        Console.WriteLine($"[steamvr] Scroll検知: y={analogData.y:F2}");
         _pointer?.Scroll(ETrackedControllerRole.RightHand, analogData.y);
     }
 

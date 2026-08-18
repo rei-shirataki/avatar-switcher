@@ -155,7 +155,13 @@ async fn handle_message(app: &AppHandle, text: &str) -> Option<ServerMessage> {
             // 認証済み接続で再度 hello が来ても無視する。
             None
         }
-        Ok(ClientMessage::AvatarsList) => Some(handle_avatars_list(app).await),
+        Ok(ClientMessage::AvatarsList) => {
+            let reply = handle_avatars_list(app).await;
+            if let ServerMessage::AvatarsListResult { avatars } = &reply {
+                log::info!("[steamvr] avatars.list 応答: {}件", avatars.len());
+            }
+            Some(reply)
+        }
         Ok(ClientMessage::AvatarsSelect { avatar_id }) => {
             Some(handle_avatars_select(&avatar_id).await)
         }
@@ -209,13 +215,20 @@ async fn handle_avatars_list(app: &AppHandle) -> ServerMessage {
 /// 素直に先に送ってから非同期のREST呼び出しを待てば十分（tokio::joinで
 /// 並行化する実利は無い）。
 async fn handle_avatars_select(avatar_id: &str) -> ServerMessage {
+    log::info!("[steamvr] avatars.select 受信: avatar_id={}", avatar_id);
     if let Err(e) = crate::osc::send_avatar_change(avatar_id) {
         log::warn!("[steamvr] OSC送信失敗: {}", e);
     }
     match vrchat::avatars::select_avatar(avatar_id).await {
-        Ok(avatar) => ServerMessage::AvatarsSelectResult { avatar },
-        Err(e) => ServerMessage::Error {
-            message: e.to_string(),
-        },
+        Ok(avatar) => {
+            log::info!("[steamvr] avatars.select 成功: avatar_id={}", avatar.id);
+            ServerMessage::AvatarsSelectResult { avatar }
+        }
+        Err(e) => {
+            log::warn!("[steamvr] avatars.select 失敗: {}", e);
+            ServerMessage::Error {
+                message: e.to_string(),
+            }
+        }
     }
 }

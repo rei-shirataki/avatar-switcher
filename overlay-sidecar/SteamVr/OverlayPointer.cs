@@ -21,7 +21,8 @@ namespace AvatarSwitcher.OverlaySidecar.SteamVr;
 /// </summary>
 internal sealed class OverlayPointer : IDisposable
 {
-    private const float PointerWidthMeters = 0.02f;
+    // #23フォローアップ: OyasumiVR自体も0.02mだが、ユーザー要望により一回り小さくしている。
+    private const float PointerWidthMeters = 0.015f;
     private const uint PointerSortOrder = 150;
 
     private readonly PointerState _left = new();
@@ -31,8 +32,9 @@ internal sealed class OverlayPointer : IDisposable
 
     public OverlayPointer()
     {
-        SetUpPointerOverlay(_left, "com.rei-shirataki.avatar-switcher:PointerLeft", "AvatarSwitcher Left Pointer");
-        SetUpPointerOverlay(_right, "com.rei-shirataki.avatar-switcher:PointerRight", "AvatarSwitcher Right Pointer");
+        var (pixels, width, height) = LoadPointerImage();
+        SetUpPointerOverlay(_left, "com.rei-shirataki.avatar-switcher:PointerLeft", "AvatarSwitcher Left Pointer", pixels, width, height);
+        SetUpPointerOverlay(_right, "com.rei-shirataki.avatar-switcher:PointerRight", "AvatarSwitcher Right Pointer", pixels, width, height);
     }
 
     public void SetTarget(AvatarPanelOverlay? overlay)
@@ -40,13 +42,12 @@ internal sealed class OverlayPointer : IDisposable
         _target = overlay;
     }
 
-    private static void SetUpPointerOverlay(PointerState state, string key, string name)
+    private static void SetUpPointerOverlay(PointerState state, string key, string name, byte[] pixels, uint width, uint height)
     {
         OvrUtils.GetOrCreateOverlay(key, name, ref state.OverlayHandle);
         OpenVR.Overlay.SetOverlayWidthInMeters(state.OverlayHandle, PointerWidthMeters);
         OpenVR.Overlay.SetOverlaySortOrder(state.OverlayHandle, PointerSortOrder);
 
-        var (pixels, width, height) = BuildPointerDot();
         var handle = System.Runtime.InteropServices.GCHandle.Alloc(pixels, System.Runtime.InteropServices.GCHandleType.Pinned);
         try
         {
@@ -59,34 +60,33 @@ internal sealed class OverlayPointer : IDisposable
     }
 
     /// <summary>
-    /// 16x16のBGRA円形ドット画像を生成する（画像アセット無しでポインタを表示するため）。
+    /// ポインタ画像を埋め込みリソース(Resources/pointer.png、OyasumiVR由来。
+    /// Resources/VENDORING.md参照)から読み込み、<c>SetOverlayRaw</c>へそのまま渡せる
+    /// BGRAバイト列に変換する。System.Drawing.Bitmapの<c>Format32bppArgb</c>は
+    /// Windows(GDI+)上ではメモリ上で既にB,G,R,Aの順に並ぶため、追加のチャンネル
+    /// 入れ替えは不要（以前の手描き円形ドットを置き換えた）。
     /// </summary>
-    private static (byte[] pixels, uint width, uint height) BuildPointerDot()
+    private static (byte[] pixels, uint width, uint height) LoadPointerImage()
     {
-        const int size = 16;
-        var pixels = new byte[size * size * 4];
-        var center = (size - 1) / 2f;
-        var radius = size / 2f - 1f;
-        for (var y = 0; y < size; y++)
+        var assembly = System.Reflection.Assembly.GetExecutingAssembly();
+        using var stream = assembly.GetManifestResourceStream("AvatarSwitcher.OverlaySidecar.Resources.pointer.png")
+            ?? throw new InvalidOperationException("pointer.png の埋め込みリソースが見つかりません");
+        using var bitmap = new System.Drawing.Bitmap(stream);
+        var width = bitmap.Width;
+        var height = bitmap.Height;
+        var rect = new System.Drawing.Rectangle(0, 0, width, height);
+        var bmpData = bitmap.LockBits(rect, System.Drawing.Imaging.ImageLockMode.ReadOnly,
+            System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+        try
         {
-            for (var x = 0; x < size; x++)
-            {
-                var dx = x - center;
-                var dy = y - center;
-                var inside = dx * dx + dy * dy <= radius * radius;
-                var i = (y * size + x) * 4;
-                if (inside)
-                {
-                    // BGRA、不透明の白いドット。
-                    pixels[i + 0] = 255;
-                    pixels[i + 1] = 255;
-                    pixels[i + 2] = 255;
-                    pixels[i + 3] = 255;
-                }
-            }
+            var pixels = new byte[width * height * 4];
+            System.Runtime.InteropServices.Marshal.Copy(bmpData.Scan0, pixels, 0, pixels.Length);
+            return (pixels, (uint)width, (uint)height);
         }
-
-        return (pixels, size, size);
+        finally
+        {
+            bitmap.UnlockBits(bmpData);
+        }
     }
 
     /// <summary>

@@ -20,6 +20,14 @@
   <ItemGroup>
     <PackageReference Include="CefSharp.OffScreen.NETCore" Version="150.0.110" />
     <PackageReference Include="SharpDX.Direct3D11" Version="4.2.0" />
+    <!-- ポインタ画像(Resources/pointer.png)のPNGデコード専用。net10.0-windows限定の
+         アプリなのでクロスプラットフォーム非対応は問題にならない。 -->
+    <PackageReference Include="System.Drawing.Common" Version="9.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- OyasumiVR(MIT License)から取得したポインタ画像。Resources/VENDORING.md参照。 -->
+    <EmbeddedResource Include="Resources\pointer.png" />
   </ItemGroup>
 
   <ItemGroup>

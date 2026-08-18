@@ -58,7 +58,7 @@ internal static class Program
 
         try
         {
-            new OverlayManager(bridge, options.UiPort, cts.Token).Run();
+            new OverlayManager(bridge, options.UiPort, options.PlacementMode, cts.Token).Run();
             await Task.Delay(Timeout.Infinite, cts.Token);
         }
         catch (OperationCanceledException)

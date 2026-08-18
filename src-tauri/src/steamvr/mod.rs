@@ -22,11 +22,17 @@ use tauri::{AppHandle, Manager};
 /// ログに留めて呼び出し元 (`lib.rs::setup`) には伝播させない。
 pub(crate) async fn init(app: &AppHandle) {
     let token = uuid::Uuid::new_v4().to_string();
+    // #28: パネル配置方式はサイドカー起動時のCLI引数でのみ渡せる（WS経由のホット
+    // リロードはv1スコープ外）。ここで一度だけ読み込む。
+    let placement_mode = crate::storage::commands::overlay_settings_get(app.clone())
+        .await
+        .map(|s| s.placement_mode)
+        .unwrap_or_default();
     match bridge::start(app.clone(), std::sync::Arc::from(token.as_str())).await {
         Ok(port) => {
             log::info!("[steamvr] WSブリッジ起動 (port={})", port);
             let ui_port = start_overlay_ui_static_server(app).await;
-            sidecar::spawn(app.clone(), port, ui_port, token).await;
+            sidecar::spawn(app.clone(), port, ui_port, token, placement_mode).await;
         }
         Err(e) => {
             log::error!("[steamvr] WSブリッジの起動に失敗しました: {}", e);

@@ -1,3 +1,5 @@
+using AvatarSwitcher.OverlaySidecar.SteamVr;
+
 namespace AvatarSwitcher.OverlaySidecar;
 
 /// <summary>
@@ -10,12 +12,15 @@ internal sealed class CliOptions
     /// <summary>overlay-ui静的ファイルサーバーのポート。Rust側が起動できなかった
     /// 場合（overlay-ui未ビルド等）は渡されない。</summary>
     public int? UiPort { get; }
+    /// <summary>パネル配置方式（#28）。未指定・不正値はHandにフォールバックする。</summary>
+    public PlacementMode PlacementMode { get; }
 
-    private CliOptions(int wsPort, string token, int? uiPort)
+    private CliOptions(int wsPort, string token, int? uiPort, PlacementMode placementMode)
     {
         WsPort = wsPort;
         Token = token;
         UiPort = uiPort;
+        PlacementMode = placementMode;
     }
 
     public static CliOptions? Parse(string[] args)
@@ -23,6 +28,7 @@ internal sealed class CliOptions
         int? wsPort = null;
         string? token = null;
         int? uiPort = null;
+        var placementMode = PlacementMode.Hand;
         for (var i = 0; i < args.Length; i++)
         {
             if (args[i] == "--ws-port" && i + 1 < args.Length && int.TryParse(args[i + 1], out var p))
@@ -40,6 +46,15 @@ internal sealed class CliOptions
                 uiPort = up;
                 i++;
             }
+            else if (args[i] == "--placement-mode" && i + 1 < args.Length)
+            {
+                placementMode = args[i + 1] switch
+                {
+                    "space" => PlacementMode.Space,
+                    _ => PlacementMode.Hand,
+                };
+                i++;
+            }
         }
 
         if (wsPort == null || string.IsNullOrEmpty(token))
@@ -47,6 +62,6 @@ internal sealed class CliOptions
             return null;
         }
 
-        return new CliOptions(wsPort.Value, token, uiPort);
+        return new CliOptions(wsPort.Value, token, uiPort, placementMode);
     }
 }

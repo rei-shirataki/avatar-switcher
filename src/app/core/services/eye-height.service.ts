@@ -100,13 +100,14 @@ export class EyeHeightService {
   /** ワールド(Udon)が公開する `/avatar/eyeheightmin` / `max`。未受信ならアプリの
    *  デフォルト範囲にフォールバックする。公式仕様上 OSC 書き込みはこの範囲の
    *  制限を受けないため、送信のクランプには使わず UI 上の目安表示にのみ使う。
-   *  ワールド遷移時にリセットする仕組みはない（VRChat が次ワールドでこの
-   *  トリオを再送するかは未確認）。再送されないワールドに移ると前ワールドの
-   *  値が残り続ける既知のトレードオフ。 */
+   *  `/avatar/change` 受信時に null へリセットする（onAvatarChange 参照）。
+   *  ワールド境界そのものを検知する OSC シグナルは存在しないため、アバター
+   *  ロードのたびに発火する avatar-change を代替トリガーとして使う。 */
   private readonly _worldMinHeight = signal<number | null>(null);
   private readonly _worldMaxHeight = signal<number | null>(null);
-  /** `/avatar/eyeheightscalingallowed`。false のワールドでは OSC 書き込みが
-   *  VRChat 側で無言で無視されるため、送信自体は止めずユーザーに可視化する。 */
+  /** `/avatar/eyeheightscalingallowed`。false のとき VRChat 側は `/avatar/eyeheight`
+   *  への書き込みを無言で無視するため、送信自体は止めずユーザーに可視化する。
+   *  null（未受信）と false を区別し、警告は false のときだけ出す。 */
   private readonly _scalingAllowed = signal<boolean | null>(null);
 
   readonly value = this._value.asReadonly();
@@ -202,17 +203,21 @@ export class EyeHeightService {
 
     // ワールド(Udon)が公開する範囲・書き込み許可。届かないワールドも多く、
     // 未受信でもアプリのデフォルト範囲で動作するため握り潰す。
-    // アバター切替ではリセットしない（ワールド/Udon スコープでありアバタースコープではない）。
+    // アバター切替直後 AVATAR_SETTLE_MS 以内の受信は旧ワールド/旧アバターの
+    // 送信残り（UDP バッファ遅延）の可能性があるため、onAvatarChange でクリア
+    // した直後に古い値で上書きしないよう捨てる（isSteadyState は使わない。
+    // このトリオは自前送信もスムーズ補間もしないため、その判定は無関係な
+    // ECHO_SUPPRESS_MS 中の受信まで誤って捨ててしまう）。
     this.registerListener(listen<number>('osc:eye-height-min', e => {
       const v = coerceFiniteNumber(e.payload);
-      if (v !== null) this._worldMinHeight.set(v);
+      if (v !== null && !this.isAvatarSettling()) this._worldMinHeight.set(v);
     }));
     this.registerListener(listen<number>('osc:eye-height-max', e => {
       const v = coerceFiniteNumber(e.payload);
-      if (v !== null) this._worldMaxHeight.set(v);
+      if (v !== null && !this.isAvatarSettling()) this._worldMaxHeight.set(v);
     }));
     this.registerListener(listen<boolean>('osc:eye-height-scaling-allowed', e => {
-      this._scalingAllowed.set(e.payload);
+      if (!this.isAvatarSettling()) this._scalingAllowed.set(e.payload);
     }));
 
     // dev HMR 等でサービスが再構築される際にリスナーと interval を確実に解放する。
@@ -387,6 +392,20 @@ export class EyeHeightService {
     this._scaleFactorAt = Number.NEGATIVE_INFINITY;
     this._scaleModifiedAt = Number.NEGATIVE_INFINITY;
     this._lastAvatarChangeAt = performance.now();
+    // ワールド/Udon スコープのトリオもここでクリアする。avatar-change を「境界」の
+    // 代替シグナルとして使う都合上、旧ワールドの値を次のワールド/アバターに
+    // 引き継がないことを優先する（Issue #6）。新しい値は世界側が再送すれば
+    // isAvatarSettling() の窓を抜けた直後に上書きされ、再送されないワールドでは
+    // null（=アプリのデフォルト範囲・警告なし）にフォールバックする。
+    this._worldMinHeight.set(null);
+    this._worldMaxHeight.set(null);
+    this._scalingAllowed.set(null);
+  }
+
+  /** アバター切替直後 AVATAR_SETTLE_MS 以内かどうか。旧アバター/旧ワールド由来の
+   *  送信残り（UDP バッファ遅延）を弾くための共通窓。 */
+  private isAvatarSettling(): boolean {
+    return performance.now() - this._lastAvatarChangeAt < AVATAR_SETTLE_MS;
   }
 
   /** プレハブ身長の計算入力を受け入れてよい「定常状態」かどうか。
@@ -396,10 +415,8 @@ export class EyeHeightService {
    *  ペアであることが保証される。 */
   private isSteadyState(): boolean {
     if (this._isSmoothing()) return false;
-    const now = performance.now();
-    if (now - this._lastSelfSendAt < ECHO_SUPPRESS_MS) return false;
-    if (now - this._lastAvatarChangeAt < AVATAR_SETTLE_MS) return false;
-    return true;
+    if (performance.now() - this._lastSelfSendAt < ECHO_SUPPRESS_MS) return false;
+    return !this.isAvatarSettling();
   }
 
   /** 定常状態で観測した整合ペアからプレハブ身長を再計算してキャッシュする。

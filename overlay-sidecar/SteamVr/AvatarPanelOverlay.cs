@@ -39,8 +39,6 @@ internal sealed class AvatarPanelOverlay : IDisposable
     private const float HandWidthMeters = 0.4f;
     /// <summary>頭部前方のオフセット（m）。DashboardOverlayのフォールバック配置に合わせた値。</summary>
     private const float ForwardOffsetMeters = 0.55f;
-    /// <summary>ボタン長押し(<see cref="ToggleSize"/>)で拡大する際の倍率。</summary>
-    private const float EnlargedScale = 1.4f;
     /// <summary>Space方式（OyasumiVR式）の手元オフセット。座標系はワールド、頭部の向きのみで回転する。</summary>
     private static readonly Vector3 NearHandOffset = new(0, 0.15f, -0.2f);
     /// <summary>Handモードのコントローラー相対オフセット（m）。手前上方に置き、見下ろす角度に傾ける。</summary>
@@ -61,9 +59,6 @@ internal sealed class AvatarPanelOverlay : IDisposable
     // #24: 起動直後はオーバーレイを表示しない。ユーザーが必要な時だけ
     // #21のダブルプレスで呼び出す想定。
     private bool _visible;
-    /// <summary>ボタン長押しで拡大された状態か。表示/非表示や配置とは独立に、
-    /// アプリ終了までセッション内で保持する（永続化はしない）。</summary>
-    private bool _enlarged;
 
     public ulong OverlayHandle => _overlayHandle;
     public OffscreenBrowser? Browser => _browser;
@@ -87,7 +82,7 @@ internal sealed class AvatarPanelOverlay : IDisposable
             return;
         }
 
-        ApplyWidth();
+        OpenVR.Overlay.SetOverlayWidthInMeters(_overlayHandle, _placementMode == PlacementMode.Hand ? HandWidthMeters : WidthMeters);
 
         _texture = await _d3D.CreateCpuWritableTextureAsync(Resolution);
 
@@ -140,30 +135,6 @@ internal sealed class AvatarPanelOverlay : IDisposable
         Console.WriteLine("[steamvr] overlay-ui 静的ファイルサーバーが起動していないため M1 テストページで代替します" +
             "（dist/overlay-ui/browser をビルドするか AVATAR_SWITCHER_OVERLAY_UI_DEV_URL を設定してください）");
         return "data:text/html;base64," + Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(TestPage.Html));
-    }
-
-    /// <summary>
-    /// 配置方式(Hand/Space)ごとの基準幅に、拡大状態なら<see cref="EnlargedScale"/>を
-    /// 掛けて反映する。<see cref="OpenVR.Overlay.SetOverlayTransformTrackedDeviceRelative"/>
-    /// / <see cref="OpenVR.Overlay.SetOverlayTransformAbsolute"/>で設定した基準点(アンカー)は
-    /// 幅を変えても動かないため、位置の再計算は不要。
-    /// </summary>
-    private void ApplyWidth()
-    {
-        var baseWidth = _placementMode == PlacementMode.Hand ? HandWidthMeters : WidthMeters;
-        OpenVR.Overlay.SetOverlayWidthInMeters(_overlayHandle, _enlarged ? baseWidth * EnlargedScale : baseWidth);
-    }
-
-    /// <summary>
-    /// ボタン長押し（新規、`/actions/toggle/in/OpenOverlay`の長押し検知から呼ばれる）で
-    /// パネルサイズを拡大/縮小トグルする。パネルが小さく見づらいという実機フィード
-    /// バック(#28のWidthMeters引き上げ)を受けて、恒久的な既定値の変更だけでなく、
-    /// ユーザーがその場で更に拡大できる手段も用意した。
-    /// </summary>
-    public void ToggleSize()
-    {
-        _enlarged = !_enlarged;
-        ApplyWidth();
     }
 
     /// <summary>

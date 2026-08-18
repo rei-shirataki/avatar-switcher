@@ -1,6 +1,6 @@
 import { Injectable, inject, signal, computed } from '@angular/core';
 import { OverlayBridgeService } from './overlay-bridge.service';
-import { VRCAvatar } from './core/models/avatar.model';
+import { AvatarFolder, VRCAvatar } from './core/models/avatar.model';
 
 /**
  * avatars-view.component.ts の SORT_OPTIONS と同じ並び。VRコントローラーでの
@@ -30,21 +30,43 @@ export class OverlayAvatarService {
   private readonly _switching = signal<string | null>(null);
   private readonly _loading = signal(false);
   private readonly _sortMode = signal<string>('updated-desc');
+  private readonly _folders = signal<AvatarFolder[]>([]);
+  /** null = 「すべて」タブ。#26: 作成/編集/削除はメインアプリ側の役割で、ここは表示・切替のみ。 */
+  private readonly _selectedFolderId = signal<string | null>(null);
 
   readonly avatars = this._avatars.asReadonly();
   readonly currentAvatarId = this._currentAvatarId.asReadonly();
   readonly switching = this._switching.asReadonly();
   readonly loading = this._loading.asReadonly();
   readonly sortMode = this._sortMode.asReadonly();
+  readonly folders = this._folders.asReadonly();
+  readonly selectedFolderId = this._selectedFolderId.asReadonly();
 
   readonly sortLabel = computed(
     () => SORT_OPTIONS.find((o) => o.value === this._sortMode())?.label ?? '',
   );
 
-  readonly sortedAvatars = computed(() => this.sortAvatars(this._avatars(), this._sortMode()));
+  private readonly filteredAvatars = computed(() => {
+    const folderId = this._selectedFolderId();
+    if (folderId === null) return this._avatars();
+    const folder = this._folders().find((f) => f.id === folderId);
+    if (!folder) return this._avatars();
+    const ids = new Set(folder.avatarIds);
+    return this._avatars().filter((a) => ids.has(a.id));
+  });
+
+  readonly sortedAvatars = computed(() => this.sortAvatars(this.filteredAvatars(), this._sortMode()));
 
   constructor() {
     this.bridge.onAvatarChanged((id) => this._currentAvatarId.set(id));
+  }
+
+  selectFolder(folderId: string | null): void {
+    this._selectedFolderId.set(folderId);
+  }
+
+  async refreshFolders(): Promise<void> {
+    this._folders.set(await this.bridge.listFolders());
   }
 
   /** タップのたびに次のソートモードへ循環する。avatars-view.component.tsのドロップダウン選択に相当。 */

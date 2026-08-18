@@ -1,6 +1,6 @@
 import { Injectable, signal } from '@angular/core';
 import { Subject, firstValueFrom, filter, timeout } from 'rxjs';
-import { VRCAvatar } from './core/models/avatar.model';
+import { AvatarFolder, VRCAvatar } from './core/models/avatar.model';
 
 /** Rust core からの応答が返ってこない異常系（送信ドロップ等）を無限待ちさせないための上限。 */
 const REQUEST_TIMEOUT_MS = 10_000;
@@ -9,6 +9,7 @@ type ServerMessage =
   | { type: 'avatars.list-result'; avatars: VRCAvatar[] }
   | { type: 'avatars.select-result'; avatarId: string }
   | { type: 'avatar-changed'; avatarId: string }
+  | { type: 'folders.list-result'; folders: AvatarFolder[] }
   | { type: 'error'; message: string };
 
 /**
@@ -93,6 +94,13 @@ export class OverlayBridgeService {
     const reply = await this.waitForOneOf(['avatars.list-result', 'error']);
     if (reply.type === 'error') throw new Error(reply.message);
     return reply.avatars;
+  }
+
+  async listFolders(): Promise<AvatarFolder[]> {
+    this.send({ type: 'folders.list' });
+    const reply = await this.waitForOneOf(['folders.list-result', 'error']);
+    if (reply.type === 'error') throw new Error(reply.message);
+    return reply.folders;
   }
 
   async selectAvatar(avatarId: string): Promise<void> {

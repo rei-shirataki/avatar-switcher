@@ -35,6 +35,11 @@ pub(crate) fn broadcast_avatar_changed(avatar_id: String) {
     let _ = PUSH_TX.send(ServerMessage::AvatarChanged { avatar_id });
 }
 
+/// `osc/mod.rs` の `EyeHeightAsMeters`/`eyeheight` 受信ハンドラから呼ばれる（#27）。
+pub(crate) fn broadcast_eye_height(value: f32) {
+    let _ = PUSH_TX.send(ServerMessage::EyeHeightUpdate { value });
+}
+
 /// hello メッセージの受信を待つ最大時間。これを過ぎたら未認証とみなし切断する。
 const HELLO_TIMEOUT: Duration = Duration::from_secs(5);
 
@@ -166,6 +171,18 @@ async fn handle_message(app: &AppHandle, text: &str) -> Option<ServerMessage> {
             Some(handle_avatars_select(&avatar_id).await)
         }
         Ok(ClientMessage::FoldersList) => Some(handle_folders_list(app).await),
+        Ok(ClientMessage::EyeHeightSet { value }) => {
+            log::info!("[steamvr] eyeheight.set 受信: value={}", value);
+            if let Err(e) = crate::osc::send_avatar_eye_height(value) {
+                log::warn!("[steamvr] eyeheight OSC送信失敗: {}", e);
+                return Some(ServerMessage::Error {
+                    message: e.to_string(),
+                });
+            }
+            // 実際に反映された値はVRChatからのOSCエコー(EyeHeightUpdate broadcast)
+            // で通知されるため、送信成功時点では応答不要(fire-and-forget)。
+            None
+        }
         Err(e) => {
             log::warn!("[steamvr] 不正なメッセージを受信: {} ({})", e, text);
             Some(ServerMessage::Error {

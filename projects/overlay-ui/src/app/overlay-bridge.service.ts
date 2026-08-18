@@ -10,6 +10,7 @@ type ServerMessage =
   | { type: 'avatars.select-result'; avatarId: string }
   | { type: 'avatar-changed'; avatarId: string }
   | { type: 'folders.list-result'; folders: AvatarFolder[] }
+  | { type: 'eyeheight-update'; value: number }
   | { type: 'error'; message: string };
 
 /**
@@ -94,6 +95,17 @@ export class OverlayBridgeService {
     const reply = await this.waitForOneOf(['avatars.list-result', 'error']);
     if (reply.type === 'error') throw new Error(reply.message);
     return reply.avatars;
+  }
+
+  onEyeHeightUpdate(handler: (value: number) => void): void {
+    this.messages$
+      .pipe(filter((m): m is Extract<ServerMessage, { type: 'eyeheight-update' }> => m.type === 'eyeheight-update'))
+      .subscribe((m) => handler(m.value));
+  }
+
+  /** #27: fire-and-forgetのため応答を待たない。反映値はonEyeHeightUpdateで受け取る。 */
+  setEyeHeight(value: number): void {
+    this.send({ type: 'eyeheight.set', value });
   }
 
   async listFolders(): Promise<AvatarFolder[]> {

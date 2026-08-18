@@ -43,6 +43,14 @@ pub enum ClientMessage {
     /// アバターを装着する（REST + OSC を並行送信）。
     #[serde(rename = "avatars.select", rename_all = "camelCase")]
     AvatarsSelect { avatar_id: String },
+    /// アイハイト(EyeHeight)をOSC経由で設定する（#27）。v1スコープは
+    /// 現在値表示+ステップボタンのみで、リセット用のプレハブ身長逆算・
+    /// EyeHeight/ScaleFactor/ScaleModifiedの異時点ペアリングraceは対象外
+    /// （`EyeHeightService`のそれはリセット機能専用のロジックのため）。
+    /// fire-and-forgetで送信結果は返さず、実際に反映された値は
+    /// `EyeHeightUpdate` broadcastで受け取る。
+    #[serde(rename = "eyeheight.set", rename_all = "camelCase")]
+    EyeHeightSet { value: f32 },
 }
 
 /// Rust core → WS クライアント。overlay-ui (TypeScript) 側が `avatarId` の
@@ -66,6 +74,10 @@ pub enum ServerMessage {
     /// 受信ハンドラから broadcast される。
     #[serde(rename = "avatar-changed", rename_all = "camelCase")]
     AvatarChanged { avatar_id: String },
+    /// VRChat側のEyeHeightAsMeters/eyeheight OSC受信を全クライアントへpushする
+    /// （#27、`AvatarChanged`と同じ仕組み）。
+    #[serde(rename = "eyeheight-update", rename_all = "camelCase")]
+    EyeHeightUpdate { value: f32 },
     #[serde(rename = "error", rename_all = "camelCase")]
     Error { message: String },
 }
@@ -95,5 +107,18 @@ mod tests {
         let json = serde_json::to_string(&server_msg).unwrap();
         assert!(json.contains("\"avatarIds\""), "avatarIdsがcamelCaseでない: {json}");
         assert!(json.contains("\"folders.list-result\""), "typeタグが不正: {json}");
+    }
+
+    #[test]
+    fn eye_height_roundtrip() {
+        let client_json = r#"{"type":"eyeheight.set","value":1.5}"#;
+        match serde_json::from_str::<ClientMessage>(client_json) {
+            Ok(ClientMessage::EyeHeightSet { value }) => assert_eq!(value, 1.5),
+            other => panic!("デシリアライズ失敗: {other:?}"),
+        }
+
+        let json = serde_json::to_string(&ServerMessage::EyeHeightUpdate { value: 1.5 }).unwrap();
+        assert!(json.contains("\"eyeheight-update\""), "typeタグが不正: {json}");
+        assert!(json.contains("\"value\":1.5"), "valueフィールドが不正: {json}");
     }
 }

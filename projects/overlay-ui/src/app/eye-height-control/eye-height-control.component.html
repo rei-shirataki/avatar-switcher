@@ -1,0 +1,12 @@
+<div class="height-bar">
+  <span class="height-bar__label">身長</span>
+  <span class="height-bar__value">
+    {{ eyeHeight.value() !== null ? (eyeHeight.value()! | number: '1.2-2') + 'm' : '—' }}
+  </span>
+  <div class="height-bar__steps">
+    <button type="button" (click)="eyeHeight.step(-0.1)">-0.1</button>
+    <button type="button" (click)="eyeHeight.step(-0.01)">-0.01</button>
+    <button type="button" (click)="eyeHeight.step(0.01)">+0.01</button>
+    <button type="button" (click)="eyeHeight.step(0.1)">+0.1</button>
+  </div>
+</div>

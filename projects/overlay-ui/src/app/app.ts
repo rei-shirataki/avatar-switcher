@@ -3,10 +3,11 @@ import { OverlayBridgeService } from './overlay-bridge.service';
 import { OverlayAvatarService } from './overlay-avatar.service';
 import { AvatarGridComponent } from './avatar-grid/avatar-grid.component';
 import { FolderTabsComponent } from './folder-tabs/folder-tabs.component';
+import { EyeHeightControlComponent } from './eye-height-control/eye-height-control.component';
 
 @Component({
   selector: 'app-root',
-  imports: [AvatarGridComponent, FolderTabsComponent],
+  imports: [AvatarGridComponent, FolderTabsComponent, EyeHeightControlComponent],
   templateUrl: './app.html',
   styleUrl: './app.scss',
 })

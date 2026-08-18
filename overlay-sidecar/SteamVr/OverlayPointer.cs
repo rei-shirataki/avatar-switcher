@@ -250,6 +250,39 @@ internal sealed class OverlayPointer : IDisposable
         browser.GetBrowser().GetHost().SendMouseClickEvent(x, y, MouseButtonType.Left, mouseUp: !pressed, clickCount: 1, CefEventFlags.None);
     }
 
+    /// <summary>
+    /// #22: スティック/トラックパッドのY軸値を、現在ポインタが指しているUV座標位置への
+    /// CEFホイールイベントに変換する。<see cref="ScrollPixelsPerUnit"/>は初期値の見込みで、
+    /// 実機での操作感次第で調整が必要。スティック上方向(y&gt;0)を「上へスクロール」
+    /// （コンテンツが下に動き、上側が見える）に対応させている。逆に感じる場合は
+    /// 符号を反転する。
+    /// </summary>
+    private const int ScrollPixelsPerUnit = 30;
+
+    public void Scroll(ETrackedControllerRole role, float deltaY)
+    {
+        var pointer = role switch
+        {
+            ETrackedControllerRole.LeftHand => _left,
+            ETrackedControllerRole.RightHand => _right,
+            _ => null,
+        };
+        if (pointer == null) return;
+
+        Vector2? uv;
+        lock (pointer)
+        {
+            uv = pointer.LastUv;
+        }
+
+        var browser = _target?.Browser;
+        if (browser == null || uv == null) return;
+
+        var (x, y) = ToBrowserPixels(uv.Value, browser);
+        var wheelDeltaY = (int)(deltaY * ScrollPixelsPerUnit);
+        browser.GetBrowser().GetHost().SendMouseWheelEvent(x, y, 0, wheelDeltaY, CefEventFlags.None);
+    }
+
     public void Dispose()
     {
         if (_disposed) return;

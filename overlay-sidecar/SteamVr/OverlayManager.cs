@@ -34,8 +34,10 @@ internal sealed class OverlayManager
     private ulong _toggleActionSetHandle;
     private ulong _overlayInteractActionHandle;
     private ulong _openOverlayActionHandle;
+    private ulong _scrollActionHandle;
     private DateTime _lastOpenOverlayPress = DateTime.MinValue;
     private static readonly TimeSpan OpenOverlayDoublePressWindow = TimeSpan.FromMilliseconds(400);
+    private const float ScrollDeadzone = 0.15f;
 
     public OverlayManager(WsBridgeClient bridge, int? uiPort, CancellationToken shutdownToken)
     {
@@ -73,6 +75,7 @@ internal sealed class OverlayManager
             UpdateActionSets();
             DetectOverlayInteract();
             DetectOpenOverlayToggle();
+            DetectScroll();
 
             while (OpenVR.System.PollNextEvent(ref e, (uint)Marshal.SizeOf(e)))
             {
@@ -153,6 +156,17 @@ internal sealed class OverlayManager
 
             _actionSetHandle = actionSetHandle;
             _overlayInteractActionHandle = actionHandle;
+
+            // #22: 右スティック(Vive Wandはトラックパッド)上下でのスクロール。トリガーと同じく
+            // /actions/main(hidden)に属するアナログアクションで、ユーザーはバインド変更不可。
+            // requirement: suggestedのため未バインドでもハンドル自体は取得できる想定。
+            ulong scrollActionHandle = 0;
+            input.GetActionHandle("/actions/main/in/Scroll", ref scrollActionHandle);
+            if (scrollActionHandle == 0)
+            {
+                Console.Error.WriteLine("[steamvr] Scroll action handle の取得に失敗しました（スクロールは無効化されます）");
+            }
+            _scrollActionHandle = scrollActionHandle;
 
             // トリガーの/actions/mainとは別に、表示切替は/actions/toggleというusage: leftrightの
             // アクションセットに分けている（#21フォローアップ）。usageはアクション単位ではなく
@@ -290,6 +304,24 @@ internal sealed class OverlayManager
         {
             _lastOpenOverlayPress = now;
         }
+    }
+
+    /// <summary>
+    /// #22: `/actions/main/in/Scroll`（右スティック/トラックパッドのY軸）を読み取り、
+    /// デッドゾーン超過分を<see cref="OverlayPointer.Scroll"/>経由でCEFのホイールイベントに変換する。
+    /// 右手にのみバインドしているため、role固定でよい（左手分の判定は不要）。
+    /// </summary>
+    private void DetectScroll()
+    {
+        if (_scrollActionHandle == 0) return;
+
+        var analogData = new InputAnalogActionData_t();
+        var dataError = OpenVR.Input.GetAnalogActionData(_scrollActionHandle, ref analogData,
+            (uint)Marshal.SizeOf<InputAnalogActionData_t>(), OpenVR.k_ulInvalidInputValueHandle);
+        if (dataError != EVRInputError.None || !analogData.bActive) return;
+        if (Math.Abs(analogData.y) < ScrollDeadzone) return;
+
+        _pointer?.Scroll(ETrackedControllerRole.RightHand, analogData.y);
     }
 
     /// <summary>アクション取得系の失敗はバインド未設定など頻発しうるので1回目だけ出す。</summary>

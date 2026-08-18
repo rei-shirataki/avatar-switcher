@@ -34,6 +34,15 @@
               "output": "/actions/main/in/overlayinteract"
             }
           }
+        },
+        {
+          "path": "/user/hand/right/input/trackpad",
+          "mode": "trackpad",
+          "inputs": {
+            "position": {
+              "output": "/actions/main/in/scroll"
+            }
+          }
         }
       ]
     },

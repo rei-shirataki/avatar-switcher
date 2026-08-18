@@ -17,27 +17,27 @@
   ],
   "actions": [
     {
-      "name": "/actions/main/in/OverlayInteract",
+      "name": "/actions/hidden/in/OverlayInteract",
       "requirement": "mandatory",
       "type": "boolean"
     }
   ],
   "action_sets": [
     {
-      "name": "/actions/main",
-      "usage": "leftright"
+      "name": "/actions/hidden",
+      "usage": "hidden"
     }
   ],
   "localization": [
     {
       "language_tag": "en_us",
-      "/actions/main": "AvatarSwitcher Actions",
-      "/actions/main/in/OverlayInteract": "Overlay Interact"
+      "/actions/hidden": "AvatarSwitcher Hidden Actions",
+      "/actions/hidden/in/OverlayInteract": "Overlay Interact"
     },
     {
       "language_tag": "ja_jp",
-      "/actions/main": "AvatarSwitcher 操作",
-      "/actions/main/in/OverlayInteract": "オーバーレイ操作"
+      "/actions/hidden": "AvatarSwitcher 内部アクション",
+      "/actions/hidden/in/OverlayInteract": "オーバーレイ操作"
     }
   ]
 }

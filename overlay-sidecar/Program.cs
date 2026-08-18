@@ -83,7 +83,7 @@ internal static class Program
         // (github.com/Raphiiko/OyasumiVR, issue #168/#166/#165)
         var cacheRoot = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "com.rei0932.avatar-switcher", "overlay-cef-cache");
+            "com.rei-shirataki.avatar-switcher", "overlay-cef-cache");
         settings.RootCachePath = Path.Combine(cacheRoot, Environment.ProcessId.ToString());
         settings.CachePath = "";
         settings.PersistSessionCookies = false;

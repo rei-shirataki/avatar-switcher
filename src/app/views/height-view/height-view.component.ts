@@ -3,8 +3,6 @@ import { FormsModule } from '@angular/forms';
 import {
   EyeHeightService,
   EYE_HEIGHT_DEFAULT,
-  EYE_HEIGHT_MAX,
-  EYE_HEIGHT_MIN,
 } from '../../core/services/eye-height.service';
 import { coerceFiniteNumber } from '../../core/utils/number.util';
 
@@ -58,9 +56,10 @@ interface Preset {
             <span class="unit">m</span>
             <button
               class="btn-reset"
+              [disabled]="eyeHeight.fetchingDefault()"
               (click)="reset()"
               title="アバター本来の身長に戻す（取得できなければ 1.6m）"
-            >リセット</button>
+            >{{ eyeHeight.fetchingDefault() ? '取得中…' : 'リセット' }}</button>
           </div>
 
           <div class="step-grid">
@@ -116,6 +115,9 @@ interface Preset {
       @if (eyeHeight.lastError(); as err) {
         <div class="error-box">{{ err }}</div>
       }
+      @if (eyeHeight.scalingAllowed() === false) {
+        <div class="warning-box">このワールドでは身長変更が許可されていないため、VRChat側で反映されない可能性があります</div>
+      }
 
       @if (contextMenu(); as menu) {
         <div class="ctx-menu" [style.left.px]="menu.x" [style.top.px]="menu.y" (click)="$event.stopPropagation()">
@@ -158,8 +160,8 @@ interface Preset {
                 <input
                   type="number"
                   class="dialog-input dialog-input--value"
-                  [min]="minValue"
-                  [max]="maxValue"
+                  [min]="minValue()"
+                  [max]="maxValue()"
                   step="0.01"
                   [ngModel]="draftValue()"
                   (ngModelChange)="draftValue.set($event)"
@@ -167,7 +169,7 @@ interface Preset {
                 />
                 <span class="unit">m</span>
               </div>
-              <span class="dialog-hint">{{ minValue }} 〜 {{ maxValue }} m</span>
+              <span class="dialog-hint">{{ minValue() }} 〜 {{ maxValue() }} m</span>
             </label>
 
             @if (dialogError()) {
@@ -300,6 +302,11 @@ interface Preset {
       white-space: nowrap;
     }
     .btn-reset:hover { background: var(--color-surface-1); }
+    .btn-reset:disabled {
+      opacity: 0.6;
+      cursor: default;
+    }
+    .btn-reset:disabled:hover { background: var(--color-surface-3); }
 
     .step-grid {
       display: grid;
@@ -412,6 +419,15 @@ interface Preset {
       border-radius: var(--radius-md);
       font-size: 12px;
       color: var(--color-error);
+    }
+
+    .warning-box {
+      padding: 12px 16px;
+      background: rgba(230, 162, 60, 0.08);
+      border: 1px solid rgba(230, 162, 60, 0.25);
+      border-radius: var(--radius-md);
+      font-size: 12px;
+      color: var(--color-warning);
     }
 
     /* ---- Custom modal dialog ---- */
@@ -558,8 +574,10 @@ interface Preset {
 export class HeightViewComponent implements OnInit {
   readonly presets = signal<Preset[]>([]);
   readonly steps = STEPS;
-  readonly minValue = EYE_HEIGHT_MIN;
-  readonly maxValue = EYE_HEIGHT_MAX;
+  /** ワールド(Udon)が `/avatar/eyeheightmin` / `max` を公開していればそれを、
+   *  なければアプリのデフォルト範囲を表示に使う。 */
+  readonly minValue = computed(() => this.eyeHeight.worldMinHeight());
+  readonly maxValue = computed(() => this.eyeHeight.worldMaxHeight());
   /** 入力欄表示用：常に 2 桁固定。
    *  スムーズ補間中は中間値ではなく目標値（target）を表示することで、
    *  「これからどこへ動くか」がユーザに明確に伝わるようにする。 */
@@ -597,8 +615,9 @@ export class HeightViewComponent implements OnInit {
     this.eyeHeight.adjust(delta);
   }
 
-  reset(): void {
-    this.eyeHeight.setValue(this.eyeHeight.getAvatarDefault());
+  async reset(): Promise<void> {
+    const target = await this.eyeHeight.getAvatarDefault();
+    await this.eyeHeight.setValue(target);
   }
 
   applyPreset(preset: Preset): void {
@@ -686,8 +705,8 @@ export class HeightViewComponent implements OnInit {
       this.dialogError.set('身長は数値で入力してください');
       return;
     }
-    if (value < this.minValue || value > this.maxValue) {
-      this.dialogError.set(`身長は ${this.minValue} 〜 ${this.maxValue} m の範囲で指定してください`);
+    if (value < this.minValue() || value > this.maxValue()) {
+      this.dialogError.set(`身長は ${this.minValue()} 〜 ${this.maxValue()} m の範囲で指定してください`);
       return;
     }
     const editId = this.editingPresetId();

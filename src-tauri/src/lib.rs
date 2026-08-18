@@ -11,6 +11,9 @@ use tauri::{
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // OSC/OSCQuery の再接続調査用。RUST_LOG 未設定時は info レベルで出す。
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
+
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_store::Builder::new().build())
@@ -126,6 +129,7 @@ pub fn run() {
             // OSC
             osc::commands::osc_change_avatar,
             osc::commands::osc_set_avatar_eye_height,
+            osc::commands::osc_query_avatar_scale_snapshot,
             osc::commands::osc_get_status,
             // Storage (folders)
             storage::commands::folders_get_all,

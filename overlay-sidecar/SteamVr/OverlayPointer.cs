@@ -31,8 +31,8 @@ internal sealed class OverlayPointer : IDisposable
 
     public OverlayPointer()
     {
-        SetUpPointerOverlay(_left, "com.rei0932.avatar-switcher:PointerLeft", "AvatarSwitcher Left Pointer");
-        SetUpPointerOverlay(_right, "com.rei0932.avatar-switcher:PointerRight", "AvatarSwitcher Right Pointer");
+        SetUpPointerOverlay(_left, "com.rei-shirataki.avatar-switcher:PointerLeft", "AvatarSwitcher Left Pointer");
+        SetUpPointerOverlay(_right, "com.rei-shirataki.avatar-switcher:PointerRight", "AvatarSwitcher Right Pointer");
     }
 
     public void SetTarget(AvatarPanelOverlay? overlay)

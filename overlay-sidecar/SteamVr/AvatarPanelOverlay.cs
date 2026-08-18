@@ -19,7 +19,7 @@ namespace AvatarSwitcher.OverlaySidecar.SteamVr;
 /// </summary>
 internal sealed class AvatarPanelOverlay : IDisposable
 {
-    private const string OverlayKey = "com.rei0932.avatar-switcher:AvatarPanel";
+    private const string OverlayKey = "com.rei-shirataki.avatar-switcher:AvatarPanel";
     private const string OverlayName = "AvatarSwitcher Panel";
     private const uint Resolution = 1024;
     private const float WidthMeters = 0.45f;

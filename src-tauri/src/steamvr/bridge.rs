@@ -196,6 +196,20 @@ async fn handle_message(app: &AppHandle, text: &str) -> Option<ServerMessage> {
             }
             None
         }
+        Ok(ClientMessage::UiStateGet) => {
+            let state = storage::commands::load_overlay_ui_state(app);
+            Some(ServerMessage::UiStateGetResult {
+                sort_mode: state.sort_mode,
+                selected_folder_id: state.selected_folder_id,
+            })
+        }
+        Ok(ClientMessage::UiStateSet { sort_mode, selected_folder_id }) => {
+            storage::commands::save_overlay_ui_state(
+                app,
+                &storage::OverlayUiState { sort_mode, selected_folder_id },
+            );
+            None
+        }
         Err(e) => {
             log::warn!("[steamvr] 不正なメッセージを受信: {} ({})", e, text);
             Some(ServerMessage::Error {

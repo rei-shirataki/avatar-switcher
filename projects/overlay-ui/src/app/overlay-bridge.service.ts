@@ -12,12 +12,19 @@ export interface AvatarsListResult {
   uploadedIds: string[];
 }
 
+/** ui-state.get-result の応答。ソートモード・選択中タブの永続化状態（詳細は setUiState 参照）。 */
+export interface UiState {
+  sortMode: string;
+  selectedFolderId: string | null;
+}
+
 type ServerMessage =
   | ({ type: 'avatars.list-result' } & AvatarsListResult)
   | { type: 'avatars.select-result'; avatarId: string }
   | { type: 'avatar-changed'; avatarId: string }
   | { type: 'folders.list-result'; folders: AvatarFolder[] }
   | { type: 'eyeheight-update'; value: number }
+  | ({ type: 'ui-state.get-result' } & UiState)
   | { type: 'error'; message: string };
 
 /**
@@ -123,6 +130,23 @@ export class OverlayBridgeService {
    */
   queryEyeHeight(): void {
     this.send({ type: 'eyeheight.query' });
+  }
+
+  /**
+   * 接続直後の初回同期用。overlay-sidecarはCEFプロセスごとに新しいキャッシュ
+   * ディレクトリを使う(`Program.cs::InitCef`)ため、ブラウザのlocalStorageは
+   * 再起動をまたいで永続化できない。Rust側に保存された値を取得する。
+   */
+  async getUiState(): Promise<UiState> {
+    this.send({ type: 'ui-state.get' });
+    const reply = await this.waitForOneOf(['ui-state.get-result', 'error']);
+    if (reply.type === 'error') throw new Error(reply.message);
+    return reply;
+  }
+
+  /** ソート/タブ切り替えのたびに送る。fire-and-forgetのため応答を待たない（setEyeHeightと同じ方針）。 */
+  setUiState(state: UiState): void {
+    this.send({ type: 'ui-state.set', ...state });
   }
 
   async listFolders(): Promise<AvatarFolder[]> {

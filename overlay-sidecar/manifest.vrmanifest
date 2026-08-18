@@ -1,0 +1,18 @@
+{
+  "source": "builtin",
+  "applications": [
+    {
+      "app_key": "com.rei-shirataki.avatar-switcher.overlay",
+      "launch_type": "binary",
+      "binary_path_windows": "overlay-sidecar.exe",
+      "action_manifest_path": "input\\action_manifest.json",
+      "is_dashboard_overlay": false,
+      "strings": {
+        "en_us": {
+          "name": "AvatarSwitcher",
+          "description": "AvatarSwitcher VR Overlay"
+        }
+      }
+    }
+  ]
+}

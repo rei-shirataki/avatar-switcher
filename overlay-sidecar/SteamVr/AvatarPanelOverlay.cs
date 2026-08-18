@@ -53,10 +53,17 @@ internal sealed class AvatarPanelOverlay : IDisposable
         OpenVR.Overlay.SetOverlayWidthInMeters(_overlayHandle, WidthMeters);
 
         _texture = await _d3D.CreateCpuWritableTextureAsync(Resolution);
-        _browser = new OffscreenBrowser("about:blank", Resolution, Resolution);
+
+        // ブラウザ生成後に別途 LoadHtml() を呼ぶ実装だと、CefSharp側のネイティブ
+        // ブラウザ初期化が非同期のため LoadHtml が初期化完了前に呼ばれて静かに
+        // 無視されるレースになる（実機確認で発生：当たり判定は効くのに
+        // ページ内容が一切表示されない）。参照実装(OyasumiVR BrowserManager.GetBrowser)
+        // に倣い、コンストラクタの address に直接コンテンツを渡して最初のナビゲーション
+        // として読み込ませる。
+        var dataUri = "data:text/html;base64," + Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(TestPage.Html));
+        _browser = new OffscreenBrowser(dataUri, Resolution, Resolution);
         LogBrowserEvents(_browser);
         _browser.SetTextureTarget(_texture);
-        _browser.LoadHtml(TestPage.Html);
 
         PlaceInFrontOfHead();
         OpenVR.Overlay.ShowOverlay(_overlayHandle);

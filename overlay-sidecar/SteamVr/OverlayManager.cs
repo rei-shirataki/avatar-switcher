@@ -82,6 +82,8 @@ internal sealed class OverlayManager
         Deactivate();
     }
 
+    private bool _warnedVrInitFailure;
+
     private bool TryActivate()
     {
         try
@@ -90,8 +92,17 @@ internal sealed class OverlayManager
             var system = OpenVR.Init(ref error, EVRApplicationType.VRApplication_Background);
             if (error != EVRInitError.None || system == null)
             {
+                // SteamVR未起動時は常に失敗し続けるため、ログを1回だけ出す
+                // （3秒間隔で無限に出続けるとログファイルが埋もれるため）。
+                if (!_warnedVrInitFailure)
+                {
+                    Console.WriteLine($"[steamvr] SteamVRに接続できません（{error}）。SteamVR起動を待機します。");
+                    _warnedVrInitFailure = true;
+                }
                 return false;
             }
+
+            _warnedVrInitFailure = false;
 
             var input = OpenVR.Input;
             if (input == null || OpenVR.Overlay == null)

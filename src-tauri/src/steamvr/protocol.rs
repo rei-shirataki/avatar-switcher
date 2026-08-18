@@ -48,8 +48,12 @@ pub enum ClientMessage {
 pub enum ServerMessage {
     #[serde(rename = "avatars.list-result", rename_all = "camelCase")]
     AvatarsListResult { avatars: Vec<VRCAvatar> },
+    /// VRChatの装着APIは「更新後のアバター情報」ではなくユーザープロフィールを
+    /// 返す実装のため（`vrchat::avatars::select_avatar`のコメント参照）、
+    /// avatar情報は積めない。クライアント側は要求時に渡したavatar_idを
+    /// 既に知っているので、成功可否の通知のみで十分。
     #[serde(rename = "avatars.select-result", rename_all = "camelCase")]
-    AvatarsSelectResult { avatar: VRCAvatar },
+    AvatarsSelectResult { avatar_id: String },
     /// VRChat 側でアバターが切り替わったこと（自分の操作/他端末経由問わず）を
     /// 接続中の全クライアントへ push する。`osc/mod.rs` の `/avatar/change`
     /// 受信ハンドラから broadcast される。

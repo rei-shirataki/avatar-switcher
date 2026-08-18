@@ -38,8 +38,8 @@ export class OverlayAvatarService {
   async switchAvatar(avatarId: string): Promise<void> {
     this._switching.set(avatarId);
     try {
-      const avatar = await this.bridge.selectAvatar(avatarId);
-      this._currentAvatarId.set(avatar.id);
+      await this.bridge.selectAvatar(avatarId);
+      this._currentAvatarId.set(avatarId);
     } finally {
       this._switching.set(null);
     }

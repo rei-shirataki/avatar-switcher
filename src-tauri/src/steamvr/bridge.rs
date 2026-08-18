@@ -220,9 +220,11 @@ async fn handle_avatars_select(avatar_id: &str) -> ServerMessage {
         log::warn!("[steamvr] OSC送信失敗: {}", e);
     }
     match vrchat::avatars::select_avatar(avatar_id).await {
-        Ok(avatar) => {
-            log::info!("[steamvr] avatars.select 成功: avatar_id={}", avatar.id);
-            ServerMessage::AvatarsSelectResult { avatar }
+        Ok(()) => {
+            log::info!("[steamvr] avatars.select 成功: avatar_id={}", avatar_id);
+            ServerMessage::AvatarsSelectResult {
+                avatar_id: avatar_id.to_string(),
+            }
         }
         Err(e) => {
             log::warn!("[steamvr] avatars.select 失敗: {}", e);

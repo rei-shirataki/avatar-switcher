@@ -1,6 +1,9 @@
 import { Injectable, signal } from '@angular/core';
-import { Subject, firstValueFrom, filter } from 'rxjs';
+import { Subject, firstValueFrom, filter, timeout } from 'rxjs';
 import { VRCAvatar } from './core/models/avatar.model';
+
+/** Rust core からの応答が返ってこない異常系（送信ドロップ等）を無限待ちさせないための上限。 */
+const REQUEST_TIMEOUT_MS = 10_000;
 
 type ServerMessage =
   | { type: 'avatars.list-result'; avatars: VRCAvatar[] }
@@ -20,39 +23,55 @@ export class OverlayBridgeService {
   private readonly messages$ = new Subject<ServerMessage>();
   readonly connected = signal(false);
 
-  connect(): void {
+  /**
+   * WebSocket接続 + hello送信が完了するまで待つ。呼び出し側 (app.ts) は
+   * このPromiseの解決を待ってから listAvatars() 等を呼ぶこと。
+   * onopen直後は非同期でOPEN状態になるだけで即座に送信可能になるとは限らない
+   * ため、接続前に listAvatars() 等を呼ぶとメッセージが送信スキップされ、
+   * 応答を待つPromiseが解決しないまま止まってしまう。
+   */
+  connect(): Promise<void> {
     const params = new URLSearchParams(window.location.search);
     const port = params.get('port');
     const token = params.get('token');
     if (!port || !token) {
       console.error('[overlay-bridge] URLクエリに port/token がありません');
-      return;
+      return Promise.reject(new Error('port/token missing'));
     }
-    this.openSocket(port, token);
+    return this.openSocket(port, token);
   }
 
-  private openSocket(port: string, token: string): void {
-    const ws = new WebSocket(`ws://127.0.0.1:${port}`);
-    this.ws = ws;
+  private openSocket(port: string, token: string): Promise<void> {
+    return new Promise((resolve) => {
+      const ws = new WebSocket(`ws://127.0.0.1:${port}`);
+      this.ws = ws;
+      let resolved = false;
 
-    ws.onopen = () => {
-      this.connected.set(true);
-      ws.send(JSON.stringify({ type: 'sidecar.hello', pid: 0, token }));
-    };
-    ws.onmessage = (ev) => {
-      try {
-        this.messages$.next(JSON.parse(ev.data) as ServerMessage);
-      } catch (e) {
-        console.warn('[overlay-bridge] 不正なメッセージを受信:', ev.data, e);
-      }
-    };
-    ws.onclose = () => {
-      this.connected.set(false);
-      // サイドカー再起動直後の一時的な切断を想定した簡易リトライ。
-      // 恒久的にサイドカーが消えた場合はページごと作り直されるため無限リトライで問題ない。
-      setTimeout(() => this.openSocket(port, token), 2000);
-    };
-    ws.onerror = () => ws.close();
+      ws.onopen = () => {
+        this.connected.set(true);
+        // hello はトークン認証を兼ねるため、Rust側は接続後最初のメッセージが
+        // hello でないと即切断する。他の送信より必ず先に届く必要がある。
+        ws.send(JSON.stringify({ type: 'sidecar.hello', pid: 0, token }));
+        if (!resolved) {
+          resolved = true;
+          resolve();
+        }
+      };
+      ws.onmessage = (ev) => {
+        try {
+          this.messages$.next(JSON.parse(ev.data) as ServerMessage);
+        } catch (e) {
+          console.warn('[overlay-bridge] 不正なメッセージを受信:', ev.data, e);
+        }
+      };
+      ws.onclose = () => {
+        this.connected.set(false);
+        // サイドカー再起動直後の一時的な切断を想定した簡易リトライ。
+        // 恒久的にサイドカーが消えた場合はページごと作り直されるため無限リトライで問題ない。
+        setTimeout(() => this.openSocket(port, token), 2000);
+      };
+      ws.onerror = () => ws.close();
+    });
   }
 
   private send(message: Record<string, unknown>): void {
@@ -89,6 +108,9 @@ export class OverlayBridgeService {
     return firstValueFrom(
       this.messages$.pipe(
         filter((m): m is Extract<ServerMessage, { type: T }> => (types as string[]).includes(m.type)),
+        // 送信がドロップされた等で応答が永遠に来ない異常系を、無限に読み込み中
+        // のまま固まる代わりにエラーとして表面化させる。
+        timeout(REQUEST_TIMEOUT_MS),
       ),
     );
   }

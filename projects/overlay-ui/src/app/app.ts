@@ -14,8 +14,14 @@ export class App implements OnInit {
   protected readonly avatarService = inject(OverlayAvatarService);
 
   ngOnInit(): void {
-    this.bridge.connect();
-    this.avatarService.refresh().catch((e) => console.error('[overlay-ui] アバター一覧取得に失敗:', e));
+    // 接続完了（helloメッセージ送信済み）を待ってから要求を送る。
+    // connect()の完了を待たずに refresh() すると、まだ OPEN 状態でない
+    // WebSocket への送信が黙ってスキップされ、応答を待つPromiseが
+    // 永遠に解決しないまま「読み込み中…」に固まってしまう。
+    this.bridge
+      .connect()
+      .then(() => this.avatarService.refresh())
+      .catch((e) => console.error('[overlay-ui] 初期化に失敗:', e));
   }
 
   onSelect(avatarId: string): void {

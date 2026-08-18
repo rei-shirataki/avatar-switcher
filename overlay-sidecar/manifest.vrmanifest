@@ -2,7 +2,7 @@
   "source": "builtin",
   "applications": [
     {
-      "app_key": "com.rei-shirataki.avatar-switcher.overlay2",
+      "app_key": "com.rei-shirataki.avatar-switcher.overlay",
       "launch_type": "binary",
       "binary_path_windows": "overlay-sidecar.exe",
       "action_manifest_path": "input\\action_manifest.json",

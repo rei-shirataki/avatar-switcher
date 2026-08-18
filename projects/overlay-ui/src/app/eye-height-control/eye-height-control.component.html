@@ -30,9 +30,13 @@
     {{ eyeHeight.resetting() ? 'リセット中…' : 'リセット' }}
   </button>
   <div class="height-bar__steps">
-    <button type="button" (click)="eyeHeight.step(-0.1)">-0.1</button>
-    <button type="button" (click)="eyeHeight.step(-0.01)">-0.01</button>
-    <button type="button" (click)="eyeHeight.step(0.01)">+0.01</button>
-    <button type="button" (click)="eyeHeight.step(0.1)">+0.1</button>
+    <!-- 長押しで連続増減できるよう、単発のclickではなくmousedown起点のオートリピート
+         (EyeHeightControlComponent.startRepeat)にしている。mouseup/mouseleave両方で
+         止めるのは、VRコントローラーの精度不足でポインタがボタン外へ逸れたまま
+         離した場合でもリピートが残留しないようにするため。 -->
+    <button type="button" (mousedown)="startRepeat(-0.1)" (mouseup)="stopRepeat()" (mouseleave)="stopRepeat()">-0.1</button>
+    <button type="button" (mousedown)="startRepeat(-0.01)" (mouseup)="stopRepeat()" (mouseleave)="stopRepeat()">-0.01</button>
+    <button type="button" (mousedown)="startRepeat(0.01)" (mouseup)="stopRepeat()" (mouseleave)="stopRepeat()">+0.01</button>
+    <button type="button" (mousedown)="startRepeat(0.1)" (mouseup)="stopRepeat()" (mouseleave)="stopRepeat()">+0.1</button>
   </div>
 </div>

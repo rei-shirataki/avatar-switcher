@@ -1,9 +1,11 @@
 // VRオーバーレイはコントローラーのレイキャストで操作するためマウスより
-// 精度が低い。カードを大きめ・タップ領域広めにしている。
+// 精度が低い。カードを大きめ・タップ領域広め・カード間隔広めにして
+// 隣接カードへの誤タップを減らしている（#23）。auto-fillの列数が
+// 減る分は右スティックスクロール(#22)で補える前提。
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 24px;
   padding: 16px;
   width: 100%;
   box-sizing: border-box;
@@ -16,7 +18,7 @@
   background: #1c1f28;
   border: 2px solid transparent;
   border-radius: 12px;
-  padding: 8px;
+  padding: 12px;
   cursor: pointer;
   color: #f2f2f5;
   font-family: inherit;

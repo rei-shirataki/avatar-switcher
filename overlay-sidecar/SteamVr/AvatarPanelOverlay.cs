@@ -59,10 +59,21 @@ internal sealed class AvatarPanelOverlay : IDisposable
     // #24: 起動直後はオーバーレイを表示しない。ユーザーが必要な時だけ
     // #21のダブルプレスで呼び出す想定。
     private bool _visible;
+    // #37: SteamVR Dashboardが開いている間はパネルを一時的に隠すためのフラグ。
+    // _visible（ユーザーが意図した表示状態）とは独立して持つことで、
+    // Dashboardを閉じた時に元の表示状態へ自動復元できるようにする。
+    private bool _dashboardVisible;
 
     public ulong OverlayHandle => _overlayHandle;
     public OffscreenBrowser? Browser => _browser;
     public bool IsVisible => _visible;
+    /// <summary>
+    /// #37: 実際にOpenVR上でShowOverlay状態になっているか（ユーザー意図の<see cref="IsVisible"/>と
+    /// 異なり、Dashboard表示中は一時的にfalseになる）。<see cref="OverlayPointer"/>はレイキャスト/
+    /// 入力送信の可否をこちらで判定する必要がある（Dashboard操作中に隠れたパネルへ誤ってクリック等が
+    /// 送られるのを防ぐため）。
+    /// </summary>
+    public bool IsShown => _visible && !_dashboardVisible;
 
     public AvatarPanelOverlay(D3D11Context d3D, int wsPort, string wsToken, int? uiPort, PlacementMode placementMode)
     {
@@ -174,6 +185,31 @@ internal sealed class AvatarPanelOverlay : IDisposable
             {
                 PlaceNearHand(role);
             }
+        }
+        ApplyOverlayVisibility();
+    }
+
+    /// <summary>
+    /// #37: SteamVR Dashboardの開閉に合わせてパネルを一時的に隠す/戻す。
+    /// <see cref="OverlayManager"/> の VREvent_DashboardActivated/Deactivated から呼ばれる。
+    /// ユーザーが意図した表示状態(<see cref="_visible"/>)は変更しないため、Dashboardを
+    /// 閉じれば元の表示状態に自動で戻る。
+    /// </summary>
+    public void SetDashboardVisible(bool dashboardVisible)
+    {
+        if (_disposed || _dashboardVisible == dashboardVisible) return;
+        _dashboardVisible = dashboardVisible;
+        ApplyOverlayVisibility();
+    }
+
+    /// <summary>
+    /// 実際のOpenVR表示状態は「ユーザーが意図した表示状態」と「Dashboard起因の
+    /// 一時非表示」の両方から導出する。Dashboard表示中は_visibleの値に関わらず隠す。
+    /// </summary>
+    private void ApplyOverlayVisibility()
+    {
+        if (IsShown)
+        {
             OpenVR.Overlay.ShowOverlay(_overlayHandle);
         }
         else

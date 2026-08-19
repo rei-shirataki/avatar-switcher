@@ -113,7 +113,7 @@ internal sealed class OverlayPointer : IDisposable
 
     private void UpdateForController(ETrackedControllerRole role, PointerState pointer, TrackedDevicePose_t[] poseBuffer)
     {
-        if (_target == null || _target.OverlayHandle == 0 || !_target.IsVisible)
+        if (_target == null || _target.OverlayHandle == 0 || !_target.IsShown)
         {
             Hide(pointer);
             return;

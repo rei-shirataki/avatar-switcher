@@ -69,3 +69,16 @@ src-tauri/                # Tauri (Rust) バックエンド
 ## 推奨 IDE 設定
 
 [VS Code](https://code.visualstudio.com/) + [Tauri](https://marketplace.visualstudio.com/items?itemName=tauri-apps.tauri-vscode) + [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer) + [Angular Language Service](https://marketplace.visualstudio.com/items?itemName=Angular.ng-template)
+
+## ライセンス
+
+このプロジェクトは [MIT License](LICENSE) の下で公開されています。
+
+## サードパーティソフトウェア
+
+SteamVR オーバーレイ機能（`overlay-sidecar/`）は以下の OSS を利用しています。
+
+- [OyasumiVR](https://github.com/Raphiiko/OyasumiVR)（MIT License）: コントローラーポインタ画像（`overlay-sidecar/Resources/pointer.png`）をそのまま使用
+- [OpenVR](https://github.com/ValveSoftware/openvr)（BSD 3-Clause License）: `overlay-sidecar/OpenVR/` にベンダリング
+
+各ライセンス全文はアプリ内の「設定 > ライセンス」からも確認できます。

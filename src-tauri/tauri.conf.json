@@ -6,7 +6,7 @@
   "build": {
     "beforeDevCommand": "npm run start",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "npm run build",
+    "beforeBuildCommand": "npm run build && npx ng build overlay-ui",
     "frontendDist": "../dist/avatar-switcher/browser"
   },
   "app": {
@@ -40,6 +40,9 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
+    "resources": {
+      "../dist/overlay-ui/browser": "overlay-ui"
+    },
     "windows": {
       "nsis": {
         "displayLanguageSelector": false,

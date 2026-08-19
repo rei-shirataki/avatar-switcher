@@ -11,9 +11,9 @@ jobs:
     runs-on: windows-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -21,11 +21,17 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
-      - name: Type check
+      - name: Type check (avatar-switcher)
         run: npx tsc --noEmit -p tsconfig.app.json
 
-      - name: Build frontend (Angular)
+      - name: Type check (overlay-ui)
+        run: npx tsc --noEmit -p projects/overlay-ui/tsconfig.app.json
+
+      - name: Build frontend (avatar-switcher)
         run: npm run build
+
+      - name: Build frontend (overlay-ui)
+        run: npx ng build overlay-ui
 
       - uses: dtolnay/rust-toolchain@stable
         with:

@@ -13,7 +13,7 @@ async fn resp_json(resp: reqwest::Response, context: &str) -> Result<serde_json:
         let msg = if text.is_empty() {
             format!("{} に失敗しました: {}", context, status)
         } else {
-            format!("{} に失敗しました: {} - {}", context, status, text)
+            format!("{} に失敗しました: {} - {}", context, status, truncate_for_log(&text, 500))
         };
         return Err(anyhow!(msg));
     }

@@ -10,6 +10,7 @@ use reqwest::Client;
 use reqwest_cookie_store::{CookieStore, CookieStoreMutex};
 use std::path::PathBuf;
 use std::sync::Arc;
+use crate::vrchat::cache::atomic_write;
 use crate::vrchat::models::*;
 
 pub const VRCHAT_API: &str = "https://api.vrchat.cloud/api/1";
@@ -322,7 +323,7 @@ fn persist_cookies() {
             .map(|dec| dec == buf)
             .unwrap_or(false);
 
-        if round_trip_ok && std::fs::write(enc_path, &encrypted).is_ok() {
+        if round_trip_ok && atomic_write(enc_path, &encrypted).is_ok() {
             // Encrypted file confirmed good: it is now safe to remove
             // the plaintext backup (if any).
             std::fs::remove_file(&plain_path).ok();
@@ -331,7 +332,7 @@ fn persist_cookies() {
     }
 
     // Encryption unavailable or round-trip failed: persist as plain JSON.
-    std::fs::write(&plain_path, &buf).ok();
+    atomic_write(&plain_path, &buf).ok();
 }
 
 // ── Initialisation ────────────────────────────────────────────────────────────

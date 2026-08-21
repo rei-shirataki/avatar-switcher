@@ -60,8 +60,11 @@ fn load_from(name: &str) -> Vec<VRCAvatar> {
 /// `path` に対して `bytes` をアトミックに書き込む。
 /// 同じディレクトリの一時ファイルに書いてから rename することで、
 /// 書き込み途中のクラッシュでも本体ファイルが破損しない。
-fn atomic_write(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
-    let tmp = path.with_extension("json.tmp");
+/// `vrchat::auth` の Cookie 永続化からも共有して使う（`pub(crate)`）。
+pub(crate) fn atomic_write(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
+    let mut tmp = path.as_os_str().to_os_string();
+    tmp.push(".tmp");
+    let tmp = PathBuf::from(tmp);
     std::fs::write(&tmp, bytes)?;
     // Windows では rename だけでは上書きできない場合があるため、
     // 本体が既存なら std::fs::rename の代わりに削除→rename とする。

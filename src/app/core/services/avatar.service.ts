@@ -58,22 +58,39 @@ export class AvatarService {
    *  Date.now() - 0 が常に TTL 超過扱いになり二重ロードしてしまうので、
    *  明示フラグでガードする。 */
   private _inFlight = false;
-  private _unlistenAvatarChange: UnlistenFn | null = null;
+  private readonly unlisteners: UnlistenFn[] = [];
+  /** onDestroy 済みか。listen() の Promise 解決が onDestroy より後になった場合、
+   *  unlisteners への push ではなく即座に unlisten してリークを防ぐために参照する。 */
+  private destroyed = false;
 
   constructor(private tauri: TauriService, private auth: VRChatAuthService) {
     // VRChat 側でアバターが切り替わったら（クイックメニュー操作・別端末経由など）
     // サイドバーの装着中アバター画像を即時更新する。avatars / favorites リストに
     // 未ロードの ID が来た場合は何もしない（次回 refresh で同期される）。
-    listen<string>('osc:avatar-change', e => this.applyExternalAvatarChange(e.payload))
-      .then(un => { this._unlistenAvatarChange = un; })
-      .catch(err => {
-        console.warn('osc:avatar-change の購読に失敗しました:', err);
-      });
+    this.registerListener(
+      listen<string>('osc:avatar-change', e => this.applyExternalAvatarChange(e.payload)),
+      err => console.warn('osc:avatar-change の購読に失敗しました:', err),
+    );
 
     inject(DestroyRef).onDestroy(() => {
-      this._unlistenAvatarChange?.();
-      this._unlistenAvatarChange = null;
+      this.destroyed = true;
+      for (const un of this.unlisteners.splice(0)) un();
     });
+  }
+
+  /** listen() の Promise を登録し、解決した unlisten を保持する。
+   *  onDestroy が Promise 解決より先に発火した場合（HMR 等）は push せず即座に
+   *  unlisten を呼び、リスナーリークを防ぐ。 */
+  private registerListener(pending: Promise<UnlistenFn>, onError?: (err: unknown) => void): void {
+    pending
+      .then(un => {
+        if (this.destroyed) {
+          un();
+          return;
+        }
+        this.unlisteners.push(un);
+      })
+      .catch(err => onError?.(err));
   }
 
   private applyExternalAvatarChange(avatarId: unknown): void {

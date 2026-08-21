@@ -10,6 +10,12 @@ use tokio::net::UdpSocket as TokioUdpSocket;
 
 const DEFAULT_OSC_HOST: &str = "127.0.0.1";
 
+/// アイハイトの許容範囲。呼び出し元(TSクライアント)側でも事前クランプしているが、
+/// IPC境界(Tauriコマンド・SteamVR WSブリッジ)のどちらから来た値でも VRChat へ
+/// 不正な範囲の値が渡らないよう、送信の最終防衛ラインとしてここでもクランプする。
+const EYE_HEIGHT_MIN: f32 = 0.2;
+const EYE_HEIGHT_MAX: f32 = 5.0;
+
 /// VRChat → 本アプリへの OSC で受け取る現在のアイハイト(m)。
 /// VRChat 公式の Built-in パラメータと Avatar Scaling 専用エンドポイントの両方を
 /// 購読する。どちらが先に来るかは VRChat のバージョン・設定により異なる。
@@ -89,7 +95,11 @@ pub fn send_avatar_change(avatar_id: &str) -> anyhow::Result<()> {
 /// VRChat の `/avatar/eyeheight` に Float 値（メートル）を送信する。
 /// VRChat 側で Avatar Scaling 機能が有効な場合に視点の高さに反映される。
 pub fn send_avatar_eye_height(value: f32) -> anyhow::Result<()> {
-    send_float(OSC_ADDR_EYE_HEIGHT_DIRECT, value)
+    if !value.is_finite() {
+        return Err(anyhow::anyhow!("値が不正です (NaN/Infinity)"));
+    }
+    let clamped = value.clamp(EYE_HEIGHT_MIN, EYE_HEIGHT_MAX);
+    send_float(OSC_ADDR_EYE_HEIGHT_DIRECT, clamped)
 }
 
 fn send_float(addr: &str, value: f32) -> anyhow::Result<()> {

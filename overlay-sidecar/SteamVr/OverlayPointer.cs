@@ -113,7 +113,7 @@ internal sealed class OverlayPointer : IDisposable
 
     private void UpdateForController(ETrackedControllerRole role, PointerState pointer, TrackedDevicePose_t[] poseBuffer)
     {
-        if (_target == null || _target.OverlayHandle == 0 || !_target.IsVisible)
+        if (_target == null || _target.OverlayHandle == 0 || !_target.IsShown)
         {
             Hide(pointer);
             return;
@@ -240,9 +240,12 @@ internal sealed class OverlayPointer : IDisposable
         }
 
         var browser = _target?.Browser;
-        if (browser == null || uv == null)
+        if (browser == null || uv == null || _target?.IsShown != true)
         {
-            Console.WriteLine($"[steamvr] クリックを無視: browser={(browser == null ? "null" : "ok")} LastUv={(uv == null ? "null(パネルに当たっていない)" : "ok")}");
+            // #37フォローアップ: LastUvはRenderLoopスレッドが次ティックでクリアするまで
+            // 残るため、Dashboardが開いた直後の数msはIsShownを見ないと隠れたパネルへ
+            // クリックが漏れる（UpdateForController側のIsShownチェックだけでは防げない）。
+            Console.WriteLine($"[steamvr] クリックを無視: browser={(browser == null ? "null" : "ok")} LastUv={(uv == null ? "null(パネルに当たっていない)" : "ok")} IsShown={_target?.IsShown}");
             return;
         }
         var (x, y) = ToBrowserPixels(uv.Value, browser);
@@ -279,7 +282,7 @@ internal sealed class OverlayPointer : IDisposable
         }
 
         var browser = _target?.Browser;
-        if (browser == null || uv == null) return;
+        if (browser == null || uv == null || _target?.IsShown != true) return;
 
         var (x, y) = ToBrowserPixels(uv.Value, browser);
         var wheelDeltaY = (int)(deltaY * ScrollPixelsPerUnit);

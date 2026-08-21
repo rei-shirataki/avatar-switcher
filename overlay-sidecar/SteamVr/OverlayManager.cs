@@ -81,12 +81,25 @@ internal sealed class OverlayManager
 
             while (OpenVR.System.PollNextEvent(ref e, (uint)Marshal.SizeOf(e)))
             {
-                if ((EVREventType)e.eventType == EVREventType.VREvent_Quit)
+                var eventType = (EVREventType)e.eventType;
+                if (eventType == EVREventType.VREvent_Quit)
                 {
                     Console.WriteLine("[steamvr] SteamVRからQuitイベントを受信、後片付けします");
                     Deactivate();
                     _ = _bridge.SendSteamVrStatusAsync(false, _shutdownToken);
                     break;
+                }
+
+                // #37: SteamVR Dashboard表示中はパネルが重なったままにならないよう、
+                // 開閉に合わせて一時的に隠す/戻す（AvatarPanelOverlay側でユーザーの
+                // 表示意図とは独立に管理するため、ここでは開閉の通知だけでよい）。
+                if (eventType == EVREventType.VREvent_DashboardActivated)
+                {
+                    _panel?.SetDashboardVisible(true);
+                }
+                else if (eventType == EVREventType.VREvent_DashboardDeactivated)
+                {
+                    _panel?.SetDashboardVisible(false);
                 }
             }
         }
@@ -195,6 +208,9 @@ internal sealed class OverlayManager
             _pointer = new OverlayPointer();
             _panel = new AvatarPanelOverlay(_d3D, _bridge.WsPort, _bridge.Token, _uiPort, _placementMode);
             _panel.OpenAsync().GetAwaiter().GetResult();
+            // #37: 起動時点で既にSteamVR Dashboardが開いていた場合の初期状態同期
+            // （以降の開閉はMainLoopのVREvent_DashboardActivated/Deactivatedで追従する）。
+            _panel.SetDashboardVisible(OpenVR.Overlay.IsDashboardVisible());
             _pointer.SetTarget(_panel);
 
             Console.WriteLine("[steamvr] OverlayManager を起動しました");

@@ -1,0 +1,52 @@
+name: バグ報告
+description: 動作がおかしい・期待通りに動かない場合はこちら
+labels: ["bug"]
+body:
+  - type: textarea
+    id: symptom
+    attributes:
+      label: 症状
+      description: 何が起きているか具体的に記載してください。
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 再現手順
+      description: 手順を追って再現できると調査がスムーズです。
+      placeholder: |
+        1. ...
+        2. ...
+        3. ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期待する動作
+    validations:
+      required: false
+  - type: input
+    id: os
+    attributes:
+      label: OS / AvatarSwitcherのバージョン
+      placeholder: 例）Windows 11 24H2 / v0.1.0
+    validations:
+      required: true
+  - type: dropdown
+    id: steamvr
+    attributes:
+      label: SteamVRオーバーレイ機能を使用中ですか？
+      options:
+        - "使用していない"
+        - "使用中（VRヘッドセット装着中に発生）"
+        - "不明"
+    validations:
+      required: false
+  - type: textarea
+    id: logs
+    attributes:
+      label: ログ・スクリーンショット
+      description: 該当する場合は添付してください。
+    validations:
+      required: false

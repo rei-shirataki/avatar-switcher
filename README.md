@@ -1,5 +1,8 @@
 # AvatarSwitcher
 
+[![CI](https://github.com/rei-shirataki/avatar-switcher/actions/workflows/ci.yml/badge.svg)](https://github.com/rei-shirataki/avatar-switcher/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 VRChat のアバター切り替え・身長（Eye Height）調整をひとつのデスクトップアプリから素早く行うためのツールです。[Tauri](https://tauri.app/) + [Angular](https://angular.dev/) で構築されています。
 
 ## できること

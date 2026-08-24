@@ -15,68 +15,79 @@ export interface CardContextMenuEvent {
   imports: [CommonModule, IconComponent],
   template: `
     <div
-      class="avatar-card"
-      [class.avatar-card--switching]="isSwitching"
-      [class.avatar-card--selected]="selected"
-      [class.avatar-card--selection-mode]="selectionMode"
+      class="flex flex-col bg-background border border-[var(--charcoal-color-container-secondary-default)] rounded-m transition-[border-color,transform,box-shadow] duration-150 hover:border-primary-dim hover:shadow-[0_4px_16px_rgba(0,0,0,0.3)]"
+      [ngClass]="{
+        'opacity-70 pointer-events-none': isSwitching,
+        'border-primary shadow-[0_0_0_1px_var(--color-primary)]': selected,
+        'cursor-pointer': selectionMode,
+        'cursor-default': !selectionMode,
+        'hover:-translate-y-0.5': !selectionMode
+      }"
       (mouseenter)="hovered.set(true)"
       (mouseleave)="hovered.set(false)"
       (click)="selectionMode ? selectToggle.emit() : openDetail.emit(avatar)"
       (contextmenu)="onCardContextMenu($event)"
     >
-      <div class="avatar-card__thumb">
+      <div class="relative w-full aspect-square bg-[var(--charcoal-color-container-secondary-default)] overflow-hidden rounded-t-m">
         @if (avatar.thumbnailImageUrl) {
           <img
+            class="w-full h-full object-cover"
             [src]="avatar.thumbnailImageUrl"
             [alt]="avatar.name"
             loading="lazy"
             (error)="onImgError($event)"
           />
         } @else {
-          <div class="avatar-card__thumb-placeholder">
+          <div class="w-full h-full flex items-center justify-center text-4xl font-bold text-text-tertiary bg-container-tertiary">
             {{ avatar.name.charAt(0) }}
           </div>
         }
         @if (selectionMode) {
-          <div class="avatar-card__select-ring" [class.avatar-card__select-ring--checked]="selected">
+          <div
+            class="absolute top-1.5 left-1.5 w-[18px] h-[18px] border-2 border-[rgba(255,255,255,0.5)] rounded-full bg-[rgba(0,0,0,0.35)] flex items-center justify-center text-[10px] text-white font-bold transition-[background,border-color] duration-100"
+            [ngClass]="{ 'bg-primary border-primary': selected }"
+          >
             @if (selected) { <span>✓</span> }
           </div>
         }
         @if (!selectionMode && hovered() && !isSwitching) {
-          <div class="avatar-card__overlay" (click)="onSwitch(); $event.stopPropagation()">
-            <span class="avatar-card__switch-btn"><app-icon name="play" [size]="11"/> 切り替え</span>
+          <div class="absolute inset-0 bg-[rgba(0,0,0,0.6)] flex items-center justify-center animate-fade-in" (click)="onSwitch(); $event.stopPropagation()">
+            <span class="px-[14px] py-1.5 bg-primary text-white rounded-m text-xs font-semibold cursor-pointer transition-colors duration-150 hover:bg-primary-hover"><app-icon name="play" [size]="11"/> 切り替え</span>
           </div>
         }
         @if (isSwitching) {
-          <div class="avatar-card__overlay avatar-card__overlay--switching">
-            <app-icon class="avatar-card__spinner" name="spinner" [size]="24"/>
+          <div class="absolute inset-0 bg-[rgba(0,0,0,0.5)] flex items-center justify-center animate-fade-in">
+            <app-icon class="text-primary animate-spin" name="spinner" [size]="24"/>
           </div>
         }
       </div>
-      <div class="avatar-card__info">
-        <div class="avatar-card__name" [title]="avatar.name">{{ avatar.name }}</div>
-        <div class="avatar-card__author">{{ avatar.authorName }}</div>
-        <div class="avatar-card__bottom">
-          <div class="avatar-card__badge" [class]="'badge-' + avatar.releaseStatus">
+      <div class="py-2 px-2.5 flex flex-col gap-0.5">
+        <div class="text-xs font-semibold text-text truncate" [title]="avatar.name">{{ avatar.name }}</div>
+        <div class="text-[11px] text-text-secondary truncate">{{ avatar.authorName }}</div>
+        <div class="flex items-center justify-between mt-0.5">
+          <div
+            class="text-[10px] px-1.5 py-0.5 rounded-[3px] self-start font-medium"
+            [ngClass]="avatar.releaseStatus === 'public' ? 'bg-[rgba(86,201,110,0.15)] text-text-positive' : 'bg-[rgba(136,136,170,0.15)] text-text-tertiary'"
+          >
             {{ avatar.releaseStatus === 'public' ? '公開' : '非公開' }}
           </div>
           @if (folders.length > 0 && !selectionMode) {
-            <div class="avatar-card__folder-wrap">
+            <div class="relative">
               <button
-                class="avatar-card__folder-btn"
-                [class.avatar-card__folder-btn--active]="isInAnyFolder()"
+                class="w-5 h-5 bg-container-secondary border border-[var(--charcoal-color-container-secondary-default)] text-text-secondary cursor-pointer p-0 flex items-center justify-center rounded transition-colors duration-150 hover:bg-primary-dim hover:border-primary hover:text-primary"
+                [ngClass]="{ 'bg-primary-dim border-primary text-primary': isInAnyFolder() }"
                 (click)="showFolderMenu.set(!showFolderMenu()); $event.stopPropagation()"
                 title="フォルダ管理"
               ><app-icon name="folder-plus" [size]="13"/></button>
               @if (showFolderMenu()) {
-                <div class="avatar-card__folder-menu" (click)="$event.stopPropagation()">
+                <div class="absolute bottom-[calc(100%+4px)] right-0 min-w-[140px] bg-background border border-[var(--charcoal-color-container-secondary-default)] rounded-m shadow-[0_4px_16px_rgba(0,0,0,0.4)] z-50 overflow-hidden" (click)="$event.stopPropagation()">
                   @for (folder of folders; track folder.id) {
                     <button
-                      class="avatar-card__folder-item"
-                      [class.avatar-card__folder-item--checked]="folder.avatarIds.includes(avatar.id)"
+                      class="flex items-center gap-1.5 w-full py-[7px] px-2.5 bg-transparent border-0 text-text-secondary text-[11px] font-[var(--font-sans)] cursor-pointer text-left transition-colors duration-100 hover:bg-container-secondary"
+                      [ngClass]="{ 'text-primary': folder.avatarIds.includes(avatar.id) }"
                       (click)="toggleFolder(folder.id)"
                     >
-                      <span class="avatar-card__folder-check">
+                      <span class="w-3 flex-shrink-0 text-primary text-[10px]">
                         {{ folder.avatarIds.includes(avatar.id) ? '✓' : '' }}
                       </span>
                       {{ folder.name }}
@@ -90,7 +101,6 @@ export interface CardContextMenuEvent {
       </div>
     </div>
   `,
-  styleUrl: './avatar-card.component.scss',
   schemas: [CUSTOM_ELEMENTS_SCHEMA],
 })
 export class AvatarCardComponent {

@@ -30,6 +30,13 @@ module.exports = {
         },
       },
       borderRadius: v2.theme.borderRadius,
+      // 各コンポーネントの@keyframesをここに集約する。spinはTailwind標準のanimate-spinをそのまま使う。
+      keyframes: {
+        'fade-in': { from: { opacity: '0' }, to: { opacity: '1' } },
+      },
+      animation: {
+        'fade-in': 'fade-in 0.15s ease',
+      },
     },
   },
   plugins: [],

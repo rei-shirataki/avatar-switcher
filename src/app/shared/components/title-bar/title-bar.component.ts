@@ -7,19 +7,19 @@ import { IconComponent } from '../icon/icon.component';
   standalone: true,
   imports: [IconComponent],
   template: `
-    <div class="title-bar" data-tauri-drag-region>
+    <div class="title-bar bg-[var(--charcoal-color-dark-neutral--5)]" data-tauri-drag-region>
       <div class="title-bar__logo" data-tauri-drag-region>
         <app-icon name="logo" [size]="16" class="title-bar__icon" data-tauri-drag-region/>
-        <span class="title-bar__name" data-tauri-drag-region>AvatarSwitcher</span>
+        <span class="title-bar__name text-text-secondary" data-tauri-drag-region>AvatarSwitcher</span>
       </div>
       <div class="title-bar__controls">
-        <button class="ctrl-btn ctrl-btn--min" (click)="minimize()" title="最小化">
+        <button class="ctrl-btn bg-transparent rounded-s text-text-tertiary hover:bg-container-secondary hover:text-text ctrl-btn--min" (click)="minimize()" title="最小化">
           <app-icon name="minimize" [size]="10"/>
         </button>
-        <button class="ctrl-btn ctrl-btn--max" (click)="maximize()" title="最大化">
+        <button class="ctrl-btn bg-transparent rounded-s text-text-tertiary hover:bg-container-secondary hover:text-text ctrl-btn--max" (click)="maximize()" title="最大化">
           <app-icon name="maximize" [size]="10"/>
         </button>
-        <button class="ctrl-btn ctrl-btn--close" (click)="close()" title="閉じる">
+        <button class="ctrl-btn bg-transparent rounded-s text-text-tertiary hover:bg-container-secondary hover:text-text ctrl-btn--close" (click)="close()" title="閉じる">
           <app-icon name="close" [size]="10"/>
         </button>
       </div>

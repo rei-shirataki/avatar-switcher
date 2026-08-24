@@ -4,7 +4,6 @@
   justify-content: space-between;
   height: 36px;
   padding: 0 8px 0 12px;
-  background: var(--charcoal-color-dark-neutral--5);
   border-bottom: 1px solid var(--charcoal-color-container-secondary-default);
   flex-shrink: 0;
   user-select: none;
@@ -24,7 +23,6 @@
   &__name {
     font-size: 12px;
     font-weight: 600;
-    color: var(--charcoal-color-text-secondary-default);
     letter-spacing: 0.03em;
   }
 
@@ -38,9 +36,6 @@
   width: 32px;
   height: 28px;
   border: none;
-  background: transparent;
-  color: var(--charcoal-color-text-tertiary-default);
-  border-radius: var(--charcoal-radius-s);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -51,11 +46,6 @@
   svg {
     display: block;
     flex-shrink: 0;
-  }
-
-  &:hover {
-    background: var(--charcoal-color-container-secondary-default);
-    color: var(--charcoal-color-text-default);
   }
 
   &--close:hover {

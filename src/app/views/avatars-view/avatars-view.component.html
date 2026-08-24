@@ -383,7 +383,7 @@
       @if (!detailEditMode()) {
         <div class="detail-panel__footer">
           <button class="detail-panel__switch-btn" (click)="onSwitch(detailAvatar()!.id); closeDetailPanel()">
-            <pixiv-icon name="24/Play" fixed-size="12" style="--charcoal-icon-size: 12px"></pixiv-icon>切り替え
+            <app-icon name="play" [size]="12"/>切り替え
           </button>
         </div>
       }

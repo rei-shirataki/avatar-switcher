@@ -44,7 +44,7 @@ export interface CardContextMenuEvent {
         }
         @if (!selectionMode && hovered() && !isSwitching) {
           <div class="avatar-card__overlay" (click)="onSwitch(); $event.stopPropagation()">
-            <span class="avatar-card__switch-btn"><pixiv-icon name="24/Play" fixed-size="11" style="--charcoal-icon-size: 11px"></pixiv-icon> 切り替え</span>
+            <span class="avatar-card__switch-btn"><app-icon name="play" [size]="11"/> 切り替え</span>
           </div>
         }
         @if (isSwitching) {

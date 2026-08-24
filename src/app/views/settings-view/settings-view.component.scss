@@ -27,7 +27,7 @@
 .account-card {
   background: var(--charcoal-color-background-default);
   border: 1px solid var(--charcoal-color-container-secondary-default);
-  border-radius: var(--radius-lg);
+  border-radius: var(--charcoal-radius-l);
   padding: 16px;
   display: flex;
   align-items: center;
@@ -66,7 +66,7 @@
   padding: 8px 16px;
   background: rgba(245, 108, 108, 0.1);
   border: 1px solid rgba(245, 108, 108, 0.3);
-  border-radius: var(--radius-md);
+  border-radius: var(--charcoal-radius-m);
   color: var(--charcoal-color-text-negative-default);
   font-size: 12px;
   font-family: var(--font-sans);
@@ -83,7 +83,7 @@
 .settings-card {
   background: var(--charcoal-color-background-default);
   border: 1px solid var(--charcoal-color-container-secondary-default);
-  border-radius: var(--radius-lg);
+  border-radius: var(--charcoal-radius-l);
   padding: 16px;
   display: flex;
   flex-direction: column;
@@ -122,7 +122,7 @@
 .status-badge {
   font-size: 11px;
   padding: 2px 10px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--charcoal-radius-s);
   background: rgba(136, 136, 170, 0.1);
   color: var(--charcoal-color-text-tertiary-default);
 
@@ -140,7 +140,7 @@
 .toggle-btn {
   flex: 1;
   padding: 4px 20px;
-  border-radius: var(--radius-md);
+  border-radius: var(--charcoal-radius-m);
   border: 1px solid var(--charcoal-color-container-secondary-default);
   background: var(--charcoal-color-container-secondary-default);
   color: var(--charcoal-color-text-tertiary-default);
@@ -167,7 +167,7 @@
   padding: 12px 16px;
   background: rgba(245, 166, 35, 0.08);
   border: 1px solid rgba(245, 166, 35, 0.25);
-  border-radius: var(--radius-md);
+  border-radius: var(--charcoal-radius-m);
   font-size: 12px;
   color: var(--charcoal-color-text-notice-default);
 }
@@ -183,7 +183,7 @@
 .license-toggle-btn {
   flex-shrink: 0;
   padding: 4px 16px;
-  border-radius: var(--radius-md);
+  border-radius: var(--charcoal-radius-m);
   border: 1px solid var(--charcoal-color-container-secondary-default);
   background: var(--charcoal-color-container-secondary-default);
   color: var(--charcoal-color-text-tertiary-default);
@@ -206,7 +206,7 @@
   padding: 12px;
   background: var(--charcoal-color-dark-neutral--5);
   border: 1px solid var(--charcoal-color-container-secondary-default);
-  border-radius: var(--radius-md);
+  border-radius: var(--charcoal-radius-m);
   font-family: var(--font-mono, monospace);
   font-size: 11px;
   line-height: 1.5;

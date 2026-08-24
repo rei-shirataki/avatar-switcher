@@ -216,7 +216,7 @@ interface Preset {
     .card {
       background: var(--charcoal-color-background-default);
       border: 1px solid var(--charcoal-color-container-secondary-default);
-      border-radius: var(--radius-lg);
+      border-radius: var(--charcoal-radius-l);
       padding: 16px;
       display: flex;
       flex-direction: column;
@@ -246,7 +246,7 @@ interface Preset {
       display: inline-flex;
       background: var(--charcoal-color-dark-neutral--5);
       border: 1px solid var(--charcoal-color-container-secondary-default);
-      border-radius: var(--radius-md);
+      border-radius: var(--charcoal-radius-m);
       padding: 2px;
       gap: 2px;
     }
@@ -254,7 +254,7 @@ interface Preset {
       padding: 6px 10px;
       background: transparent;
       border: none;
-      border-radius: calc(var(--radius-md) - 2px);
+      border-radius: calc(var(--charcoal-radius-m) - 2px);
       color: var(--charcoal-color-text-tertiary-default);
       font-size: 11px;
       font-weight: 600;
@@ -273,7 +273,7 @@ interface Preset {
       flex: 1;
       background: var(--charcoal-color-dark-neutral--5);
       border: 1px solid var(--charcoal-color-container-secondary-default);
-      border-radius: var(--radius-md);
+      border-radius: var(--charcoal-radius-m);
       padding: 10px 12px;
       font-size: 18px;
       font-weight: 600;
@@ -293,7 +293,7 @@ interface Preset {
       padding: 8px 14px;
       background: var(--charcoal-color-container-secondary-default);
       border: 1px solid var(--charcoal-color-container-secondary-default);
-      border-radius: var(--radius-md);
+      border-radius: var(--charcoal-radius-m);
       color: var(--charcoal-color-text-secondary-default);
       font-size: 12px;
       font-family: var(--font-sans);
@@ -316,7 +316,7 @@ interface Preset {
     .step-btn {
       flex: 1;
       padding: 8px 6px;
-      border-radius: var(--radius-md);
+      border-radius: var(--charcoal-radius-m);
       border: 1px solid var(--charcoal-color-container-secondary-default);
       background: var(--charcoal-color-dark-neutral--5);
       color: var(--charcoal-color-text-secondary-default);
@@ -336,7 +336,7 @@ interface Preset {
       padding: 6px 12px;
       background: var(--color-primary-dim);
       border: 1px solid var(--color-primary);
-      border-radius: var(--radius-md);
+      border-radius: var(--charcoal-radius-m);
       color: var(--color-primary);
       font-size: 12px;
       font-weight: 600;
@@ -367,7 +367,7 @@ interface Preset {
       padding: 10px 12px;
       background: var(--charcoal-color-dark-neutral--5);
       border: 1px solid var(--charcoal-color-container-secondary-default);
-      border-radius: var(--radius-md);
+      border-radius: var(--charcoal-radius-m);
       color: var(--charcoal-color-text-default);
       font-family: var(--font-sans);
       cursor: pointer;
@@ -388,7 +388,7 @@ interface Preset {
       width: 36px;
       background: var(--charcoal-color-dark-neutral--5);
       border: 1px solid var(--charcoal-color-container-secondary-default);
-      border-radius: var(--radius-md);
+      border-radius: var(--charcoal-radius-m);
       color: var(--charcoal-color-text-tertiary-default);
       font-size: 18px;
       line-height: 1;
@@ -406,7 +406,7 @@ interface Preset {
       padding: 10px 14px;
       background: rgba(245, 166, 35, 0.08);
       border: 1px solid rgba(245, 166, 35, 0.25);
-      border-radius: var(--radius-md);
+      border-radius: var(--charcoal-radius-m);
       font-size: 11px;
       color: var(--charcoal-color-text-notice-default);
       line-height: 1.6;
@@ -416,7 +416,7 @@ interface Preset {
       padding: 12px 16px;
       background: rgba(245, 108, 108, 0.08);
       border: 1px solid rgba(245, 108, 108, 0.25);
-      border-radius: var(--radius-md);
+      border-radius: var(--charcoal-radius-m);
       font-size: 12px;
       color: var(--charcoal-color-text-negative-default);
     }
@@ -425,7 +425,7 @@ interface Preset {
       padding: 12px 16px;
       background: rgba(230, 162, 60, 0.08);
       border: 1px solid rgba(230, 162, 60, 0.25);
-      border-radius: var(--radius-md);
+      border-radius: var(--charcoal-radius-m);
       font-size: 12px;
       color: var(--charcoal-color-text-notice-default);
     }
@@ -449,7 +449,7 @@ interface Preset {
       width: min(360px, calc(100vw - 48px));
       background: var(--charcoal-color-background-default);
       border: 1px solid var(--charcoal-color-container-secondary-default);
-      border-radius: var(--radius-lg);
+      border-radius: var(--charcoal-radius-l);
       padding: 20px;
       display: flex;
       flex-direction: column;
@@ -482,7 +482,7 @@ interface Preset {
     .dialog-input {
       background: var(--charcoal-color-dark-neutral--5);
       border: 1px solid var(--charcoal-color-container-secondary-default);
-      border-radius: var(--radius-md);
+      border-radius: var(--charcoal-radius-m);
       padding: 9px 12px;
       font-size: 13px;
       color: var(--charcoal-color-text-default);
@@ -520,7 +520,7 @@ interface Preset {
     }
     .dialog-btn {
       padding: 8px 18px;
-      border-radius: var(--radius-md);
+      border-radius: var(--charcoal-radius-m);
       font-size: 12px;
       font-weight: 600;
       font-family: var(--font-sans);
@@ -546,7 +546,7 @@ interface Preset {
       z-index: 901;
       background: var(--charcoal-color-background-default);
       border: 1px solid var(--charcoal-color-container-secondary-default);
-      border-radius: var(--radius-md);
+      border-radius: var(--charcoal-radius-m);
       padding: 4px;
       box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
       min-width: 120px;
@@ -557,7 +557,7 @@ interface Preset {
       padding: 8px 12px;
       background: transparent;
       border: none;
-      border-radius: calc(var(--radius-md) - 4px);
+      border-radius: calc(var(--charcoal-radius-m) - 4px);
       color: var(--charcoal-color-text-default);
       font-size: 12px;
       font-family: var(--font-sans);

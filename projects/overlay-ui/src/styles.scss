@@ -1,3 +1,5 @@
+@import '@charcoal-ui/theme/css/v2/dark.css';
+
 // SteamVRオーバーレイのパネルとして描画される。ウィンドウ枠が無いため
 // html/body自体に背景色を敷く（M1テストページのトーンに合わせている）。
 html, body {

@@ -1,4 +1,4 @@
-import { Component } from '@angular/core';
+import { Component, CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
 import { RouterLink, RouterLinkActive } from '@angular/router';
 import { VRChatAuthService } from '../../../core/services/vrchat-auth.service';
 import { Router } from '@angular/router';
@@ -42,13 +42,14 @@ interface NavItem {
           </div>
         }
         <button class="sidebar__logout" (click)="logout()" title="ログアウト">
-          <app-icon name="log-out" [size]="16"/>
+          <pixiv-icon name="24/Logout" fixed-size="16" style="--charcoal-icon-size: 16px"></pixiv-icon>
           <span class="sidebar__logout-label">ログアウト</span>
         </button>
       </div>
     </nav>
   `,
   styleUrl: './sidebar.component.scss',
+  schemas: [CUSTOM_ELEMENTS_SCHEMA],
 })
 export class SidebarComponent {
   navItems: NavItem[] = [

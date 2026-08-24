@@ -2,7 +2,7 @@
   <!-- Toolbar -->
   <div class="avatars-toolbar">
     <div class="search-box">
-      <app-icon class="search-box__icon" name="search" [size]="14"/>
+      <pixiv-icon class="search-box__icon" name="16/Search" fixed-size="14" style="--charcoal-icon-size: 14px"></pixiv-icon>
       <input
         class="search-box__input"
         type="text"
@@ -40,8 +40,8 @@
       [class.btn-icon--active]="selectionMode()"
       (click)="toggleSelectionMode()"
       title="複数選択"
-    ><app-icon name="select" [size]="16"/></button>
-    <button class="btn-icon" (click)="avatarService.refresh()" title="再読み込み"><app-icon name="reload" [size]="16"/></button>
+    ><pixiv-icon name="16/Check"></pixiv-icon></button>
+    <button class="btn-icon" (click)="avatarService.refresh()" title="再読み込み"><pixiv-icon name="24/Reload" fixed-size="16" style="--charcoal-icon-size: 16px"></pixiv-icon></button>
   </div>
 
   <!-- Bulk action bar -->
@@ -277,12 +277,12 @@
           <!-- 通常モード: 編集アイコン（自作アバターのみ） ─── ✕ -->
           @if (isDetailAvatarOwned()) {
             <button class="detail-panel__edit-btn" (click)="startEdit()" title="編集">
-              <app-icon name="edit" [size]="14"/>
+              <pixiv-icon name="16/Pencil" fixed-size="14" style="--charcoal-icon-size: 14px"></pixiv-icon>
             </button>
           }
           <span class="detail-panel__header-spacer"></span>
           <button class="detail-panel__close" (click)="closeDetailPanel()" title="閉じる">
-            <app-icon name="close" [size]="14"/>
+            <pixiv-icon name="24/Close" fixed-size="14" style="--charcoal-icon-size: 14px"></pixiv-icon>
           </button>
         }
       </div>
@@ -299,7 +299,7 @@
             <div class="detail-panel__thumb-placeholder">{{ detailAvatar()!.name.charAt(0) }}</div>
           }
           <div class="detail-panel__thumb-overlay" (click)="thumbFileInput.click()">
-            <app-icon name="camera" [size]="22"/>
+            <pixiv-icon name="24/Camera" fixed-size="22" style="--charcoal-icon-size: 22px"></pixiv-icon>
             <span>画像を変更</span>
           </div>
           @if (hasCustomThumb) {
@@ -383,7 +383,7 @@
       @if (!detailEditMode()) {
         <div class="detail-panel__footer">
           <button class="detail-panel__switch-btn" (click)="onSwitch(detailAvatar()!.id); closeDetailPanel()">
-            <app-icon name="play" [size]="12"/>切り替え
+            <pixiv-icon name="24/Play" fixed-size="12" style="--charcoal-icon-size: 12px"></pixiv-icon>切り替え
           </button>
         </div>
       }

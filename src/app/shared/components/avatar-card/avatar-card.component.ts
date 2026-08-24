@@ -1,4 +1,4 @@
-import { Component, Input, Output, EventEmitter, signal, HostListener } from '@angular/core';
+import { Component, CUSTOM_ELEMENTS_SCHEMA, Input, Output, EventEmitter, signal, HostListener } from '@angular/core';
 import { VRCAvatar, AvatarFolder } from '../../../core/models/avatar.model';
 import { CommonModule } from '@angular/common';
 import { IconComponent } from '../icon/icon.component';
@@ -44,7 +44,7 @@ export interface CardContextMenuEvent {
         }
         @if (!selectionMode && hovered() && !isSwitching) {
           <div class="avatar-card__overlay" (click)="onSwitch(); $event.stopPropagation()">
-            <span class="avatar-card__switch-btn"><app-icon name="play" [size]="11"/> 切り替え</span>
+            <span class="avatar-card__switch-btn"><pixiv-icon name="24/Play" fixed-size="11" style="--charcoal-icon-size: 11px"></pixiv-icon> 切り替え</span>
           </div>
         }
         @if (isSwitching) {
@@ -91,6 +91,7 @@ export interface CardContextMenuEvent {
     </div>
   `,
   styleUrl: './avatar-card.component.scss',
+  schemas: [CUSTOM_ELEMENTS_SCHEMA],
 })
 export class AvatarCardComponent {
   @Input({ required: true }) avatar!: VRCAvatar;

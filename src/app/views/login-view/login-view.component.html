@@ -1,5 +1,5 @@
 <div class="flex items-center justify-center w-full h-full bg-[var(--charcoal-color-dark-neutral--10)] bg-[radial-gradient(ellipse_at_20%_50%,rgba(124,106,247,.08)_0%,transparent_60%),radial-gradient(ellipse_at_80%_20%,rgba(124,106,247,.05)_0%,transparent_50%)]">
-  <div class="w-[360px] bg-background border border-[var(--charcoal-color-container-secondary-default)] rounded-xl p-8 shadow-[0_20px_60px_rgba(0,0,0,0.5)]">
+  <div class="w-[360px] bg-background border border-[var(--charcoal-color-container-secondary-default)] rounded-ch-xl p-8 shadow-[0_20px_60px_rgba(0,0,0,0.5)]">
     <div class="text-center mb-7">
       <span class="text-[32px] text-primary block mb-2">⬡</span>
       <h1 class="m-0 mb-1.5 text-xl font-bold text-text">AvatarSwitcher</h1>
@@ -11,7 +11,7 @@
         <div class="flex flex-col gap-1.5">
           <label class="text-[11px] font-medium text-text-secondary tracking-[0.02em]">ユーザー名またはメールアドレス</label>
           <input
-            class="w-full py-[9px] px-3 bg-container-tertiary border border-[var(--charcoal-color-container-secondary-default)] rounded-m text-text text-[13px] font-[var(--font-sans)] outline-none transition-colors duration-150 box-border placeholder:text-text-placeholder focus:border-primary disabled:opacity-50 disabled:cursor-not-allowed"
+            class="w-full py-[9px] px-3 bg-container-tertiary border border-[var(--charcoal-color-container-secondary-default)] rounded-ch-m text-text text-[13px] font-[var(--font-sans)] outline-none transition-colors duration-150 box-border placeholder:text-text-placeholder focus:border-primary disabled:opacity-50 disabled:cursor-not-allowed"
             type="text"
             [(ngModel)]="username"
             name="username"
@@ -23,7 +23,7 @@
         <div class="flex flex-col gap-1.5">
           <label class="text-[11px] font-medium text-text-secondary tracking-[0.02em]">パスワード</label>
           <input
-            class="w-full py-[9px] px-3 bg-container-tertiary border border-[var(--charcoal-color-container-secondary-default)] rounded-m text-text text-[13px] font-[var(--font-sans)] outline-none transition-colors duration-150 box-border placeholder:text-text-placeholder focus:border-primary disabled:opacity-50 disabled:cursor-not-allowed"
+            class="w-full py-[9px] px-3 bg-container-tertiary border border-[var(--charcoal-color-container-secondary-default)] rounded-ch-m text-text text-[13px] font-[var(--font-sans)] outline-none transition-colors duration-150 box-border placeholder:text-text-placeholder focus:border-primary disabled:opacity-50 disabled:cursor-not-allowed"
             type="password"
             [(ngModel)]="password"
             name="password"
@@ -34,11 +34,11 @@
         </div>
 
         @if (error()) {
-          <div class="py-2 px-3 bg-[rgba(245,108,108,0.1)] border border-[rgba(245,108,108,0.3)] rounded-m text-text-negative text-xs">⚠ {{ error() }}</div>
+          <div class="py-2 px-3 bg-[rgba(245,108,108,0.1)] border border-[rgba(245,108,108,0.3)] rounded-ch-m text-text-negative text-xs">⚠ {{ error() }}</div>
         }
 
         <button
-          class="w-full p-2.5 bg-primary border-0 rounded-m text-white text-[13px] font-semibold font-[var(--font-sans)] cursor-pointer transition-colors duration-150 flex items-center justify-center gap-1.5 enabled:hover:bg-primary-hover disabled:opacity-50 disabled:cursor-not-allowed"
+          class="w-full p-2.5 bg-primary border-0 rounded-ch-m text-white text-[13px] font-semibold font-[var(--font-sans)] cursor-pointer transition-colors duration-150 flex items-center justify-center gap-1.5 enabled:hover:bg-primary-hover disabled:opacity-50 disabled:cursor-not-allowed"
           type="submit"
           [disabled]="loading()"
         >
@@ -71,7 +71,7 @@
             }
           </label>
           <input
-            class="w-full py-[9px] px-3 bg-container-tertiary border border-[var(--charcoal-color-container-secondary-default)] rounded-m text-text font-[var(--font-sans)] outline-none transition-colors duration-150 box-border placeholder:text-text-placeholder focus:border-primary disabled:opacity-50 disabled:cursor-not-allowed text-xl text-center tracking-[0.3em] font-[var(--font-mono)]"
+            class="w-full py-[9px] px-3 bg-container-tertiary border border-[var(--charcoal-color-container-secondary-default)] rounded-ch-m text-text font-[var(--font-sans)] outline-none transition-colors duration-150 box-border placeholder:text-text-placeholder focus:border-primary disabled:opacity-50 disabled:cursor-not-allowed text-xl text-center tracking-[0.3em] font-[var(--font-mono)]"
             type="text"
             [(ngModel)]="twoFactorCode"
             [placeholder]="twoFactorMethod() === 'otp' ? 'xxxx-xxxx' : '000000'"
@@ -82,7 +82,7 @@
         </div>
 
         @if (error()) {
-          <div class="py-2 px-3 bg-[rgba(245,108,108,0.1)] border border-[rgba(245,108,108,0.3)] rounded-m text-text-negative text-xs">⚠ {{ error() }}</div>
+          <div class="py-2 px-3 bg-[rgba(245,108,108,0.1)] border border-[rgba(245,108,108,0.3)] rounded-ch-m text-text-negative text-xs">⚠ {{ error() }}</div>
         }
 
         @if (twoFactorMethod() === 'totp') {
@@ -96,9 +96,9 @@
         }
 
         <div class="flex gap-2 justify-end">
-          <button class="py-2.5 px-4 bg-container-secondary border-0 rounded-m text-text-secondary text-[13px] font-[var(--font-sans)] cursor-pointer transition-colors duration-150 whitespace-nowrap hover:bg-container-tertiary" type="button" (click)="backToCredentials()">← 戻る</button>
+          <button class="py-2.5 px-4 bg-container-secondary border-0 rounded-ch-m text-text-secondary text-[13px] font-[var(--font-sans)] cursor-pointer transition-colors duration-150 whitespace-nowrap hover:bg-container-tertiary" type="button" (click)="backToCredentials()">← 戻る</button>
           <button
-            class="w-full p-2.5 bg-primary border-0 rounded-m text-white text-[13px] font-semibold font-[var(--font-sans)] cursor-pointer transition-colors duration-150 flex items-center justify-center gap-1.5 enabled:hover:bg-primary-hover disabled:opacity-50 disabled:cursor-not-allowed"
+            class="w-full p-2.5 bg-primary border-0 rounded-ch-m text-white text-[13px] font-semibold font-[var(--font-sans)] cursor-pointer transition-colors duration-150 flex items-center justify-center gap-1.5 enabled:hover:bg-primary-hover disabled:opacity-50 disabled:cursor-not-allowed"
             type="button"
             (click)="onVerify2fa()"
             [disabled]="loading()"

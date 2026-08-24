@@ -23,7 +23,7 @@ interface NavItem {
           <a
             #rla="routerLinkActive"
             routerLinkActive
-            class="flex flex-col items-center justify-center gap-[5px] py-[14px] px-1 rounded-m no-underline transition-colors duration-150 cursor-pointer relative"
+            class="flex flex-col items-center justify-center gap-[5px] py-[14px] px-1 rounded-ch-m no-underline transition-colors duration-150 cursor-pointer relative"
             [ngClass]="rla.isActive ? 'bg-primary-dim text-primary' : 'text-text-tertiary hover:bg-background hover:text-text-secondary'"
             [routerLink]="item.route"
             [title]="item.label"
@@ -49,7 +49,7 @@ interface NavItem {
           </div>
         }
         <button
-          class="w-full border-0 bg-transparent text-text-tertiary rounded-m cursor-pointer flex flex-col items-center justify-center gap-[5px] py-[14px] px-1 transition-colors duration-150 hover:bg-[rgba(245,108,108,0.12)] hover:text-text-negative"
+          class="w-full border-0 bg-transparent text-text-tertiary rounded-ch-m cursor-pointer flex flex-col items-center justify-center gap-[5px] py-[14px] px-1 transition-colors duration-150 hover:bg-[rgba(245,108,108,0.12)] hover:text-text-negative"
           (click)="logout()"
           title="ログアウト"
         >

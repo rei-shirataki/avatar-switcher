@@ -15,7 +15,7 @@ export interface CardContextMenuEvent {
   imports: [CommonModule, IconComponent],
   template: `
     <div
-      class="flex flex-col bg-background border border-[var(--charcoal-color-container-secondary-default)] rounded-m transition-[border-color,transform,box-shadow] duration-150 hover:border-primary-dim hover:shadow-[0_4px_16px_rgba(0,0,0,0.3)]"
+      class="flex flex-col bg-background border border-[var(--charcoal-color-container-secondary-default)] rounded-ch-m transition-[border-color,transform,box-shadow] duration-150 hover:border-primary-dim hover:shadow-[0_4px_16px_rgba(0,0,0,0.3)]"
       [ngClass]="{
         'opacity-70 pointer-events-none': isSwitching,
         'border-primary shadow-[0_0_0_1px_var(--color-primary)]': selected,
@@ -28,7 +28,7 @@ export interface CardContextMenuEvent {
       (click)="selectionMode ? selectToggle.emit() : openDetail.emit(avatar)"
       (contextmenu)="onCardContextMenu($event)"
     >
-      <div class="relative w-full aspect-square bg-[var(--charcoal-color-container-secondary-default)] overflow-hidden rounded-t-m">
+      <div class="relative w-full aspect-square bg-[var(--charcoal-color-container-secondary-default)] overflow-hidden rounded-t-ch-m">
         @if (avatar.thumbnailImageUrl) {
           <img
             class="w-full h-full object-cover"
@@ -52,7 +52,7 @@ export interface CardContextMenuEvent {
         }
         @if (!selectionMode && hovered() && !isSwitching) {
           <div class="absolute inset-0 bg-[rgba(0,0,0,0.6)] flex items-center justify-center animate-fade-in" (click)="onSwitch(); $event.stopPropagation()">
-            <span class="px-[14px] py-1.5 bg-primary text-white rounded-m text-xs font-semibold cursor-pointer transition-colors duration-150 hover:bg-primary-hover"><app-icon name="play" [size]="11"/> 切り替え</span>
+            <span class="px-[14px] py-1.5 bg-primary text-white rounded-ch-m text-xs font-semibold cursor-pointer transition-colors duration-150 hover:bg-primary-hover"><app-icon name="play" [size]="11"/> 切り替え</span>
           </div>
         }
         @if (isSwitching) {
@@ -80,7 +80,7 @@ export interface CardContextMenuEvent {
                 title="フォルダ管理"
               ><app-icon name="folder-plus" [size]="13"/></button>
               @if (showFolderMenu()) {
-                <div class="absolute bottom-[calc(100%+4px)] right-0 min-w-[140px] bg-background border border-[var(--charcoal-color-container-secondary-default)] rounded-m shadow-[0_4px_16px_rgba(0,0,0,0.4)] z-50 overflow-hidden" (click)="$event.stopPropagation()">
+                <div class="absolute bottom-[calc(100%+4px)] right-0 min-w-[140px] bg-background border border-[var(--charcoal-color-container-secondary-default)] rounded-ch-m shadow-[0_4px_16px_rgba(0,0,0,0.4)] z-50 overflow-hidden" (click)="$event.stopPropagation()">
                   @for (folder of folders; track folder.id) {
                     <button
                       class="flex items-center gap-1.5 w-full py-[7px] px-2.5 bg-transparent border-0 text-text-secondary text-[11px] font-[var(--font-sans)] cursor-pointer text-left transition-colors duration-100 hover:bg-container-secondary"

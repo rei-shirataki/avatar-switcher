@@ -13,13 +13,13 @@ import { IconComponent } from '../icon/icon.component';
         <span class="text-xs font-semibold tracking-[0.03em] text-text-secondary" data-tauri-drag-region>AvatarSwitcher</span>
       </div>
       <div class="flex gap-0.5">
-        <button class="w-8 h-7 border-0 cursor-pointer flex items-center justify-center transition-colors duration-150 p-0 bg-transparent rounded-s text-text-tertiary hover:bg-container-secondary hover:text-text" (click)="minimize()" title="最小化">
+        <button class="w-8 h-7 border-0 cursor-pointer flex items-center justify-center transition-colors duration-150 p-0 bg-transparent rounded-ch-s text-text-tertiary hover:bg-container-secondary hover:text-text" (click)="minimize()" title="最小化">
           <app-icon name="minimize" [size]="10"/>
         </button>
-        <button class="w-8 h-7 border-0 cursor-pointer flex items-center justify-center transition-colors duration-150 p-0 bg-transparent rounded-s text-text-tertiary hover:bg-container-secondary hover:text-text" (click)="maximize()" title="最大化">
+        <button class="w-8 h-7 border-0 cursor-pointer flex items-center justify-center transition-colors duration-150 p-0 bg-transparent rounded-ch-s text-text-tertiary hover:bg-container-secondary hover:text-text" (click)="maximize()" title="最大化">
           <app-icon name="maximize" [size]="10"/>
         </button>
-        <button class="w-8 h-7 border-0 cursor-pointer flex items-center justify-center transition-colors duration-150 p-0 bg-transparent rounded-s text-text-tertiary hover:bg-[#c42b1c] hover:text-white" (click)="close()" title="閉じる">
+        <button class="w-8 h-7 border-0 cursor-pointer flex items-center justify-center transition-colors duration-150 p-0 bg-transparent rounded-ch-s text-text-tertiary hover:bg-[#c42b1c] hover:text-white" (click)="close()" title="閉じる">
           <app-icon name="close" [size]="10"/>
         </button>
       </div>

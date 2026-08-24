@@ -29,7 +29,13 @@ module.exports = {
           label: '#9ad1ff',
         },
       },
-      borderRadius: v2.theme.borderRadius,
+      // v2のキー(s/m/l/xl/xxl等)をそのまま使うとTailwind標準の論理/物理方向ユーティリティ
+      // (rounded-l = 左側のみ角丸、rounded-s = start側のみ角丸 等)と名前が衝突し、
+      // 該当する角だけTailwind側の既定値(0.25rem)で上書きされてしまう(左右で丸みが
+      // 異なって見えるバグの原因になった)。ch- prefixを付けて完全に名前空間を分離する。
+      borderRadius: Object.fromEntries(
+        Object.entries(v2.theme.borderRadius).map(([key, value]) => [`ch-${key}`, value]),
+      ),
       // 各コンポーネントの@keyframesをここに集約する。spinはTailwind標準のanimate-spinをそのまま使う。
       keyframes: {
         'fade-in': { from: { opacity: '0' }, to: { opacity: '1' } },

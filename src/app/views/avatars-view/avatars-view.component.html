@@ -1,7 +1,7 @@
 <div class="flex flex-col h-full overflow-hidden">
   <!-- Toolbar -->
   <div class="flex items-center gap-2 py-3 px-4 border-b border-[var(--charcoal-color-container-secondary-default)] flex-shrink-0">
-    <div class="flex-1 flex items-center gap-2 bg-container-tertiary border border-[var(--charcoal-color-container-secondary-default)] rounded-m px-2.5 transition-colors duration-150 focus-within:border-primary">
+    <div class="flex-1 flex items-center gap-2 bg-container-tertiary border border-[var(--charcoal-color-container-secondary-default)] rounded-ch-m px-2.5 transition-colors duration-150 focus-within:border-primary">
       <pixiv-icon class="text-text-tertiary flex-shrink-0" name="16/Search" fixed-size="14" style="--charcoal-icon-size: 14px"></pixiv-icon>
       <input
         class="flex-1 bg-transparent border-0 outline-none text-text text-[13px] font-[var(--font-sans)] py-[7px] placeholder:text-text-placeholder"
@@ -16,7 +16,7 @@
     </div>
     <div class="relative inline-block min-w-[175px] flex-shrink-0 select-none">
       <div
-        class="flex items-center justify-between gap-2 h-[34px] py-0 pr-2.5 pl-3 box-border rounded-m text-text text-xs font-[var(--font-sans)] cursor-pointer transition-colors duration-150"
+        class="flex items-center justify-between gap-2 h-[34px] py-0 pr-2.5 pl-3 box-border rounded-ch-m text-text text-xs font-[var(--font-sans)] cursor-pointer transition-colors duration-150"
         [ngClass]="activeDropdown() === 'sort' ? 'border border-primary bg-container-secondary' : 'border border-[var(--charcoal-color-container-secondary-default)] bg-container-secondary hover:border-[var(--charcoal-color-text-tertiary-default)]'"
         role="button"
         tabindex="0"
@@ -31,7 +31,7 @@
           aria-hidden="true"></span>
       </div>
       <ul
-        class="absolute top-[calc(100%+4px)] left-0 right-0 z-[200] m-0 py-1 px-0 list-none bg-background border border-[var(--charcoal-color-container-secondary-default)] rounded-m shadow-[0_6px_20px_rgba(0,0,0,0.5)] overflow-hidden"
+        class="absolute top-[calc(100%+4px)] left-0 right-0 z-[200] m-0 py-1 px-0 list-none bg-background border border-[var(--charcoal-color-container-secondary-default)] rounded-ch-m shadow-[0_6px_20px_rgba(0,0,0,0.5)] overflow-hidden"
         [ngClass]="activeDropdown() === 'sort' ? 'block' : 'hidden'"
         role="listbox">
         @for (opt of SORT_OPTIONS; track opt.value) {
@@ -45,24 +45,24 @@
       </ul>
     </div>
     <button
-      class="w-[34px] h-[34px] rounded-m text-base cursor-pointer flex items-center justify-center transition-colors duration-150"
+      class="w-[34px] h-[34px] rounded-ch-m text-base cursor-pointer flex items-center justify-center transition-colors duration-150"
       [ngClass]="selectionMode() ? 'bg-primary-dim border border-primary text-primary' : 'bg-container-secondary border border-transparent text-text-secondary hover:bg-container-tertiary'"
       (click)="toggleSelectionMode()"
       title="複数選択"
     ><pixiv-icon name="16/Check"></pixiv-icon></button>
-    <button class="w-[34px] h-[34px] bg-container-secondary border border-transparent rounded-m text-text-secondary text-base cursor-pointer flex items-center justify-center transition-colors duration-150 hover:bg-container-tertiary" (click)="avatarService.refresh()" title="再読み込み"><pixiv-icon name="24/Reload" fixed-size="16" style="--charcoal-icon-size: 16px"></pixiv-icon></button>
+    <button class="w-[34px] h-[34px] bg-container-secondary border border-transparent rounded-ch-m text-text-secondary text-base cursor-pointer flex items-center justify-center transition-colors duration-150 hover:bg-container-tertiary" (click)="avatarService.refresh()" title="再読み込み"><pixiv-icon name="24/Reload" fixed-size="16" style="--charcoal-icon-size: 16px"></pixiv-icon></button>
   </div>
 
   <!-- Bulk action bar -->
   @if (selectionMode()) {
     <div class="flex items-center gap-2 py-2 px-4 bg-primary-dim border-b border-primary flex-shrink-0">
       <span class="text-xs text-primary font-semibold whitespace-nowrap">{{ selectedAvatarIds().length }} 件選択中</span>
-      <button class="py-1 px-2.5 border border-[var(--charcoal-color-container-secondary-default)] rounded-m bg-container-secondary text-text-secondary text-[11px] font-[var(--font-sans)] cursor-pointer whitespace-nowrap transition-colors duration-150 hover:bg-container-tertiary" (click)="selectAll()">全選択</button>
+      <button class="py-1 px-2.5 border border-[var(--charcoal-color-container-secondary-default)] rounded-ch-m bg-container-secondary text-text-secondary text-[11px] font-[var(--font-sans)] cursor-pointer whitespace-nowrap transition-colors duration-150 hover:bg-container-tertiary" (click)="selectAll()">全選択</button>
       <div class="flex-1"></div>
       @if (selectedAvatarIds().length > 0 && avatarService.folders().length > 0) {
         <div class="relative inline-block min-w-[130px] flex-shrink-0 select-none">
           <div
-            class="flex items-center justify-between gap-2 h-[34px] py-0 pr-2.5 pl-3 box-border rounded-m text-text text-xs font-[var(--font-sans)] cursor-pointer transition-colors duration-150"
+            class="flex items-center justify-between gap-2 h-[34px] py-0 pr-2.5 pl-3 box-border rounded-ch-m text-text text-xs font-[var(--font-sans)] cursor-pointer transition-colors duration-150"
             [ngClass]="activeDropdown() === 'bulk' ? 'border border-primary bg-container-secondary' : 'border border-[var(--charcoal-color-container-secondary-default)] bg-container-secondary hover:border-[var(--charcoal-color-text-tertiary-default)]'"
             role="button"
             tabindex="0"
@@ -77,7 +77,7 @@
               aria-hidden="true"></span>
           </div>
           <ul
-            class="absolute top-[calc(100%+4px)] left-0 right-0 z-[200] m-0 py-1 px-0 list-none bg-background border border-[var(--charcoal-color-container-secondary-default)] rounded-m shadow-[0_6px_20px_rgba(0,0,0,0.5)] overflow-hidden"
+            class="absolute top-[calc(100%+4px)] left-0 right-0 z-[200] m-0 py-1 px-0 list-none bg-background border border-[var(--charcoal-color-container-secondary-default)] rounded-ch-m shadow-[0_6px_20px_rgba(0,0,0,0.5)] overflow-hidden"
             [ngClass]="activeDropdown() === 'bulk' ? 'block' : 'hidden'"
             role="listbox">
             @for (folder of avatarService.folders(); track folder.id) {
@@ -91,19 +91,19 @@
           </ul>
         </div>
         <button
-          class="py-1 px-2.5 rounded-m text-[11px] font-[var(--font-sans)] cursor-pointer whitespace-nowrap transition-colors duration-150 bg-primary border border-primary text-white hover:bg-primary-hover"
+          class="py-1 px-2.5 rounded-ch-m text-[11px] font-[var(--font-sans)] cursor-pointer whitespace-nowrap transition-colors duration-150 bg-primary border border-primary text-white hover:bg-primary-hover"
           (click)="bulkAddToFolder()"
           [disabled]="!bulkFolderId()"
         >追加</button>
       }
-      <button class="py-1 px-2.5 border border-[var(--charcoal-color-container-secondary-default)] rounded-m bg-container-secondary text-text-secondary text-[11px] font-[var(--font-sans)] cursor-pointer whitespace-nowrap transition-colors duration-150 hover:bg-container-tertiary" (click)="toggleSelectionMode()">解除</button>
+      <button class="py-1 px-2.5 border border-[var(--charcoal-color-container-secondary-default)] rounded-ch-m bg-container-secondary text-text-secondary text-[11px] font-[var(--font-sans)] cursor-pointer whitespace-nowrap transition-colors duration-150 hover:bg-container-tertiary" (click)="toggleSelectionMode()">解除</button>
     </div>
   }
 
   <!-- Folder tabs -->
   <div class="flex items-center gap-1 py-2 px-4 border-b border-[var(--charcoal-color-container-secondary-default)] flex-shrink-0 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
     <button
-      class="py-1 px-3 rounded-m text-xs font-[var(--font-sans)] cursor-pointer whitespace-nowrap transition-all duration-150 flex-shrink-0"
+      class="py-1 px-3 rounded-ch-m text-xs font-[var(--font-sans)] cursor-pointer whitespace-nowrap transition-all duration-150 flex-shrink-0"
       [ngClass]="selectedFolderId() === null ? 'bg-primary-dim border border-primary text-primary' : 'border border-[var(--charcoal-color-container-secondary-default)] bg-transparent text-text-tertiary hover:bg-background hover:text-text-secondary'"
       (click)="selectedFolderId.set(null)"
     >
@@ -111,7 +111,7 @@
       <span class="ml-1 opacity-80 text-[11px]">{{ avatarService.allAvatars().length }}</span>
     </button>
     <button
-      class="py-1 px-3 rounded-m text-xs font-[var(--font-sans)] cursor-pointer whitespace-nowrap transition-all duration-150 flex-shrink-0"
+      class="py-1 px-3 rounded-ch-m text-xs font-[var(--font-sans)] cursor-pointer whitespace-nowrap transition-all duration-150 flex-shrink-0"
       [ngClass]="selectedFolderId() === FAVORITES_TAB ? 'bg-primary-dim border border-primary text-primary' : 'border border-[var(--charcoal-color-container-secondary-default)] bg-transparent text-text-tertiary hover:bg-background hover:text-text-secondary'"
       (click)="selectedFolderId.set(FAVORITES_TAB)"
     >
@@ -119,7 +119,7 @@
       <span class="ml-1 opacity-80 text-[11px]">{{ avatarService.favorites().length }}</span>
     </button>
     <button
-      class="py-1 px-3 rounded-m text-xs font-[var(--font-sans)] cursor-pointer whitespace-nowrap transition-all duration-150 flex-shrink-0"
+      class="py-1 px-3 rounded-ch-m text-xs font-[var(--font-sans)] cursor-pointer whitespace-nowrap transition-all duration-150 flex-shrink-0"
       [ngClass]="selectedFolderId() === UPLOADED_TAB ? 'bg-primary-dim border border-primary text-primary' : 'border border-[var(--charcoal-color-container-secondary-default)] bg-transparent text-text-tertiary hover:bg-background hover:text-text-secondary'"
       (click)="selectedFolderId.set(UPLOADED_TAB)"
     >
@@ -134,7 +134,7 @@
         @if (renamingFolderId() === folder.id) {
           <div class="flex items-center gap-1.5">
             <input
-              class="py-1 px-2 bg-container-tertiary border border-primary rounded-m text-text text-xs font-[var(--font-sans)] outline-none w-[120px]"
+              class="py-1 px-2 bg-container-tertiary border border-primary rounded-ch-m text-text text-xs font-[var(--font-sans)] outline-none w-[120px]"
               type="text"
               [(ngModel)]="renamingFolderName"
               maxlength="64"
@@ -142,12 +142,12 @@
               (keyup.escape)="cancelRenameFolder()"
               autofocus
             />
-            <button class="py-1 px-2.5 rounded-m text-[11px] font-[var(--font-sans)] cursor-pointer whitespace-nowrap transition-colors duration-150 bg-primary border border-primary text-white hover:bg-primary-hover" (click)="confirmRenameFolder()">確定</button>
-            <button class="py-1 px-2.5 border border-[var(--charcoal-color-container-secondary-default)] rounded-m bg-container-secondary text-text-secondary text-[11px] font-[var(--font-sans)] cursor-pointer whitespace-nowrap transition-colors duration-150 hover:bg-container-tertiary" (click)="cancelRenameFolder()">✕</button>
+            <button class="py-1 px-2.5 rounded-ch-m text-[11px] font-[var(--font-sans)] cursor-pointer whitespace-nowrap transition-colors duration-150 bg-primary border border-primary text-white hover:bg-primary-hover" (click)="confirmRenameFolder()">確定</button>
+            <button class="py-1 px-2.5 border border-[var(--charcoal-color-container-secondary-default)] rounded-ch-m bg-container-secondary text-text-secondary text-[11px] font-[var(--font-sans)] cursor-pointer whitespace-nowrap transition-colors duration-150 hover:bg-container-tertiary" (click)="cancelRenameFolder()">✕</button>
           </div>
         } @else {
           <button
-            class="py-1 px-3 rounded-m text-xs font-[var(--font-sans)] cursor-pointer whitespace-nowrap transition-all duration-150 flex-shrink-0"
+            class="py-1 px-3 rounded-ch-m text-xs font-[var(--font-sans)] cursor-pointer whitespace-nowrap transition-all duration-150 flex-shrink-0"
             [ngClass]="selectedFolderId() === folder.id ? 'bg-primary-dim border border-primary text-primary' : 'border border-[var(--charcoal-color-container-secondary-default)] bg-transparent text-text-tertiary hover:bg-background hover:text-text-secondary'"
             (click)="selectedFolderId.set(folder.id)"
           >
@@ -160,7 +160,7 @@
     @if (showNewFolderInput()) {
       <div class="flex items-center gap-1.5">
         <input
-          class="py-1 px-2 bg-container-tertiary border border-primary rounded-m text-text text-xs font-[var(--font-sans)] outline-none w-[120px]"
+          class="py-1 px-2 bg-container-tertiary border border-primary rounded-ch-m text-text text-xs font-[var(--font-sans)] outline-none w-[120px]"
           type="text"
           [(ngModel)]="newFolderName"
           maxlength="64"
@@ -169,11 +169,11 @@
           (keyup.escape)="showNewFolderInput.set(false)"
           autofocus
         />
-        <button class="py-1 px-2.5 rounded-m text-[11px] font-[var(--font-sans)] cursor-pointer whitespace-nowrap transition-colors duration-150 bg-primary border border-primary text-white hover:bg-primary-hover" (click)="createFolder()">作成</button>
-        <button class="py-1 px-2.5 border border-[var(--charcoal-color-container-secondary-default)] rounded-m bg-container-secondary text-text-secondary text-[11px] font-[var(--font-sans)] cursor-pointer whitespace-nowrap transition-colors duration-150 hover:bg-container-tertiary" (click)="showNewFolderInput.set(false)">キャンセル</button>
+        <button class="py-1 px-2.5 rounded-ch-m text-[11px] font-[var(--font-sans)] cursor-pointer whitespace-nowrap transition-colors duration-150 bg-primary border border-primary text-white hover:bg-primary-hover" (click)="createFolder()">作成</button>
+        <button class="py-1 px-2.5 border border-[var(--charcoal-color-container-secondary-default)] rounded-ch-m bg-container-secondary text-text-secondary text-[11px] font-[var(--font-sans)] cursor-pointer whitespace-nowrap transition-colors duration-150 hover:bg-container-tertiary" (click)="showNewFolderInput.set(false)">キャンセル</button>
       </div>
     } @else {
-      <button class="py-1 px-3 rounded-m text-xs font-[var(--font-sans)] cursor-pointer whitespace-nowrap transition-all duration-150 flex-shrink-0 border border-dashed border-[var(--charcoal-color-container-secondary-default)] bg-transparent text-text-tertiary hover:border-primary hover:text-primary" (click)="showNewFolderInput.set(true)">
+      <button class="py-1 px-3 rounded-ch-m text-xs font-[var(--font-sans)] cursor-pointer whitespace-nowrap transition-all duration-150 flex-shrink-0 border border-dashed border-[var(--charcoal-color-container-secondary-default)] bg-transparent text-text-tertiary hover:border-primary hover:text-primary" (click)="showNewFolderInput.set(true)">
         + フォルダ
       </button>
     }
@@ -222,7 +222,7 @@
   <!-- Avatar card context menu -->
   @if (cardMenuAvatar()) {
     <div
-      class="fixed z-[201] bg-background border border-[var(--charcoal-color-container-secondary-default)] rounded-m shadow-[0_4px_20px_rgba(0,0,0,0.5)] overflow-hidden min-w-[160px] animate-menu-fade-in"
+      class="fixed z-[201] bg-background border border-[var(--charcoal-color-container-secondary-default)] rounded-ch-m shadow-[0_4px_20px_rgba(0,0,0,0.5)] overflow-hidden min-w-[160px] animate-menu-fade-in"
       [style.left.px]="cardMenuPos().x"
       [style.top.px]="cardMenuPos().y"
       (click)="$event.stopPropagation()"
@@ -254,7 +254,7 @@
   <!-- Folder context menu -->
   @if (contextMenuFolder()) {
     <div
-      class="fixed z-[201] bg-background border border-[var(--charcoal-color-container-secondary-default)] rounded-m shadow-[0_4px_20px_rgba(0,0,0,0.5)] overflow-hidden min-w-[160px] animate-menu-fade-in"
+      class="fixed z-[201] bg-background border border-[var(--charcoal-color-container-secondary-default)] rounded-ch-m shadow-[0_4px_20px_rgba(0,0,0,0.5)] overflow-hidden min-w-[160px] animate-menu-fade-in"
       [style.left.px]="contextMenuPos().x"
       [style.top.px]="contextMenuPos().y"
     >
@@ -273,7 +273,7 @@
   <!-- Toast -->
   @if (successMessage()) {
     <div
-      class="fixed bottom-5 right-5 py-2.5 px-4 rounded-m text-[13px] font-medium animate-[toast-slide-up_0.2s_ease,toast-fade-out_0.3s_ease_2.2s_forwards] z-[400]"
+      class="fixed bottom-5 right-5 py-2.5 px-4 rounded-ch-m text-[13px] font-medium animate-[toast-slide-up_0.2s_ease,toast-fade-out_0.3s_ease_2.2s_forwards] z-[400]"
       [ngClass]="toastKind() === 'success'
         ? 'bg-[#1a3d24] border border-[rgba(86,201,110,0.6)] text-[#6edc8a] shadow-[0_4px_16px_rgba(0,0,0,0.6)]'
         : 'bg-[#3d1a1f] border border-[rgba(220,90,110,0.6)] text-[#ef8a98] shadow-[0_4px_16px_rgba(0,0,0,0.6)]'"
@@ -289,10 +289,10 @@
       <div class="flex items-center gap-0.5 pt-2.5 px-2 pb-3 flex-shrink-0">
         @if (detailEditMode()) {
           <!-- 編集モード: キャンセル ─── 保存 -->
-          <button class="py-[5px] px-3 h-7 box-border bg-transparent border-0 rounded-s text-xs font-[var(--font-sans)] cursor-pointer transition-colors duration-150 text-text-tertiary hover:text-text flex-shrink-0" (click)="cancelEdit()">キャンセル</button>
+          <button class="py-[5px] px-3 h-7 box-border bg-transparent border-0 rounded-ch-s text-xs font-[var(--font-sans)] cursor-pointer transition-colors duration-150 text-text-tertiary hover:text-text flex-shrink-0" (click)="cancelEdit()">キャンセル</button>
           <span class="flex-1"></span>
           <button
-            class="py-[5px] px-[14px] h-7 box-border bg-primary text-white border-0 rounded-s text-xs font-[var(--font-sans)] font-semibold cursor-pointer transition-colors duration-150 enabled:hover:bg-primary-hover disabled:opacity-60 disabled:cursor-default flex-shrink-0"
+            class="py-[5px] px-[14px] h-7 box-border bg-primary text-white border-0 rounded-ch-s text-xs font-[var(--font-sans)] font-semibold cursor-pointer transition-colors duration-150 enabled:hover:bg-primary-hover disabled:opacity-60 disabled:cursor-default flex-shrink-0"
             (click)="saveEdit()"
             [disabled]="detailEditSaving()">
             {{ detailEditSaving() ? '保存中…' : '保存' }}
@@ -300,12 +300,12 @@
         } @else {
           <!-- 通常モード: 編集アイコン（自作アバターのみ） ─── ✕ -->
           @if (isDetailAvatarOwned()) {
-            <button class="flex-shrink-0 w-7 h-7 bg-transparent border-0 text-text-tertiary cursor-pointer rounded-s flex items-center justify-center transition-colors duration-150 hover:bg-container-secondary hover:text-text" (click)="startEdit()" title="編集">
+            <button class="flex-shrink-0 w-7 h-7 bg-transparent border-0 text-text-tertiary cursor-pointer rounded-ch-s flex items-center justify-center transition-colors duration-150 hover:bg-container-secondary hover:text-text" (click)="startEdit()" title="編集">
               <pixiv-icon name="16/Pencil" fixed-size="14" style="--charcoal-icon-size: 14px"></pixiv-icon>
             </button>
           }
           <span class="flex-1"></span>
-          <button class="flex-shrink-0 w-7 h-7 bg-transparent border-0 text-text-tertiary cursor-pointer rounded-s flex items-center justify-center transition-colors duration-150 hover:bg-container-secondary hover:text-text" (click)="closeDetailPanel()" title="閉じる">
+          <button class="flex-shrink-0 w-7 h-7 bg-transparent border-0 text-text-tertiary cursor-pointer rounded-ch-s flex items-center justify-center transition-colors duration-150 hover:bg-container-secondary hover:text-text" (click)="closeDetailPanel()" title="閉じる">
             <pixiv-icon name="24/Close" fixed-size="14" style="--charcoal-icon-size: 14px"></pixiv-icon>
           </button>
         }
@@ -357,7 +357,7 @@
         <div class="flex-1 min-w-0">
           <!-- 名前 -->
           @if (detailEditMode()) {
-            <input class="w-full bg-container-secondary border border-primary rounded-s text-text text-[13px] font-bold font-[var(--font-sans)] py-1 px-2 outline-none box-border placeholder:text-text-placeholder placeholder:font-normal"
+            <input class="w-full bg-container-secondary border border-primary rounded-ch-s text-text text-[13px] font-bold font-[var(--font-sans)] py-1 px-2 outline-none box-border placeholder:text-text-placeholder placeholder:font-normal"
                    [(ngModel)]="detailEditName"
                    maxlength="64"
                    placeholder="アバター名"/>
@@ -369,7 +369,7 @@
 
         <!-- 編集モード: エラー -->
         @if (detailEditMode() && detailEditError()) {
-          <div class="text-[11px] text-text-negative bg-[rgba(224,85,85,0.1)] border border-[rgba(224,85,85,0.3)] rounded-s py-1.5 px-2.5 leading-[1.4]">{{ detailEditError() }}</div>
+          <div class="text-[11px] text-text-negative bg-[rgba(224,85,85,0.1)] border border-[rgba(224,85,85,0.3)] rounded-ch-s py-1.5 px-2.5 leading-[1.4]">{{ detailEditError() }}</div>
         }
 
         @if (!detailEditMode()) {
@@ -409,7 +409,7 @@
 
       @if (!detailEditMode()) {
         <div class="py-3 px-[14px] border-t border-[var(--charcoal-color-container-secondary-default)] flex-shrink-0">
-          <button class="flex items-center justify-center gap-1.5 w-full py-[9px] px-0 bg-primary text-white border-0 rounded-m text-[13px] font-semibold cursor-pointer transition-colors duration-150 hover:bg-primary-hover" (click)="onSwitch(detailAvatar()!.id); closeDetailPanel()">
+          <button class="flex items-center justify-center gap-1.5 w-full py-[9px] px-0 bg-primary text-white border-0 rounded-ch-m text-[13px] font-semibold cursor-pointer transition-colors duration-150 hover:bg-primary-hover" (click)="onSwitch(detailAvatar()!.id); closeDetailPanel()">
             <app-icon name="play" [size]="12"/>切り替え
           </button>
         </div>

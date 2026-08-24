@@ -26,10 +26,10 @@ interface Preset {
 
       <div class="mb-6">
         <h3 class="m-0 mb-3 text-[11px] font-semibold uppercase tracking-[0.08em] text-text-tertiary">アイハイト (m)</h3>
-        <div class="bg-background border border-[var(--charcoal-color-container-secondary-default)] rounded-l p-4 flex flex-col gap-[14px]">
+        <div class="bg-background border border-[var(--charcoal-color-container-secondary-default)] rounded-ch-l p-4 flex flex-col gap-[14px]">
           <div class="flex items-center gap-2.5">
             <div
-              class="inline-flex bg-[var(--charcoal-color-dark-neutral--5)] border border-[var(--charcoal-color-container-secondary-default)] rounded-m p-0.5 gap-0.5"
+              class="inline-flex bg-[var(--charcoal-color-dark-neutral--5)] border border-[var(--charcoal-color-container-secondary-default)] rounded-ch-m p-0.5 gap-0.5"
               role="group"
               aria-label="送信モード"
               title="スムーズ: 補間して滑らかに変化 / 普通: 即時反映"
@@ -50,13 +50,13 @@ interface Preset {
             <input
               type="text"
               inputmode="decimal"
-              class="flex-1 bg-[var(--charcoal-color-dark-neutral--5)] border border-[var(--charcoal-color-container-secondary-default)] rounded-m py-2.5 px-3 text-lg font-semibold text-text font-[var(--font-mono)] outline-none transition-colors duration-150 text-right focus:border-primary"
+              class="flex-1 bg-[var(--charcoal-color-dark-neutral--5)] border border-[var(--charcoal-color-container-secondary-default)] rounded-ch-m py-2.5 px-3 text-lg font-semibold text-text font-[var(--font-mono)] outline-none transition-colors duration-150 text-right focus:border-primary"
               [value]="displayValue()"
               (change)="onValueChange($any($event.target).value)"
             />
             <span class="text-sm text-text-tertiary font-[var(--font-mono)]">m</span>
             <button
-              class="py-2 px-[14px] bg-container-secondary border border-[var(--charcoal-color-container-secondary-default)] rounded-m text-text-secondary text-xs font-[var(--font-sans)] cursor-pointer transition-colors duration-150 whitespace-nowrap enabled:hover:bg-[var(--charcoal-color-dark-neutral--5)] disabled:opacity-60 disabled:cursor-default"
+              class="py-2 px-[14px] bg-container-secondary border border-[var(--charcoal-color-container-secondary-default)] rounded-ch-m text-text-secondary text-xs font-[var(--font-sans)] cursor-pointer transition-colors duration-150 whitespace-nowrap enabled:hover:bg-[var(--charcoal-color-dark-neutral--5)] disabled:opacity-60 disabled:cursor-default"
               [disabled]="eyeHeight.fetchingDefault()"
               (click)="reset()"
               title="アバター本来の身長に戻す（取得できなければ 1.6m）"
@@ -65,36 +65,36 @@ interface Preset {
 
           <div class="grid grid-cols-4 gap-1.5">
             @for (step of steps; track step) {
-              <button class="flex-1 py-2 px-1.5 rounded-m border border-[var(--charcoal-color-container-secondary-default)] bg-[var(--charcoal-color-dark-neutral--5)] text-text-secondary text-xs font-[var(--font-mono)] font-semibold cursor-pointer transition-all duration-100 hover:bg-container-secondary hover:text-text active:translate-y-px" (click)="adjust(step)">
+              <button class="flex-1 py-2 px-1.5 rounded-ch-m border border-[var(--charcoal-color-container-secondary-default)] bg-[var(--charcoal-color-dark-neutral--5)] text-text-secondary text-xs font-[var(--font-mono)] font-semibold cursor-pointer transition-all duration-100 hover:bg-container-secondary hover:text-text active:translate-y-px" (click)="adjust(step)">
                 + {{ step.toFixed(2) }}
               </button>
             }
             @for (step of steps; track step) {
-              <button class="flex-1 py-2 px-1.5 rounded-m border border-[var(--charcoal-color-container-secondary-default)] bg-[var(--charcoal-color-dark-neutral--5)] text-text-secondary text-xs font-[var(--font-mono)] font-semibold cursor-pointer transition-all duration-100 hover:bg-container-secondary hover:text-text active:translate-y-px" (click)="adjust(-step)">
+              <button class="flex-1 py-2 px-1.5 rounded-ch-m border border-[var(--charcoal-color-container-secondary-default)] bg-[var(--charcoal-color-dark-neutral--5)] text-text-secondary text-xs font-[var(--font-mono)] font-semibold cursor-pointer transition-all duration-100 hover:bg-container-secondary hover:text-text active:translate-y-px" (click)="adjust(-step)">
                 − {{ step.toFixed(2) }}
               </button>
             }
           </div>
 
         </div>
-        <p class="mt-2 py-2.5 px-[14px] bg-[rgba(245,166,35,0.08)] border border-[rgba(245,166,35,0.25)] rounded-m text-[11px] text-text-notice leading-[1.6]">ワールド移動・アバター変更時は VRChat 側の身長がリセットされます。変更後は再度適用してください。</p>
+        <p class="mt-2 py-2.5 px-[14px] bg-[rgba(245,166,35,0.08)] border border-[rgba(245,166,35,0.25)] rounded-ch-m text-[11px] text-text-notice leading-[1.6]">ワールド移動・アバター変更時は VRChat 側の身長がリセットされます。変更後は再度適用してください。</p>
       </div>
 
       <div class="mb-6">
         <div class="flex items-center justify-between mb-3">
           <h3 class="m-0 text-[11px] font-semibold uppercase tracking-[0.08em] text-text-tertiary">プリセット</h3>
-          <button class="py-1.5 px-3 bg-primary-dim border border-primary rounded-m text-primary text-xs font-semibold font-[var(--font-sans)] cursor-pointer transition-colors duration-150 hover:bg-primary hover:text-white" (click)="openSaveDialog()">
+          <button class="py-1.5 px-3 bg-primary-dim border border-primary rounded-ch-m text-primary text-xs font-semibold font-[var(--font-sans)] cursor-pointer transition-colors duration-150 hover:bg-primary hover:text-white" (click)="openSaveDialog()">
             + 現在値を保存
           </button>
         </div>
-        <div class="bg-background border border-[var(--charcoal-color-container-secondary-default)] rounded-l p-4 flex flex-col gap-2">
+        <div class="bg-background border border-[var(--charcoal-color-container-secondary-default)] rounded-ch-l p-4 flex flex-col gap-2">
           @if (presets().length === 0) {
             <p class="m-0 text-xs text-text-placeholder text-center py-2">プリセットはまだありません。現在値を保存しましょう。</p>
           } @else {
             @for (preset of presets(); track preset.id) {
               <div class="flex gap-1.5 items-stretch">
                 <button
-                  class="flex-1 flex items-center justify-between py-2.5 px-3 bg-[var(--charcoal-color-dark-neutral--5)] border border-[var(--charcoal-color-container-secondary-default)] rounded-m text-text font-[var(--font-sans)] cursor-pointer transition-all duration-100 hover:bg-container-secondary hover:border-primary"
+                  class="flex-1 flex items-center justify-between py-2.5 px-3 bg-[var(--charcoal-color-dark-neutral--5)] border border-[var(--charcoal-color-container-secondary-default)] rounded-ch-m text-text font-[var(--font-sans)] cursor-pointer transition-all duration-100 hover:bg-container-secondary hover:border-primary"
                   (click)="applyPreset(preset)"
                   (contextmenu)="openContextMenu(preset, $event)"
                 >
@@ -102,7 +102,7 @@ interface Preset {
                   <span class="text-xs text-primary font-[var(--font-mono)] font-semibold">{{ preset.value.toFixed(2) }} m</span>
                 </button>
                 <button
-                  class="w-9 bg-[var(--charcoal-color-dark-neutral--5)] border border-[var(--charcoal-color-container-secondary-default)] rounded-m text-text-tertiary text-lg leading-none cursor-pointer transition-all duration-100 hover:bg-[rgba(245,108,108,0.1)] hover:border-[rgba(245,108,108,0.3)] hover:text-text-negative"
+                  class="w-9 bg-[var(--charcoal-color-dark-neutral--5)] border border-[var(--charcoal-color-container-secondary-default)] rounded-ch-m text-text-tertiary text-lg leading-none cursor-pointer transition-all duration-100 hover:bg-[rgba(245,108,108,0.1)] hover:border-[rgba(245,108,108,0.3)] hover:text-text-negative"
                   (click)="deletePreset(preset.id)"
                   title="削除"
                   aria-label="削除"
@@ -114,14 +114,14 @@ interface Preset {
       </div>
 
       @if (eyeHeight.lastError(); as err) {
-        <div class="py-3 px-4 bg-[rgba(245,108,108,0.08)] border border-[rgba(245,108,108,0.25)] rounded-m text-xs text-text-negative">{{ err }}</div>
+        <div class="py-3 px-4 bg-[rgba(245,108,108,0.08)] border border-[rgba(245,108,108,0.25)] rounded-ch-m text-xs text-text-negative">{{ err }}</div>
       }
       @if (eyeHeight.scalingAllowed() === false) {
-        <div class="py-3 px-4 bg-[rgba(230,162,60,0.08)] border border-[rgba(230,162,60,0.25)] rounded-m text-xs text-text-notice">このワールドでは身長変更が許可されていないため、VRChat側で反映されない可能性があります</div>
+        <div class="py-3 px-4 bg-[rgba(230,162,60,0.08)] border border-[rgba(230,162,60,0.25)] rounded-ch-m text-xs text-text-notice">このワールドでは身長変更が許可されていないため、VRChat側で反映されない可能性があります</div>
       }
 
       @if (contextMenu(); as menu) {
-        <div class="fixed z-[901] bg-background border border-[var(--charcoal-color-container-secondary-default)] rounded-m p-1 shadow-[0_4px_16px_rgba(0,0,0,0.35)] min-w-[120px]" [style.left.px]="menu.x" [style.top.px]="menu.y" (click)="$event.stopPropagation()">
+        <div class="fixed z-[901] bg-background border border-[var(--charcoal-color-container-secondary-default)] rounded-ch-m p-1 shadow-[0_4px_16px_rgba(0,0,0,0.35)] min-w-[120px]" [style.left.px]="menu.x" [style.top.px]="menu.y" (click)="$event.stopPropagation()">
           <button class="block w-full py-2 px-3 bg-transparent border-0 rounded-[calc(var(--charcoal-radius-m)_-_4px)] text-text text-xs font-[var(--font-sans)] text-left cursor-pointer hover:bg-container-secondary" (click)="openEditDialog(menu.preset); closeContextMenu()">編集</button>
           <button class="block w-full py-2 px-3 bg-transparent border-0 rounded-[calc(var(--charcoal-radius-m)_-_4px)] text-text-negative text-xs font-[var(--font-sans)] text-left cursor-pointer hover:bg-[rgba(245,108,108,0.1)]" (click)="deletePreset(menu.preset.id); closeContextMenu()">削除</button>
         </div>
@@ -130,7 +130,7 @@ interface Preset {
       @if (dialogOpen()) {
         <div class="fixed inset-0 bg-[rgba(0,0,0,0.55)] flex items-center justify-center z-[1000] animate-dialog-fade-in" (click)="closeDialog()">
           <div
-            class="w-[min(360px,calc(100vw_-_48px))] bg-background border border-[var(--charcoal-color-container-secondary-default)] rounded-l p-5 flex flex-col gap-[14px] shadow-[0_12px_32px_rgba(0,0,0,0.4)] animate-dialog-slide-in"
+            class="w-[min(360px,calc(100vw_-_48px))] bg-background border border-[var(--charcoal-color-container-secondary-default)] rounded-ch-l p-5 flex flex-col gap-[14px] shadow-[0_12px_32px_rgba(0,0,0,0.4)] animate-dialog-slide-in"
             role="dialog"
             aria-modal="true"
             aria-labelledby="preset-dialog-title"
@@ -144,7 +144,7 @@ interface Preset {
               <input
                 #nameInput
                 type="text"
-                class="bg-[var(--charcoal-color-dark-neutral--5)] border border-[var(--charcoal-color-container-secondary-default)] rounded-m py-[9px] px-3 text-[13px] text-text font-[var(--font-sans)] outline-none transition-colors duration-150 w-full box-border focus:border-primary"
+                class="bg-[var(--charcoal-color-dark-neutral--5)] border border-[var(--charcoal-color-container-secondary-default)] rounded-ch-m py-[9px] px-3 text-[13px] text-text font-[var(--font-sans)] outline-none transition-colors duration-150 w-full box-border focus:border-primary"
                 [ngModel]="draftName()"
                 (ngModelChange)="draftName.set($event)"
                 (keydown.enter)="confirmSave()"
@@ -160,7 +160,7 @@ interface Preset {
               <div class="flex items-center gap-2">
                 <input
                   type="number"
-                  class="bg-[var(--charcoal-color-dark-neutral--5)] border border-[var(--charcoal-color-container-secondary-default)] rounded-m py-[9px] px-3 text-[13px] text-text font-[var(--font-sans)] outline-none transition-colors duration-150 w-full box-border focus:border-primary font-[var(--font-mono)] text-right font-semibold"
+                  class="bg-[var(--charcoal-color-dark-neutral--5)] border border-[var(--charcoal-color-container-secondary-default)] rounded-ch-m py-[9px] px-3 text-[13px] text-text font-[var(--font-sans)] outline-none transition-colors duration-150 w-full box-border focus:border-primary font-[var(--font-mono)] text-right font-semibold"
                   [min]="minValue()"
                   [max]="maxValue()"
                   step="0.01"
@@ -178,10 +178,10 @@ interface Preset {
             }
 
             <div class="flex gap-2 justify-end mt-1">
-              <button class="py-2 px-[18px] rounded-m text-xs font-semibold font-[var(--font-sans)] cursor-pointer transition-all duration-100 border border-[var(--charcoal-color-container-secondary-default)] bg-container-secondary text-text-secondary hover:bg-[var(--charcoal-color-dark-neutral--5)]" (click)="closeDialog()">
+              <button class="py-2 px-[18px] rounded-ch-m text-xs font-semibold font-[var(--font-sans)] cursor-pointer transition-all duration-100 border border-[var(--charcoal-color-container-secondary-default)] bg-container-secondary text-text-secondary hover:bg-[var(--charcoal-color-dark-neutral--5)]" (click)="closeDialog()">
                 キャンセル
               </button>
-              <button class="py-2 px-[18px] rounded-m text-xs font-semibold font-[var(--font-sans)] cursor-pointer transition-all duration-100 border border-primary bg-primary text-white hover:brightness-[1.08]" (click)="confirmSave()">
+              <button class="py-2 px-[18px] rounded-ch-m text-xs font-semibold font-[var(--font-sans)] cursor-pointer transition-all duration-100 border border-primary bg-primary text-white hover:brightness-[1.08]" (click)="confirmSave()">
                 保存
               </button>
             </div>

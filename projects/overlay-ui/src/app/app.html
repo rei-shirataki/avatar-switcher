@@ -1,10 +1,10 @@
-<div class="panel">
-  <header class="panel__header">
-    <h1>AvatarSwitcher</h1>
+<div class="flex flex-col w-full h-full overflow-hidden">
+  <header class="flex items-center gap-3 pt-4 px-4 pb-0 flex-shrink-0">
+    <h1 class="text-[22px] m-0">AvatarSwitcher</h1>
     @if (avatarService.loading()) {
-      <span class="panel__status">読み込み中…</span>
+      <span class="text-accent-label text-[13px]">読み込み中…</span>
     }
-    <button type="button" class="sort-button" (click)="avatarService.cycleSortMode()">
+    <button type="button" class="ml-auto py-2.5 px-4 border-2 border-transparent rounded-lg bg-background text-text text-[13px] font-[inherit] cursor-pointer whitespace-nowrap hover:border-accent-hover" (click)="avatarService.cycleSortMode()">
       並び替え: {{ avatarService.sortLabel() }}
     </button>
   </header>

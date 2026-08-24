@@ -1,4 +1,5 @@
 import { Component, DestroyRef, OnInit, inject, signal } from '@angular/core';
+import { NgClass } from '@angular/common';
 import { getVersion } from '@tauri-apps/api/app';
 import { VRChatAuthService } from '../../core/services/vrchat-auth.service';
 import { TauriService } from '../../core/services/tauri.service';
@@ -116,113 +117,115 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.`,
 @Component({
   selector: 'app-settings-view',
   standalone: true,
-  imports: [],
+  imports: [NgClass],
   template: `
-    <div class="settings-view">
-      <h2 class="page-title">設定</h2>
+    <div class="p-6 h-full overflow-y-auto">
+      <h2 class="m-0 mb-6 text-lg font-bold text-text">設定</h2>
 
       @if (auth.user(); as user) {
-        <div class="settings-section">
-          <h3 class="section-title">アカウント</h3>
-          <div class="account-card">
+        <div class="mb-6">
+          <h3 class="m-0 mb-3 text-[11px] font-semibold uppercase tracking-[0.08em] text-text-tertiary">アカウント</h3>
+          <div class="bg-background border border-[var(--charcoal-color-container-secondary-default)] rounded-ch-l p-4 flex items-center justify-between gap-4">
             @if (avatarUrl(user); as url) {
               <img
-                class="account-avatar"
+                class="w-10 h-10 rounded-full object-cover flex-shrink-0 bg-container-secondary"
                 [src]="url"
                 alt=""
                 (error)="onAvatarError($event)"
               />
             } @else {
-              <div class="account-avatar account-avatar--placeholder"></div>
+              <div class="w-10 h-10 rounded-full flex-shrink-0 bg-container-secondary"></div>
             }
-            <div class="account-info">
-              <div class="account-name">{{ user.displayName }}</div>
+            <div class="flex-1 min-w-0">
+              <div class="text-[15px] font-semibold text-text">{{ user.displayName }}</div>
             </div>
-            <button class="btn-logout" (click)="logout()">ログアウト</button>
+            <button class="py-2 px-4 bg-[rgba(245,108,108,0.1)] border border-[rgba(245,108,108,0.3)] rounded-ch-m text-text-negative text-xs font-[var(--font-sans)] cursor-pointer transition-colors duration-150 whitespace-nowrap flex-shrink-0 hover:bg-[rgba(245,108,108,0.2)]" (click)="logout()">ログアウト</button>
           </div>
         </div>
       }
 
-      <div class="settings-section">
-        <h3 class="section-title">OSC</h3>
-        <div class="settings-card">
-          <div class="setting-row">
-            <span class="setting-label">VRChat 接続</span>
+      <div class="mb-6">
+        <h3 class="m-0 mb-3 text-[11px] font-semibold uppercase tracking-[0.08em] text-text-tertiary">OSC</h3>
+        <div class="bg-background border border-[var(--charcoal-color-container-secondary-default)] rounded-ch-l p-4 flex flex-col gap-3 mb-3">
+          <div class="flex items-center justify-between">
+            <span class="text-[13px] text-text-secondary">VRChat 接続</span>
             @if (oscStatus(); as s) {
-              <span class="status-badge" [class.status-badge--on]="s.vrchat_detected">
+              <span
+                class="text-[11px] py-0.5 px-2.5 rounded-ch-s"
+                [ngClass]="s.vrchat_detected ? 'bg-[rgba(86,201,110,0.1)] text-text-positive' : 'bg-[rgba(136,136,170,0.1)] text-text-tertiary'"
+              >
                 {{ s.vrchat_detected ? '接続中' : '未接続' }}
               </span>
             } @else {
-              <span class="status-badge">確認中…</span>
+              <span class="text-[11px] py-0.5 px-2.5 rounded-ch-s bg-[rgba(136,136,170,0.1)] text-text-tertiary">確認中…</span>
             }
           </div>
           @if (oscStatus()?.vrchat_detected) {
-            <div class="setting-row">
-              <span class="setting-label">ポート</span>
-              <span class="setting-value">{{ oscStatus()?.port }}</span>
+            <div class="flex items-center justify-between">
+              <span class="text-[13px] text-text-secondary">ポート</span>
+              <span class="text-primary font-semibold">{{ oscStatus()?.port }}</span>
             </div>
           }
         </div>
       </div>
 
-      <div class="settings-section">
-        <h3 class="section-title">SteamVRオーバーレイ</h3>
-        <div class="settings-card">
-          <div class="setting-row setting-row--column">
-            <span class="setting-label">パネルの配置</span>
-            <div class="placement-toggle">
+      <div class="mb-6">
+        <h3 class="m-0 mb-3 text-[11px] font-semibold uppercase tracking-[0.08em] text-text-tertiary">SteamVRオーバーレイ</h3>
+        <div class="bg-background border border-[var(--charcoal-color-container-secondary-default)] rounded-ch-l p-4 flex flex-col gap-3 mb-3">
+          <div class="flex flex-col items-stretch gap-2">
+            <span class="text-[13px] text-text-secondary">パネルの配置</span>
+            <div class="flex gap-2">
               <button
-                class="toggle-btn"
-                [class.toggle-btn--on]="placementMode() === 'hand'"
+                class="flex-1 py-1 px-5 rounded-ch-m text-xs font-semibold font-[var(--font-sans)] cursor-pointer transition-all duration-150"
+                [ngClass]="placementMode() === 'hand' ? 'bg-primary-dim border border-primary text-primary' : 'bg-container-secondary border border-[var(--charcoal-color-container-secondary-default)] text-text-tertiary'"
                 (click)="setPlacementMode('hand')"
               >
                 手に追従
               </button>
               <button
-                class="toggle-btn"
-                [class.toggle-btn--on]="placementMode() === 'space'"
+                class="flex-1 py-1 px-5 rounded-ch-m text-xs font-semibold font-[var(--font-sans)] cursor-pointer transition-all duration-150"
+                [ngClass]="placementMode() === 'space' ? 'bg-primary-dim border border-primary text-primary' : 'bg-container-secondary border border-[var(--charcoal-color-container-secondary-default)] text-text-tertiary'"
                 (click)="setPlacementMode('space')"
               >
                 空間に固定
               </button>
             </div>
-            <p class="setting-hint">変更はオーバーレイの再起動後に反映されます（アプリの再起動が必要です）</p>
+            <p class="m-0 text-[11px] text-text-placeholder">変更はオーバーレイの再起動後に反映されます（アプリの再起動が必要です）</p>
           </div>
         </div>
       </div>
 
-      <div class="settings-section">
-        <h3 class="section-title">このアプリについて</h3>
-        <div class="settings-card">
-          <div class="setting-row">
-            <span class="setting-label">バージョン</span>
-            <span class="setting-value">{{ version() }}</span>
+      <div class="mb-6">
+        <h3 class="m-0 mb-3 text-[11px] font-semibold uppercase tracking-[0.08em] text-text-tertiary">このアプリについて</h3>
+        <div class="bg-background border border-[var(--charcoal-color-container-secondary-default)] rounded-ch-l p-4 flex flex-col gap-3 mb-3">
+          <div class="flex items-center justify-between">
+            <span class="text-[13px] text-text-secondary">バージョン</span>
+            <span class="text-primary font-semibold">{{ version() }}</span>
           </div>
         </div>
       </div>
 
-      <div class="settings-section">
-        <h3 class="section-title">ライセンス</h3>
-        <div class="settings-card">
+      <div class="mb-6">
+        <h3 class="m-0 mb-3 text-[11px] font-semibold uppercase tracking-[0.08em] text-text-tertiary">ライセンス</h3>
+        <div class="bg-background border border-[var(--charcoal-color-container-secondary-default)] rounded-ch-l p-4 flex flex-col gap-3 mb-3">
           @for (entry of licenses; track entry.name; let i = $index) {
-            <div class="setting-row">
-              <div class="license-info">
-                <span class="setting-label">{{ entry.name }}</span>
-                <span class="license-type">{{ entry.license }}</span>
+            <div class="flex items-center justify-between">
+              <div class="flex flex-col gap-0.5">
+                <span class="text-[13px] text-text-secondary">{{ entry.name }}</span>
+                <span class="text-[11px] text-text-placeholder">{{ entry.license }}</span>
               </div>
-              <button class="license-toggle-btn" (click)="toggleLicense(i)">
+              <button class="flex-shrink-0 py-1 px-4 rounded-ch-m border border-[var(--charcoal-color-container-secondary-default)] bg-container-secondary text-text-tertiary text-xs font-semibold font-[var(--font-sans)] cursor-pointer transition-colors duration-150 hover:bg-primary-dim" (click)="toggleLicense(i)">
                 {{ expandedLicense() === i ? '閉じる' : '表示' }}
               </button>
             </div>
             @if (expandedLicense() === i) {
-              <pre class="license-text">{{ entry.text }}</pre>
+              <pre class="m-0 p-3 bg-[var(--charcoal-color-dark-neutral--5)] border border-[var(--charcoal-color-container-secondary-default)] rounded-ch-m font-[var(--font-mono,monospace)] text-[11px] leading-normal text-text-tertiary whitespace-pre-wrap break-words">{{ entry.text }}</pre>
             }
           }
         </div>
       </div>
     </div>
   `,
-  styleUrl: './settings-view.component.scss',
 })
 export class SettingsViewComponent implements OnInit {
   readonly version = signal<string>('...');
@@ -305,7 +308,7 @@ export class SettingsViewComponent implements OnInit {
   onAvatarError(event: Event): void {
     const el = event.target as HTMLImageElement | null;
     if (!el) return;
-    el.classList.add('account-avatar--placeholder');
+    el.style.objectFit = 'initial';
     el.removeAttribute('src');
   }
 

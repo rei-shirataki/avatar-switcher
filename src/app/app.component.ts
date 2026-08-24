@@ -11,19 +11,21 @@ import { CommonModule } from '@angular/common';
   standalone: true,
   imports: [RouterOutlet, TitleBarComponent, SidebarComponent, CommonModule],
   template: `
-    <div class="app-window" (contextmenu)="$event.preventDefault()">
+    <div
+      class="flex flex-col w-screen h-screen bg-[var(--charcoal-color-dark-neutral--10)]"
+      (contextmenu)="$event.preventDefault()"
+    >
       <app-title-bar />
-      <div class="app-body">
+      <div class="flex flex-1 overflow-hidden">
         @if (auth.isLoggedIn()) {
           <app-sidebar />
         }
-        <main class="app-content">
+        <main class="flex-1 overflow-hidden flex flex-col">
           <router-outlet />
         </main>
       </div>
     </div>
   `,
-  styleUrl: './app.component.scss',
 })
 export class AppComponent implements OnInit {
   constructor(

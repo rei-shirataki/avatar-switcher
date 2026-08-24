@@ -9,7 +9,7 @@ import { EyeHeightControlComponent } from './eye-height-control/eye-height-contr
   selector: 'app-root',
   imports: [AvatarGridComponent, FolderTabsComponent, EyeHeightControlComponent],
   templateUrl: './app.html',
-  styleUrl: './app.scss',
+  host: { class: 'block w-full h-full' },
 })
 export class App implements OnInit {
   private readonly bridge = inject(OverlayBridgeService);

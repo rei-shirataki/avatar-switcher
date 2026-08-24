@@ -1,21 +1,21 @@
-<div class="height-bar">
-  <span class="height-bar__label">身長</span>
-  <span class="height-bar__value">
+<div class="flex items-center gap-3 pt-3 px-4 pb-0 flex-shrink-0 flex-wrap">
+  <span class="text-accent-label text-[18px]">身長</span>
+  <span class="text-2xl font-bold [font-variant-numeric:tabular-nums] min-w-[4.5em]">
     {{ eyeHeight.value() !== null ? (eyeHeight.value()! | number: '1.2-2') + 'm' : '—' }}
   </span>
-  <div class="height-bar__mode" role="group" aria-label="送信モード">
+  <div class="flex gap-1 p-1 bg-background rounded-lg" role="group" aria-label="送信モード">
     <button
       type="button"
-      class="height-bar__mode-btn"
-      [class.height-bar__mode-btn--active]="eyeHeight.mode() === 'instant'"
+      class="py-2 px-[14px] border-2 border-transparent rounded-md text-sm font-[inherit] cursor-pointer"
+      [ngClass]="eyeHeight.mode() === 'instant' ? 'bg-accent/15 text-accent' : 'bg-transparent text-text-tertiary'"
       (click)="eyeHeight.setMode('instant')"
     >
       普通
     </button>
     <button
       type="button"
-      class="height-bar__mode-btn"
-      [class.height-bar__mode-btn--active]="eyeHeight.mode() === 'smooth'"
+      class="py-2 px-[14px] border-2 border-transparent rounded-md text-sm font-[inherit] cursor-pointer"
+      [ngClass]="eyeHeight.mode() === 'smooth' ? 'bg-accent/15 text-accent' : 'bg-transparent text-text-tertiary'"
       (click)="eyeHeight.setMode('smooth')"
     >
       スムーズ
@@ -23,20 +23,20 @@
   </div>
   <button
     type="button"
-    class="height-bar__reset"
+    class="py-2.5 px-4 border-2 border-transparent rounded-lg bg-background text-text text-base font-[inherit] cursor-pointer enabled:hover:border-accent-hover disabled:opacity-50 disabled:cursor-default"
     [disabled]="eyeHeight.resetting()"
     (click)="eyeHeight.reset()"
   >
     {{ eyeHeight.resetting() ? 'リセット中…' : 'リセット' }}
   </button>
-  <div class="height-bar__steps">
+  <div class="flex gap-2 ml-auto">
     <!-- 長押しで連続増減できるよう、単発のclickではなくmousedown起点のオートリピート
          (EyeHeightControlComponent.startRepeat)にしている。mouseup/mouseleave両方で
          止めるのは、VRコントローラーの精度不足でポインタがボタン外へ逸れたまま
          離した場合でもリピートが残留しないようにするため。 -->
-    <button type="button" (mousedown)="startRepeat(-0.1)" (mouseup)="stopRepeat()" (mouseleave)="stopRepeat()">-0.1</button>
-    <button type="button" (mousedown)="startRepeat(-0.01)" (mouseup)="stopRepeat()" (mouseleave)="stopRepeat()">-0.01</button>
-    <button type="button" (mousedown)="startRepeat(0.01)" (mouseup)="stopRepeat()" (mouseleave)="stopRepeat()">+0.01</button>
-    <button type="button" (mousedown)="startRepeat(0.1)" (mouseup)="stopRepeat()" (mouseleave)="stopRepeat()">+0.1</button>
+    <button class="py-2.5 px-[14px] border-2 border-transparent rounded-lg bg-background text-text text-base font-[inherit] cursor-pointer hover:border-accent-hover" type="button" (mousedown)="startRepeat(-0.1)" (mouseup)="stopRepeat()" (mouseleave)="stopRepeat()">-0.1</button>
+    <button class="py-2.5 px-[14px] border-2 border-transparent rounded-lg bg-background text-text text-base font-[inherit] cursor-pointer hover:border-accent-hover" type="button" (mousedown)="startRepeat(-0.01)" (mouseup)="stopRepeat()" (mouseleave)="stopRepeat()">-0.01</button>
+    <button class="py-2.5 px-[14px] border-2 border-transparent rounded-lg bg-background text-text text-base font-[inherit] cursor-pointer hover:border-accent-hover" type="button" (mousedown)="startRepeat(0.01)" (mouseup)="stopRepeat()" (mouseleave)="stopRepeat()">+0.01</button>
+    <button class="py-2.5 px-[14px] border-2 border-transparent rounded-lg bg-background text-text text-base font-[inherit] cursor-pointer hover:border-accent-hover" type="button" (mousedown)="startRepeat(0.1)" (mouseup)="stopRepeat()" (mouseleave)="stopRepeat()">+0.1</button>
   </div>
 </div>

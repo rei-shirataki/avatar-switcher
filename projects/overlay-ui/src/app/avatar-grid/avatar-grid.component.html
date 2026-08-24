@@ -1,29 +1,28 @@
-<div class="grid">
+<div class="grid gap-6 p-4 w-full box-border [grid-template-columns:repeat(auto-fill,minmax(200px,1fr))]">
   @for (avatar of avatars; track avatar.id) {
     <button
       type="button"
-      class="card"
-      [class.card--current]="avatar.id === currentAvatarId"
-      [class.card--switching]="avatar.id === switchingId"
+      class="flex flex-col gap-2 bg-background border-2 rounded-xl p-3 cursor-pointer text-text font-[inherit] text-left transition-[border-color,transform,box-shadow] duration-150 enabled:hover:-translate-y-0.5 enabled:hover:shadow-[0_4px_16px_rgba(0,0,0,0.3)] disabled:cursor-default disabled:opacity-60"
+      [ngClass]="avatar.id === currentAvatarId ? 'border-accent' : 'border-transparent enabled:hover:border-accent-hover'"
       [disabled]="switchingId !== null"
       (click)="select.emit(avatar.id)"
     >
-      <div class="card__thumb">
+      <div class="relative w-full aspect-square rounded-lg overflow-hidden bg-[var(--charcoal-color-dark-neutral--10)]">
         @if (avatar.thumbnailImageUrl) {
-          <img [src]="avatar.thumbnailImageUrl" [alt]="avatar.name" draggable="false" (error)="onImgError($event)" />
+          <img class="w-full h-full object-cover pointer-events-none [-webkit-user-drag:none]" [src]="avatar.thumbnailImageUrl" [alt]="avatar.name" draggable="false" (error)="onImgError($event)" />
         } @else {
-          <div class="card__thumb-placeholder">{{ avatar.name.charAt(0) }}</div>
+          <div class="w-full h-full flex items-center justify-center text-[40px] text-text-placeholder">{{ avatar.name.charAt(0) }}</div>
         }
         @if (avatar.id === currentAvatarId) {
-          <div class="card__current-badge">装着中</div>
+          <div class="absolute top-1.5 left-1.5 bg-accent text-white text-[11px] py-0.5 px-2 rounded-md">装着中</div>
         }
         @if (avatar.id === switchingId) {
-          <div class="card__spinner"></div>
+          <div class="absolute inset-0 flex items-center justify-center bg-[rgba(0,0,0,0.5)] after:content-[''] after:w-7 after:h-7 after:rounded-full after:border-[3px] after:border-[rgba(255,255,255,0.3)] after:border-t-white after:animate-[spin_0.8s_linear_infinite]"></div>
         }
       </div>
-      <div class="card__name" [title]="avatar.name">{{ avatar.name }}</div>
+      <div class="text-sm truncate" [title]="avatar.name">{{ avatar.name }}</div>
     </button>
   } @empty {
-    <div class="empty">アバターがありません</div>
+    <div class="p-8 text-text-tertiary text-center [grid-column:1/-1]">アバターがありません</div>
   }
 </div>

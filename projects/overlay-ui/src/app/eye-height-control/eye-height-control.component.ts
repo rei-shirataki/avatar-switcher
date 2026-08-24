@@ -1,5 +1,5 @@
 import { Component, DestroyRef, inject } from '@angular/core';
-import { DecimalPipe } from '@angular/common';
+import { DecimalPipe, NgClass } from '@angular/common';
 import { OverlayEyeHeightService } from '../overlay-eye-height.service';
 
 /** 長押し開始からオートリピートが始まるまでの遅延。単発タップと区別するため。 */
@@ -9,9 +9,8 @@ const REPEAT_INTERVAL_MS = 150;
 
 @Component({
   selector: 'app-eye-height-control',
-  imports: [DecimalPipe],
+  imports: [DecimalPipe, NgClass],
   templateUrl: './eye-height-control.component.html',
-  styleUrl: './eye-height-control.component.scss',
 })
 export class EyeHeightControlComponent {
   protected readonly eyeHeight = inject(OverlayEyeHeightService);

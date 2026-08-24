@@ -11,7 +11,6 @@ type LoginStep = 'credentials' | '2fa';
   standalone: true,
   imports: [FormsModule, CommonModule],
   templateUrl: './login-view.component.html',
-  styleUrl: './login-view.component.scss',
 })
 export class LoginViewComponent {
   step = signal<LoginStep>('credentials');

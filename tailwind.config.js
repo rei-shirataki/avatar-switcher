@@ -1,0 +1,71 @@
+const { unstable_createTailwindConfigTokenV2 } = require('@charcoal-ui/tailwind-config');
+
+const v2 = unstable_createTailwindConfigTokenV2();
+
+/** @type {import('tailwindcss').Config} */
+module.exports = {
+  content: [
+    './src/**/*.{html,ts}',
+    './projects/overlay-ui/src/**/*.{html,ts}',
+  ],
+  theme: {
+    // v1のconfig(presets)はtheme.spacing/gap/widthをcharcoal独自スケールで完全上書きしてしまい、
+    // p-4等の標準Tailwindクラスの意味が変わってしまう罠があるため使わない。
+    // colors/borderRadiusだけをextendで注入し、spacing/gap/width/heightは標準スケールを維持する。
+    extend: {
+      colors: {
+        ...v2.theme.colors,
+        // avatar-switcher独自のブランド色。charcoal標準パレットに対応する色がないため専用トークンとして維持。
+        primary: {
+          DEFAULT: 'var(--color-primary)',
+          hover: 'var(--color-primary-hover)',
+          active: 'var(--color-primary-active)',
+          dim: 'var(--color-primary-dim)',
+        },
+        // overlay-ui独自のアクセント色。同じくcharcoal標準パレットに対応する色がない。
+        accent: {
+          DEFAULT: '#2b6fd6',
+          hover: '#3f82ea',
+          label: '#9ad1ff',
+        },
+      },
+      // v2のキー(s/m/l/xl/xxl等)をそのまま使うとTailwind標準の論理/物理方向ユーティリティ
+      // (rounded-l = 左側のみ角丸、rounded-s = start側のみ角丸 等)と名前が衝突し、
+      // 該当する角だけTailwind側の既定値(0.25rem)で上書きされてしまう(左右で丸みが
+      // 異なって見えるバグの原因になった)。ch- prefixを付けて完全に名前空間を分離する。
+      borderRadius: Object.fromEntries(
+        Object.entries(v2.theme.borderRadius).map(([key, value]) => [`ch-${key}`, value]),
+      ),
+      // 各コンポーネントの@keyframesをここに集約する。spinはTailwind標準のanimate-spinをそのまま使う。
+      keyframes: {
+        'fade-in': { from: { opacity: '0' }, to: { opacity: '1' } },
+        'dialog-fade-in': { from: { opacity: '0' }, to: { opacity: '1' } },
+        'dialog-slide-in': {
+          from: { transform: 'translateY(8px)', opacity: '0' },
+          to: { transform: 'translateY(0)', opacity: '1' },
+        },
+        'menu-fade-in': {
+          from: { opacity: '0', transform: 'scale(0.96)' },
+          to: { opacity: '1', transform: 'scale(1)' },
+        },
+        'toast-slide-up': {
+          from: { transform: 'translateY(10px)', opacity: '0' },
+          to: { transform: 'translateY(0)', opacity: '1' },
+        },
+        'toast-fade-out': { to: { opacity: '0' } },
+        'slide-in-right': {
+          from: { transform: 'translateX(100%)', opacity: '0' },
+          to: { transform: 'translateX(0)', opacity: '1' },
+        },
+      },
+      animation: {
+        'fade-in': 'fade-in 0.15s ease',
+        'dialog-fade-in': 'dialog-fade-in 0.12s ease-out',
+        'dialog-slide-in': 'dialog-slide-in 0.15s ease-out',
+        'menu-fade-in': 'menu-fade-in 0.1s ease',
+        'slide-in-right': 'slide-in-right 0.2s ease',
+      },
+    },
+  },
+  plugins: [],
+};

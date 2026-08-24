@@ -1,4 +1,4 @@
-import { Component, OnInit, signal, computed, HostListener } from '@angular/core';
+import { Component, CUSTOM_ELEMENTS_SCHEMA, OnInit, signal, computed, HostListener } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { CommonModule } from '@angular/common';
 import { AvatarService } from '../../core/services/avatar.service';
@@ -15,7 +15,7 @@ type ToastKind = 'success' | 'error';
   standalone: true,
   imports: [FormsModule, CommonModule, AvatarCardComponent, IconComponent],
   templateUrl: './avatars-view.component.html',
-  styleUrl: './avatars-view.component.scss',
+  schemas: [CUSTOM_ELEMENTS_SCHEMA],
 })
 export class AvatarsViewComponent implements OnInit {
   searchQuery = signal('');

@@ -1,12 +1,12 @@
 import { Component, Input, Output, EventEmitter } from '@angular/core';
+import { NgClass } from '@angular/common';
 import { AvatarFolder } from '../core/models/avatar.model';
 import { FAVORITES_TAB, UPLOADED_TAB } from '../overlay-avatar.service';
 
 @Component({
   selector: 'app-folder-tabs',
-  imports: [],
+  imports: [NgClass],
   templateUrl: './folder-tabs.component.html',
-  styleUrl: './folder-tabs.component.scss',
 })
 export class FolderTabsComponent {
   @Input() folders: AvatarFolder[] = [];

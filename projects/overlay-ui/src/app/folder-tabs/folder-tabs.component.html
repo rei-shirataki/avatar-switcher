@@ -1,24 +1,24 @@
-<div class="tabs">
+<div class="flex gap-3 pt-3 px-4 pb-5 overflow-x-auto overflow-y-hidden flex-shrink-0 [scrollbar-width:thin] [scrollbar-color:var(--charcoal-color-container-tertiary-default)_transparent] [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-[var(--charcoal-color-container-tertiary-default)] [&::-webkit-scrollbar-thumb]:rounded-[3px]">
   <button
     type="button"
-    class="tab"
-    [class.tab--active]="selectedFolderId === null"
+    class="flex-shrink-0 py-2.5 px-[18px] border-2 rounded-lg text-text text-sm font-[inherit] cursor-pointer whitespace-nowrap"
+    [ngClass]="selectedFolderId === null ? 'bg-[#232838] border-accent' : 'bg-background border-transparent hover:border-accent-hover'"
     (click)="select.emit(null)"
   >
     すべて
   </button>
   <button
     type="button"
-    class="tab"
-    [class.tab--active]="selectedFolderId === FAVORITES_TAB"
+    class="flex-shrink-0 py-2.5 px-[18px] border-2 rounded-lg text-text text-sm font-[inherit] cursor-pointer whitespace-nowrap"
+    [ngClass]="selectedFolderId === FAVORITES_TAB ? 'bg-[#232838] border-accent' : 'bg-background border-transparent hover:border-accent-hover'"
     (click)="select.emit(FAVORITES_TAB)"
   >
     お気に入り
   </button>
   <button
     type="button"
-    class="tab"
-    [class.tab--active]="selectedFolderId === UPLOADED_TAB"
+    class="flex-shrink-0 py-2.5 px-[18px] border-2 rounded-lg text-text text-sm font-[inherit] cursor-pointer whitespace-nowrap"
+    [ngClass]="selectedFolderId === UPLOADED_TAB ? 'bg-[#232838] border-accent' : 'bg-background border-transparent hover:border-accent-hover'"
     (click)="select.emit(UPLOADED_TAB)"
   >
     アップロード済み
@@ -26,8 +26,8 @@
   @for (folder of folders; track folder.id) {
     <button
       type="button"
-      class="tab"
-      [class.tab--active]="selectedFolderId === folder.id"
+      class="flex-shrink-0 py-2.5 px-[18px] border-2 rounded-lg text-text text-sm font-[inherit] cursor-pointer whitespace-nowrap"
+      [ngClass]="selectedFolderId === folder.id ? 'bg-[#232838] border-accent' : 'bg-background border-transparent hover:border-accent-hover'"
       (click)="select.emit(folder.id)"
     >
       {{ folder.name }}

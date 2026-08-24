@@ -41,8 +41,8 @@
   padding: 10px 16px;
   border: 2px solid transparent;
   border-radius: 8px;
-  background: #1c1f28;
-  color: #f2f2f5;
+  background: var(--charcoal-color-background-default);
+  color: var(--charcoal-color-text-default);
   font-size: 13px;
   font-family: inherit;
   cursor: pointer;

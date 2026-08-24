@@ -9,7 +9,7 @@
   overflow-y: auto;
 
   scrollbar-width: thin;
-  scrollbar-color: #3a3f4c transparent;
+  scrollbar-color: var(--charcoal-color-container-tertiary-default) transparent;
 
   &::-webkit-scrollbar {
     width: 8px;
@@ -20,11 +20,11 @@
   }
 
   &::-webkit-scrollbar-thumb {
-    background: #3a3f4c;
+    background: var(--charcoal-color-container-tertiary-default);
     border-radius: 4px;
 
     &:hover {
-      background: #4a5266;
+      background: var(--charcoal-color-dark-neutral-20);
     }
   }
 }
@@ -46,12 +46,12 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
-  background: #1c1f28;
+  background: var(--charcoal-color-background-default);
   border: 2px solid transparent;
   border-radius: 12px;
   padding: 12px;
   cursor: pointer;
-  color: #f2f2f5;
+  color: var(--charcoal-color-text-default);
   font-family: inherit;
   text-align: left;
   // メインアプリのavatar-card.component.scssと同じホバー演出(浮き上がり+影)。
@@ -82,7 +82,7 @@
   aspect-ratio: 1 / 1;
   border-radius: 8px;
   overflow: hidden;
-  background: #0f1116;
+  background: var(--charcoal-color-dark-neutral--10);
 
   img {
     width: 100%;
@@ -105,7 +105,7 @@
   align-items: center;
   justify-content: center;
   font-size: 40px;
-  color: #666;
+  color: var(--charcoal-color-text-placeholder-default);
 }
 
 .card__current-badge {
@@ -151,7 +151,7 @@
 
 .empty {
   padding: 32px;
-  color: #999;
+  color: var(--charcoal-color-text-tertiary-default);
   text-align: center;
   grid-column: 1 / -1;
 }

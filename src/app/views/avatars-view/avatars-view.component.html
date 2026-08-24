@@ -275,8 +275,8 @@
     <div
       class="fixed bottom-5 right-5 py-2.5 px-4 rounded-ch-m text-[13px] font-medium animate-[toast-slide-up_0.2s_ease,toast-fade-out_0.3s_ease_2.2s_forwards] z-[400]"
       [ngClass]="toastKind() === 'success'
-        ? 'bg-[#1a3d24] border border-[rgba(86,201,110,0.6)] text-[#6edc8a] shadow-[0_4px_16px_rgba(0,0,0,0.6)]'
-        : 'bg-[#3d1a1f] border border-[rgba(220,90,110,0.6)] text-[#ef8a98] shadow-[0_4px_16px_rgba(0,0,0,0.6)]'"
+        ? 'bg-[var(--charcoal-color-dark-green-10)] border border-[var(--charcoal-color-dark-green-20)] text-text-positive shadow-[0_4px_16px_rgba(0,0,0,0.6)]'
+        : 'bg-[var(--charcoal-color-dark-red-10)] border border-border-negative text-text-negative shadow-[0_4px_16px_rgba(0,0,0,0.6)]'"
     >
       {{ toastKind() === 'success' ? '✓' : '⚠' }} {{ successMessage() }}
     </div>

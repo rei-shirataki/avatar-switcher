@@ -6,16 +6,16 @@
   <div class="flex gap-1 p-1 bg-background rounded-lg" role="group" aria-label="送信モード">
     <button
       type="button"
-      class="py-2 px-[14px] border-2 border-transparent rounded-md bg-transparent text-sm font-[inherit] cursor-pointer"
-      [ngClass]="eyeHeight.mode() === 'instant' ? 'bg-accent text-white' : 'text-text-tertiary'"
+      class="py-2 px-[14px] border-2 border-transparent rounded-md text-sm font-[inherit] cursor-pointer"
+      [ngClass]="eyeHeight.mode() === 'instant' ? 'bg-accent/15 text-accent' : 'bg-transparent text-text-tertiary'"
       (click)="eyeHeight.setMode('instant')"
     >
       普通
     </button>
     <button
       type="button"
-      class="py-2 px-[14px] border-2 border-transparent rounded-md bg-transparent text-sm font-[inherit] cursor-pointer"
-      [ngClass]="eyeHeight.mode() === 'smooth' ? 'bg-accent text-white' : 'text-text-tertiary'"
+      class="py-2 px-[14px] border-2 border-transparent rounded-md text-sm font-[inherit] cursor-pointer"
+      [ngClass]="eyeHeight.mode() === 'smooth' ? 'bg-accent/15 text-accent' : 'bg-transparent text-text-tertiary'"
       (click)="eyeHeight.setMode('smooth')"
     >
       スムーズ

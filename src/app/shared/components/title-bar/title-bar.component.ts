@@ -19,7 +19,7 @@ import { IconComponent } from '../icon/icon.component';
         <button class="w-8 h-7 border-0 cursor-pointer flex items-center justify-center transition-colors duration-150 p-0 bg-transparent rounded-ch-s text-text-tertiary hover:bg-container-secondary hover:text-text" (click)="maximize()" title="最大化">
           <app-icon name="maximize" [size]="10"/>
         </button>
-        <button class="w-8 h-7 border-0 cursor-pointer flex items-center justify-center transition-colors duration-150 p-0 bg-transparent rounded-ch-s text-text-tertiary hover:bg-[#c42b1c] hover:text-white" (click)="close()" title="閉じる">
+        <button class="w-8 h-7 border-0 cursor-pointer flex items-center justify-center transition-colors duration-150 p-0 bg-transparent rounded-ch-s text-text-tertiary hover:bg-container-negative hover:text-text-on-negative" (click)="close()" title="閉じる">
           <app-icon name="close" [size]="10"/>
         </button>
       </div>

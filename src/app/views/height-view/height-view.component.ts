@@ -36,14 +36,14 @@ interface Preset {
             >
               <button
                 type="button"
-                class="py-1.5 px-2.5 bg-transparent border-0 rounded-[calc(var(--charcoal-radius-m)_-_2px)] text-[11px] font-semibold font-[var(--font-sans)] cursor-pointer transition-all duration-100 whitespace-nowrap"
-                [ngClass]="eyeHeight.mode() === 'instant' ? 'bg-primary text-white' : 'text-text-tertiary hover:text-text'"
+                class="py-1.5 px-2.5 border-0 rounded-ch-s text-[11px] font-semibold font-[var(--font-sans)] cursor-pointer transition-all duration-100 whitespace-nowrap"
+                [ngClass]="eyeHeight.mode() === 'instant' ? 'bg-primary-dim text-primary' : 'bg-transparent text-text-tertiary hover:text-text'"
                 (click)="eyeHeight.setMode('instant')"
               >普通</button>
               <button
                 type="button"
-                class="py-1.5 px-2.5 bg-transparent border-0 rounded-[calc(var(--charcoal-radius-m)_-_2px)] text-[11px] font-semibold font-[var(--font-sans)] cursor-pointer transition-all duration-100 whitespace-nowrap"
-                [ngClass]="eyeHeight.mode() === 'smooth' ? 'bg-primary text-white' : 'text-text-tertiary hover:text-text'"
+                class="py-1.5 px-2.5 border-0 rounded-ch-s text-[11px] font-semibold font-[var(--font-sans)] cursor-pointer transition-all duration-100 whitespace-nowrap"
+                [ngClass]="eyeHeight.mode() === 'smooth' ? 'bg-primary-dim text-primary' : 'bg-transparent text-text-tertiary hover:text-text'"
                 (click)="eyeHeight.setMode('smooth')"
               >スムーズ</button>
             </div>
@@ -122,8 +122,8 @@ interface Preset {
 
       @if (contextMenu(); as menu) {
         <div class="fixed z-[901] bg-background border border-[var(--charcoal-color-container-secondary-default)] rounded-ch-m p-1 shadow-[0_4px_16px_rgba(0,0,0,0.35)] min-w-[120px]" [style.left.px]="menu.x" [style.top.px]="menu.y" (click)="$event.stopPropagation()">
-          <button class="block w-full py-2 px-3 bg-transparent border-0 rounded-[calc(var(--charcoal-radius-m)_-_4px)] text-text text-xs font-[var(--font-sans)] text-left cursor-pointer hover:bg-container-secondary" (click)="openEditDialog(menu.preset); closeContextMenu()">編集</button>
-          <button class="block w-full py-2 px-3 bg-transparent border-0 rounded-[calc(var(--charcoal-radius-m)_-_4px)] text-text-negative text-xs font-[var(--font-sans)] text-left cursor-pointer hover:bg-[rgba(245,108,108,0.1)]" (click)="deletePreset(menu.preset.id); closeContextMenu()">削除</button>
+          <button class="block w-full py-2 px-3 bg-transparent border-0 rounded-ch-s text-text text-xs font-[var(--font-sans)] text-left cursor-pointer hover:bg-container-secondary" (click)="openEditDialog(menu.preset); closeContextMenu()">編集</button>
+          <button class="block w-full py-2 px-3 bg-transparent border-0 rounded-ch-s text-text-negative text-xs font-[var(--font-sans)] text-left cursor-pointer hover:bg-[rgba(245,108,108,0.1)]" (click)="deletePreset(menu.preset.id); closeContextMenu()">削除</button>
         </div>
       }
 

@@ -12,7 +12,7 @@ import { CommonModule } from '@angular/common';
   imports: [RouterOutlet, TitleBarComponent, SidebarComponent, CommonModule],
   template: `
     <div
-      class="flex flex-col w-screen h-screen bg-[var(--charcoal-color-dark-neutral--10)] rounded-ch-l overflow-hidden border border-[var(--charcoal-color-container-secondary-default)]"
+      class="flex flex-col w-screen h-screen bg-[var(--charcoal-color-dark-neutral--10)]"
       (contextmenu)="$event.preventDefault()"
     >
       <app-title-bar />

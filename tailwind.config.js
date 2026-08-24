@@ -38,11 +38,26 @@ module.exports = {
           from: { transform: 'translateY(8px)', opacity: '0' },
           to: { transform: 'translateY(0)', opacity: '1' },
         },
+        'menu-fade-in': {
+          from: { opacity: '0', transform: 'scale(0.96)' },
+          to: { opacity: '1', transform: 'scale(1)' },
+        },
+        'toast-slide-up': {
+          from: { transform: 'translateY(10px)', opacity: '0' },
+          to: { transform: 'translateY(0)', opacity: '1' },
+        },
+        'toast-fade-out': { to: { opacity: '0' } },
+        'slide-in-right': {
+          from: { transform: 'translateX(100%)', opacity: '0' },
+          to: { transform: 'translateX(0)', opacity: '1' },
+        },
       },
       animation: {
         'fade-in': 'fade-in 0.15s ease',
         'dialog-fade-in': 'dialog-fade-in 0.12s ease-out',
         'dialog-slide-in': 'dialog-slide-in 0.15s ease-out',
+        'menu-fade-in': 'menu-fade-in 0.1s ease',
+        'slide-in-right': 'slide-in-right 0.2s ease',
       },
     },
   },

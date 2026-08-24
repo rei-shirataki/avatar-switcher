@@ -1,122 +1,140 @@
-<div class="avatars-view">
+<div class="flex flex-col h-full overflow-hidden">
   <!-- Toolbar -->
-  <div class="avatars-toolbar">
-    <div class="search-box">
-      <pixiv-icon class="search-box__icon" name="16/Search" fixed-size="14" style="--charcoal-icon-size: 14px"></pixiv-icon>
+  <div class="flex items-center gap-2 py-3 px-4 border-b border-[var(--charcoal-color-container-secondary-default)] flex-shrink-0">
+    <div class="flex-1 flex items-center gap-2 bg-container-tertiary border border-[var(--charcoal-color-container-secondary-default)] rounded-m px-2.5 transition-colors duration-150 focus-within:border-primary">
+      <pixiv-icon class="text-text-tertiary flex-shrink-0" name="16/Search" fixed-size="14" style="--charcoal-icon-size: 14px"></pixiv-icon>
       <input
-        class="search-box__input"
+        class="flex-1 bg-transparent border-0 outline-none text-text text-[13px] font-[var(--font-sans)] py-[7px] placeholder:text-text-placeholder"
         type="text"
         placeholder="アバターを検索..."
         [ngModel]="searchQuery()"
         (ngModelChange)="searchQuery.set($event)"
       />
       @if (searchQuery()) {
-        <button class="search-box__clear" (click)="searchQuery.set('')">✕</button>
+        <button class="bg-transparent border-0 text-text-tertiary text-[10px] cursor-pointer p-0.5 rounded-[2px] hover:text-text" (click)="searchQuery.set('')">✕</button>
       }
     </div>
-    <div class="cselect cselect--sort" [class.cselect--open]="activeDropdown() === 'sort'">
-      <div class="cselect__trigger"
-           role="button"
-           tabindex="0"
-           [attr.aria-expanded]="activeDropdown() === 'sort'"
-           aria-haspopup="listbox"
-           (click)="openDropdown('sort', $event)"
-           (keydown)="onDropdownKeydown('sort', $event)">
+    <div class="relative inline-block min-w-[175px] flex-shrink-0 select-none">
+      <div
+        class="flex items-center justify-between gap-2 h-[34px] py-0 pr-2.5 pl-3 box-border rounded-m text-text text-xs font-[var(--font-sans)] cursor-pointer transition-colors duration-150"
+        [ngClass]="activeDropdown() === 'sort' ? 'border border-primary bg-container-secondary' : 'border border-[var(--charcoal-color-container-secondary-default)] bg-container-secondary hover:border-[var(--charcoal-color-text-tertiary-default)]'"
+        role="button"
+        tabindex="0"
+        [attr.aria-expanded]="activeDropdown() === 'sort'"
+        aria-haspopup="listbox"
+        (click)="openDropdown('sort', $event)"
+        (keydown)="onDropdownKeydown('sort', $event)">
         <span>{{ sortLabel() }}</span>
-        <span class="cselect__chevron" aria-hidden="true"></span>
+        <span
+          class="flex-shrink-0 w-0 h-0 border-l-4 border-l-transparent border-r-4 border-r-transparent border-t-[5px] border-t-[var(--charcoal-color-text-tertiary-default)] transition-transform duration-150"
+          [ngClass]="{ 'rotate-180': activeDropdown() === 'sort' }"
+          aria-hidden="true"></span>
       </div>
-      <ul class="cselect__list" role="listbox">
+      <ul
+        class="absolute top-[calc(100%+4px)] left-0 right-0 z-[200] m-0 py-1 px-0 list-none bg-background border border-[var(--charcoal-color-container-secondary-default)] rounded-m shadow-[0_6px_20px_rgba(0,0,0,0.5)] overflow-hidden"
+        [ngClass]="activeDropdown() === 'sort' ? 'block' : 'hidden'"
+        role="listbox">
         @for (opt of SORT_OPTIONS; track opt.value) {
-          <li class="cselect__item"
-              role="option"
-              [attr.aria-selected]="sortMode() === opt.value"
-              [class.cselect__item--active]="sortMode() === opt.value"
-              (click)="onDropdownSelect('sort', opt.value, $event)">{{ opt.label }}</li>
+          <li
+            class="py-2 px-3 text-xs cursor-pointer transition-colors duration-100"
+            [ngClass]="sortMode() === opt.value ? 'text-primary bg-primary-dim' : 'text-text-secondary hover:bg-container-secondary hover:text-text'"
+            role="option"
+            [attr.aria-selected]="sortMode() === opt.value"
+            (click)="onDropdownSelect('sort', opt.value, $event)">{{ opt.label }}</li>
         }
       </ul>
     </div>
     <button
-      class="btn-icon"
-      [class.btn-icon--active]="selectionMode()"
+      class="w-[34px] h-[34px] rounded-m text-base cursor-pointer flex items-center justify-center transition-colors duration-150"
+      [ngClass]="selectionMode() ? 'bg-primary-dim border border-primary text-primary' : 'bg-container-secondary border border-transparent text-text-secondary hover:bg-container-tertiary'"
       (click)="toggleSelectionMode()"
       title="複数選択"
     ><pixiv-icon name="16/Check"></pixiv-icon></button>
-    <button class="btn-icon" (click)="avatarService.refresh()" title="再読み込み"><pixiv-icon name="24/Reload" fixed-size="16" style="--charcoal-icon-size: 16px"></pixiv-icon></button>
+    <button class="w-[34px] h-[34px] bg-container-secondary border border-transparent rounded-m text-text-secondary text-base cursor-pointer flex items-center justify-center transition-colors duration-150 hover:bg-container-tertiary" (click)="avatarService.refresh()" title="再読み込み"><pixiv-icon name="24/Reload" fixed-size="16" style="--charcoal-icon-size: 16px"></pixiv-icon></button>
   </div>
 
   <!-- Bulk action bar -->
   @if (selectionMode()) {
-    <div class="bulk-bar">
-      <span class="bulk-bar__count">{{ selectedAvatarIds().length }} 件選択中</span>
-      <button class="btn-sm" (click)="selectAll()">全選択</button>
-      <div class="bulk-bar__spacer"></div>
+    <div class="flex items-center gap-2 py-2 px-4 bg-primary-dim border-b border-primary flex-shrink-0">
+      <span class="text-xs text-primary font-semibold whitespace-nowrap">{{ selectedAvatarIds().length }} 件選択中</span>
+      <button class="py-1 px-2.5 border border-[var(--charcoal-color-container-secondary-default)] rounded-m bg-container-secondary text-text-secondary text-[11px] font-[var(--font-sans)] cursor-pointer whitespace-nowrap transition-colors duration-150 hover:bg-container-tertiary" (click)="selectAll()">全選択</button>
+      <div class="flex-1"></div>
       @if (selectedAvatarIds().length > 0 && avatarService.folders().length > 0) {
-        <div class="cselect" [class.cselect--open]="activeDropdown() === 'bulk'">
-          <div class="cselect__trigger"
-               role="button"
-               tabindex="0"
-               [attr.aria-expanded]="activeDropdown() === 'bulk'"
-               aria-haspopup="listbox"
-               (click)="openDropdown('bulk', $event)"
-               (keydown)="onDropdownKeydown('bulk', $event)">
-            <span [class.cselect__placeholder]="!bulkFolderId()">{{ bulkFolderLabel() }}</span>
-            <span class="cselect__chevron" aria-hidden="true"></span>
+        <div class="relative inline-block min-w-[130px] flex-shrink-0 select-none">
+          <div
+            class="flex items-center justify-between gap-2 h-[34px] py-0 pr-2.5 pl-3 box-border rounded-m text-text text-xs font-[var(--font-sans)] cursor-pointer transition-colors duration-150"
+            [ngClass]="activeDropdown() === 'bulk' ? 'border border-primary bg-container-secondary' : 'border border-[var(--charcoal-color-container-secondary-default)] bg-container-secondary hover:border-[var(--charcoal-color-text-tertiary-default)]'"
+            role="button"
+            tabindex="0"
+            [attr.aria-expanded]="activeDropdown() === 'bulk'"
+            aria-haspopup="listbox"
+            (click)="openDropdown('bulk', $event)"
+            (keydown)="onDropdownKeydown('bulk', $event)">
+            <span [ngClass]="{ 'text-text-placeholder': !bulkFolderId() }">{{ bulkFolderLabel() }}</span>
+            <span
+              class="flex-shrink-0 w-0 h-0 border-l-4 border-l-transparent border-r-4 border-r-transparent border-t-[5px] border-t-[var(--charcoal-color-text-tertiary-default)] transition-transform duration-150"
+              [ngClass]="{ 'rotate-180': activeDropdown() === 'bulk' }"
+              aria-hidden="true"></span>
           </div>
-          <ul class="cselect__list" role="listbox">
+          <ul
+            class="absolute top-[calc(100%+4px)] left-0 right-0 z-[200] m-0 py-1 px-0 list-none bg-background border border-[var(--charcoal-color-container-secondary-default)] rounded-m shadow-[0_6px_20px_rgba(0,0,0,0.5)] overflow-hidden"
+            [ngClass]="activeDropdown() === 'bulk' ? 'block' : 'hidden'"
+            role="listbox">
             @for (folder of avatarService.folders(); track folder.id) {
-              <li class="cselect__item"
-                  role="option"
-                  [attr.aria-selected]="bulkFolderId() === folder.id"
-                  [class.cselect__item--active]="bulkFolderId() === folder.id"
-                  (click)="onDropdownSelect('bulk', folder.id, $event)">{{ folder.name }}</li>
+              <li
+                class="py-2 px-3 text-xs cursor-pointer transition-colors duration-100"
+                [ngClass]="bulkFolderId() === folder.id ? 'text-primary bg-primary-dim' : 'text-text-secondary hover:bg-container-secondary hover:text-text'"
+                role="option"
+                [attr.aria-selected]="bulkFolderId() === folder.id"
+                (click)="onDropdownSelect('bulk', folder.id, $event)">{{ folder.name }}</li>
             }
           </ul>
         </div>
         <button
-          class="btn-sm btn-primary-sm"
+          class="py-1 px-2.5 rounded-m text-[11px] font-[var(--font-sans)] cursor-pointer whitespace-nowrap transition-colors duration-150 bg-primary border border-primary text-white hover:bg-primary-hover"
           (click)="bulkAddToFolder()"
           [disabled]="!bulkFolderId()"
         >追加</button>
       }
-      <button class="btn-sm" (click)="toggleSelectionMode()">解除</button>
+      <button class="py-1 px-2.5 border border-[var(--charcoal-color-container-secondary-default)] rounded-m bg-container-secondary text-text-secondary text-[11px] font-[var(--font-sans)] cursor-pointer whitespace-nowrap transition-colors duration-150 hover:bg-container-tertiary" (click)="toggleSelectionMode()">解除</button>
     </div>
   }
 
   <!-- Folder tabs -->
-  <div class="folder-tabs">
+  <div class="flex items-center gap-1 py-2 px-4 border-b border-[var(--charcoal-color-container-secondary-default)] flex-shrink-0 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
     <button
-      class="folder-tab"
-      [class.folder-tab--active]="selectedFolderId() === null"
+      class="py-1 px-3 rounded-m text-xs font-[var(--font-sans)] cursor-pointer whitespace-nowrap transition-all duration-150 flex-shrink-0"
+      [ngClass]="selectedFolderId() === null ? 'bg-primary-dim border border-primary text-primary' : 'border border-[var(--charcoal-color-container-secondary-default)] bg-transparent text-text-tertiary hover:bg-background hover:text-text-secondary'"
       (click)="selectedFolderId.set(null)"
     >
       すべて
-      <span class="folder-tab__count">{{ avatarService.allAvatars().length }}</span>
+      <span class="ml-1 opacity-80 text-[11px]">{{ avatarService.allAvatars().length }}</span>
     </button>
     <button
-      class="folder-tab"
-      [class.folder-tab--active]="selectedFolderId() === FAVORITES_TAB"
+      class="py-1 px-3 rounded-m text-xs font-[var(--font-sans)] cursor-pointer whitespace-nowrap transition-all duration-150 flex-shrink-0"
+      [ngClass]="selectedFolderId() === FAVORITES_TAB ? 'bg-primary-dim border border-primary text-primary' : 'border border-[var(--charcoal-color-container-secondary-default)] bg-transparent text-text-tertiary hover:bg-background hover:text-text-secondary'"
       (click)="selectedFolderId.set(FAVORITES_TAB)"
     >
       お気に入り
-      <span class="folder-tab__count">{{ avatarService.favorites().length }}</span>
+      <span class="ml-1 opacity-80 text-[11px]">{{ avatarService.favorites().length }}</span>
     </button>
     <button
-      class="folder-tab"
-      [class.folder-tab--active]="selectedFolderId() === UPLOADED_TAB"
+      class="py-1 px-3 rounded-m text-xs font-[var(--font-sans)] cursor-pointer whitespace-nowrap transition-all duration-150 flex-shrink-0"
+      [ngClass]="selectedFolderId() === UPLOADED_TAB ? 'bg-primary-dim border border-primary text-primary' : 'border border-[var(--charcoal-color-container-secondary-default)] bg-transparent text-text-tertiary hover:bg-background hover:text-text-secondary'"
       (click)="selectedFolderId.set(UPLOADED_TAB)"
     >
       アップロード済み
-      <span class="folder-tab__count">{{ avatarService.avatars().length }}</span>
+      <span class="ml-1 opacity-80 text-[11px]">{{ avatarService.avatars().length }}</span>
     </button>
     @for (folder of avatarService.folders(); track folder.id) {
       <div
-        class="folder-tab-wrap"
+        class="flex items-center"
         (contextmenu)="onFolderContextMenu($event, folder)"
       >
         @if (renamingFolderId() === folder.id) {
-          <div class="new-folder-input">
+          <div class="flex items-center gap-1.5">
             <input
-              class="folder-name-input"
+              class="py-1 px-2 bg-container-tertiary border border-primary rounded-m text-text text-xs font-[var(--font-sans)] outline-none w-[120px]"
               type="text"
               [(ngModel)]="renamingFolderName"
               maxlength="64"
@@ -124,25 +142,25 @@
               (keyup.escape)="cancelRenameFolder()"
               autofocus
             />
-            <button class="btn-sm btn-primary-sm" (click)="confirmRenameFolder()">確定</button>
-            <button class="btn-sm" (click)="cancelRenameFolder()">✕</button>
+            <button class="py-1 px-2.5 rounded-m text-[11px] font-[var(--font-sans)] cursor-pointer whitespace-nowrap transition-colors duration-150 bg-primary border border-primary text-white hover:bg-primary-hover" (click)="confirmRenameFolder()">確定</button>
+            <button class="py-1 px-2.5 border border-[var(--charcoal-color-container-secondary-default)] rounded-m bg-container-secondary text-text-secondary text-[11px] font-[var(--font-sans)] cursor-pointer whitespace-nowrap transition-colors duration-150 hover:bg-container-tertiary" (click)="cancelRenameFolder()">✕</button>
           </div>
         } @else {
           <button
-            class="folder-tab"
-            [class.folder-tab--active]="selectedFolderId() === folder.id"
+            class="py-1 px-3 rounded-m text-xs font-[var(--font-sans)] cursor-pointer whitespace-nowrap transition-all duration-150 flex-shrink-0"
+            [ngClass]="selectedFolderId() === folder.id ? 'bg-primary-dim border border-primary text-primary' : 'border border-[var(--charcoal-color-container-secondary-default)] bg-transparent text-text-tertiary hover:bg-background hover:text-text-secondary'"
             (click)="selectedFolderId.set(folder.id)"
           >
             {{ folder.name }}
-            <span class="folder-tab__count">{{ folder.avatarIds.length }}</span>
+            <span class="ml-1 opacity-80 text-[11px]">{{ folder.avatarIds.length }}</span>
           </button>
         }
       </div>
     }
     @if (showNewFolderInput()) {
-      <div class="new-folder-input">
+      <div class="flex items-center gap-1.5">
         <input
-          class="folder-name-input"
+          class="py-1 px-2 bg-container-tertiary border border-primary rounded-m text-text text-xs font-[var(--font-sans)] outline-none w-[120px]"
           type="text"
           [(ngModel)]="newFolderName"
           maxlength="64"
@@ -151,37 +169,37 @@
           (keyup.escape)="showNewFolderInput.set(false)"
           autofocus
         />
-        <button class="btn-sm btn-primary-sm" (click)="createFolder()">作成</button>
-        <button class="btn-sm" (click)="showNewFolderInput.set(false)">キャンセル</button>
+        <button class="py-1 px-2.5 rounded-m text-[11px] font-[var(--font-sans)] cursor-pointer whitespace-nowrap transition-colors duration-150 bg-primary border border-primary text-white hover:bg-primary-hover" (click)="createFolder()">作成</button>
+        <button class="py-1 px-2.5 border border-[var(--charcoal-color-container-secondary-default)] rounded-m bg-container-secondary text-text-secondary text-[11px] font-[var(--font-sans)] cursor-pointer whitespace-nowrap transition-colors duration-150 hover:bg-container-tertiary" (click)="showNewFolderInput.set(false)">キャンセル</button>
       </div>
     } @else {
-      <button class="folder-tab folder-tab--add" (click)="showNewFolderInput.set(true)">
+      <button class="py-1 px-3 rounded-m text-xs font-[var(--font-sans)] cursor-pointer whitespace-nowrap transition-all duration-150 flex-shrink-0 border border-dashed border-[var(--charcoal-color-container-secondary-default)] bg-transparent text-text-tertiary hover:border-primary hover:text-primary" (click)="showNewFolderInput.set(true)">
         + フォルダ
       </button>
     }
   </div>
 
   <!-- Avatar grid -->
-  <div class="avatar-grid-container">
+  <div class="flex-1 overflow-y-auto p-4">
     @if (avatarService.isLoading()) {
-      <div class="loading-state">
-        <app-icon name="spinner" [size]="28" class="spinner"/>
-        <p>アバターを読み込み中...</p>
+      <div class="flex flex-col items-center justify-center h-[300px] text-text-tertiary gap-2">
+        <app-icon name="spinner" [size]="28" class="animate-spin"/>
+        <p class="m-0 text-[13px]">アバターを読み込み中...</p>
       </div>
     } @else if (filteredAvatars().length === 0) {
-      <div class="empty-state">
+      <div class="flex flex-col items-center justify-center h-[300px] text-text-tertiary gap-2">
         @if (searchQuery()) {
-          <p>「{{ searchQuery() }}」に一致するアバターが見つかりませんでした</p>
+          <p class="m-0 text-[13px]">「{{ searchQuery() }}」に一致するアバターが見つかりませんでした</p>
         } @else if (selectedFolderId() && selectedFolderId() !== FAVORITES_TAB && selectedFolderId() !== UPLOADED_TAB) {
-          <p>このフォルダにアバターがありません</p>
-          <p class="empty-state__hint">アバターカードのフォルダボタンから追加できます</p>
+          <p class="m-0 text-[13px]">このフォルダにアバターがありません</p>
+          <p class="m-0 text-[13px] !text-[11px] !text-text-placeholder">アバターカードのフォルダボタンから追加できます</p>
         } @else {
-          <p>アバターがありません</p>
-          <p class="empty-state__hint">VRChatでアバターをアップロードすると表示されます</p>
+          <p class="m-0 text-[13px]">アバターがありません</p>
+          <p class="m-0 text-[13px] !text-[11px] !text-text-placeholder">VRChatでアバターをアップロードすると表示されます</p>
         }
       </div>
     } @else {
-      <div class="avatar-grid">
+      <div class="grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(160px,1fr))]">
         @for (avatar of filteredAvatars(); track avatar.id) {
           <app-avatar-card
             [avatar]="avatar"
@@ -204,28 +222,28 @@
   <!-- Avatar card context menu -->
   @if (cardMenuAvatar()) {
     <div
-      class="context-menu"
+      class="fixed z-[201] bg-background border border-[var(--charcoal-color-container-secondary-default)] rounded-m shadow-[0_4px_20px_rgba(0,0,0,0.5)] overflow-hidden min-w-[160px] animate-menu-fade-in"
       [style.left.px]="cardMenuPos().x"
       [style.top.px]="cardMenuPos().y"
       (click)="$event.stopPropagation()"
     >
-      <div class="context-menu__header">{{ cardMenuAvatar()!.name }}</div>
-      <button class="context-menu__item" (click)="openDetailPanel(cardMenuAvatar()!); cardMenuAvatar.set(null)">
+      <div class="pt-[7px] px-3 pb-[5px] text-[11px] text-text-placeholder border-b border-[var(--charcoal-color-container-secondary-default)] whitespace-nowrap overflow-hidden text-ellipsis max-w-[200px]">{{ cardMenuAvatar()!.name }}</div>
+      <button class="block w-full py-2 px-3 bg-transparent border-0 text-text text-left text-xs font-[var(--font-sans)] cursor-pointer transition-colors duration-100 hover:bg-container-secondary" (click)="openDetailPanel(cardMenuAvatar()!); cardMenuAvatar.set(null)">
         詳細を表示
       </button>
-      <button class="context-menu__item" (click)="onSwitch(cardMenuAvatar()!.id); cardMenuAvatar.set(null)">
+      <button class="block w-full py-2 px-3 bg-transparent border-0 text-text text-left text-xs font-[var(--font-sans)] cursor-pointer transition-colors duration-100 hover:bg-container-secondary" (click)="onSwitch(cardMenuAvatar()!.id); cardMenuAvatar.set(null)">
         切り替え
       </button>
       @if (avatarService.folders().length > 0) {
-        <div class="context-menu__sep"></div>
-        <div class="context-menu__sub-label">フォルダに追加</div>
+        <div class="h-px bg-[var(--charcoal-color-container-secondary-default)] my-0.5"></div>
+        <div class="py-[5px] px-3 pb-[3px] text-[10px] text-text-placeholder tracking-[0.04em]">フォルダに追加</div>
         @for (folder of avatarService.folders(); track folder.id) {
           <button
-            class="context-menu__item"
-            [class.context-menu__item--checked]="folder.avatarIds.includes(cardMenuAvatar()!.id)"
+            class="block w-full py-2 px-3 bg-transparent border-0 text-left text-xs font-[var(--font-sans)] cursor-pointer transition-colors duration-100 hover:bg-container-secondary"
+            [ngClass]="folder.avatarIds.includes(cardMenuAvatar()!.id) ? 'text-primary' : 'text-text'"
             (click)="toggleCardMenuFolder(folder.id)"
           >
-            <span class="context-menu__check">{{ folder.avatarIds.includes(cardMenuAvatar()!.id) ? '✓' : '' }}</span>
+            <span class="inline-block w-3.5 mr-1 text-primary text-[10px] font-bold">{{ folder.avatarIds.includes(cardMenuAvatar()!.id) ? '✓' : '' }}</span>
             {{ folder.name }}
           </button>
         }
@@ -236,17 +254,17 @@
   <!-- Folder context menu -->
   @if (contextMenuFolder()) {
     <div
-      class="context-menu"
+      class="fixed z-[201] bg-background border border-[var(--charcoal-color-container-secondary-default)] rounded-m shadow-[0_4px_20px_rgba(0,0,0,0.5)] overflow-hidden min-w-[160px] animate-menu-fade-in"
       [style.left.px]="contextMenuPos().x"
       [style.top.px]="contextMenuPos().y"
     >
-      <div class="context-menu__header">{{ contextMenuFolder()!.name }}</div>
+      <div class="pt-[7px] px-3 pb-[5px] text-[11px] text-text-placeholder border-b border-[var(--charcoal-color-container-secondary-default)] whitespace-nowrap overflow-hidden text-ellipsis max-w-[200px]">{{ contextMenuFolder()!.name }}</div>
       <button
-        class="context-menu__item"
+        class="block w-full py-2 px-3 bg-transparent border-0 text-text text-left text-xs font-[var(--font-sans)] cursor-pointer transition-colors duration-100 hover:bg-container-secondary"
         (click)="startRenameFolder(contextMenuFolder()!)"
       >名前を変更</button>
       <button
-        class="context-menu__item context-menu__item--danger"
+        class="block w-full py-2 px-3 bg-transparent border-0 text-left text-xs font-[var(--font-sans)] cursor-pointer transition-colors duration-100 text-text-negative hover:bg-container-secondary"
         (click)="deleteFolder(contextMenuFolder()!); contextMenuFolder.set(null)"
       >削除</button>
     </div>
@@ -254,56 +272,62 @@
 
   <!-- Toast -->
   @if (successMessage()) {
-    <div class="toast" [class]="'toast toast--' + toastKind()">
+    <div
+      class="fixed bottom-5 right-5 py-2.5 px-4 rounded-m text-[13px] font-medium animate-[toast-slide-up_0.2s_ease,toast-fade-out_0.3s_ease_2.2s_forwards] z-[400]"
+      [ngClass]="toastKind() === 'success'
+        ? 'bg-[#1a3d24] border border-[rgba(86,201,110,0.6)] text-[#6edc8a] shadow-[0_4px_16px_rgba(0,0,0,0.6)]'
+        : 'bg-[#3d1a1f] border border-[rgba(220,90,110,0.6)] text-[#ef8a98] shadow-[0_4px_16px_rgba(0,0,0,0.6)]'"
+    >
       {{ toastKind() === 'success' ? '✓' : '⚠' }} {{ successMessage() }}
     </div>
   }
 
   <!-- Avatar detail panel -->
   @if (detailAvatar()) {
-    <div class="detail-backdrop" (click)="closeDetailPanel()"></div>
-    <div class="detail-panel">
-      <div class="detail-panel__header">
+    <div class="fixed inset-0 top-9 z-[300] bg-[rgba(0,0,0,0.45)]" (click)="closeDetailPanel()"></div>
+    <div class="fixed top-9 right-0 bottom-0 border-t border-[var(--charcoal-color-container-secondary-default)] w-[360px] z-[301] bg-[var(--charcoal-color-dark-neutral--5)] border-l border-[var(--charcoal-color-container-secondary-default)] flex flex-col animate-slide-in-right">
+      <div class="flex items-center gap-0.5 pt-2.5 px-2 pb-3 flex-shrink-0">
         @if (detailEditMode()) {
           <!-- 編集モード: キャンセル ─── 保存 -->
-          <button class="detail-panel__cancel-btn" (click)="cancelEdit()">キャンセル</button>
-          <span class="detail-panel__header-spacer"></span>
-          <button class="detail-panel__save-btn"
-                  (click)="saveEdit()"
-                  [disabled]="detailEditSaving()">
+          <button class="py-[5px] px-3 h-7 box-border bg-transparent border-0 rounded-s text-xs font-[var(--font-sans)] cursor-pointer transition-colors duration-150 text-text-tertiary hover:text-text flex-shrink-0" (click)="cancelEdit()">キャンセル</button>
+          <span class="flex-1"></span>
+          <button
+            class="py-[5px] px-[14px] h-7 box-border bg-primary text-white border-0 rounded-s text-xs font-[var(--font-sans)] font-semibold cursor-pointer transition-colors duration-150 enabled:hover:bg-primary-hover disabled:opacity-60 disabled:cursor-default flex-shrink-0"
+            (click)="saveEdit()"
+            [disabled]="detailEditSaving()">
             {{ detailEditSaving() ? '保存中…' : '保存' }}
           </button>
         } @else {
           <!-- 通常モード: 編集アイコン（自作アバターのみ） ─── ✕ -->
           @if (isDetailAvatarOwned()) {
-            <button class="detail-panel__edit-btn" (click)="startEdit()" title="編集">
+            <button class="flex-shrink-0 w-7 h-7 bg-transparent border-0 text-text-tertiary cursor-pointer rounded-s flex items-center justify-center transition-colors duration-150 hover:bg-container-secondary hover:text-text" (click)="startEdit()" title="編集">
               <pixiv-icon name="16/Pencil" fixed-size="14" style="--charcoal-icon-size: 14px"></pixiv-icon>
             </button>
           }
-          <span class="detail-panel__header-spacer"></span>
-          <button class="detail-panel__close" (click)="closeDetailPanel()" title="閉じる">
+          <span class="flex-1"></span>
+          <button class="flex-shrink-0 w-7 h-7 bg-transparent border-0 text-text-tertiary cursor-pointer rounded-s flex items-center justify-center transition-colors duration-150 hover:bg-container-secondary hover:text-text" (click)="closeDetailPanel()" title="閉じる">
             <pixiv-icon name="24/Close" fixed-size="14" style="--charcoal-icon-size: 14px"></pixiv-icon>
           </button>
         }
       </div>
 
       <!-- サムネイル -->
-      <div class="detail-panel__thumb">
+      <div class="relative w-full aspect-[4/3] bg-container-secondary flex-shrink-0 overflow-hidden">
         @if (detailEditMode()) {
           <!-- 編集モード: プレビュー + オーバーレイ -->
           @if (editPreviewThumb) {
-            <img class="detail-panel__thumb-low"
+            <img class="absolute inset-0 w-full h-full object-cover z-[1] blur-none"
                  [src]="editPreviewThumb"
                  [alt]="detailAvatar()!.name"/>
           } @else {
-            <div class="detail-panel__thumb-placeholder">{{ detailAvatar()!.name.charAt(0) }}</div>
+            <div class="w-full h-full flex items-center justify-center text-5xl font-bold text-text-tertiary">{{ detailAvatar()!.name.charAt(0) }}</div>
           }
-          <div class="detail-panel__thumb-overlay" (click)="thumbFileInput.click()">
+          <div class="absolute inset-0 z-10 flex flex-col items-center justify-center gap-1.5 bg-[rgba(0,0,0,0.55)] text-white cursor-pointer text-xs font-medium transition-colors duration-150 hover:bg-[rgba(0,0,0,0.7)]" (click)="thumbFileInput.click()">
             <pixiv-icon name="24/Camera" fixed-size="22" style="--charcoal-icon-size: 22px"></pixiv-icon>
             <span>画像を変更</span>
           </div>
           @if (hasCustomThumb) {
-            <button class="detail-panel__thumb-reset"
+            <button class="absolute top-1.5 right-1.5 z-[11] w-[22px] h-[22px] bg-[rgba(0,0,0,0.6)] border border-[rgba(255,255,255,0.25)] rounded-full text-white text-[10px] leading-none cursor-pointer flex items-center justify-center transition-colors duration-150 hover:bg-[rgba(200,50,50,0.8)]"
                     (click)="resetThumbnail(); $event.stopPropagation()"
                     title="元の画像に戻す">✕</button>
           }
@@ -312,77 +336,80 @@
         } @else {
           <!-- 通常モード: 既存の dual-layer 表示 -->
           @if (detailAvatar()!.thumbnailImageUrl) {
-            <img class="detail-panel__thumb-low"
+            <img class="absolute inset-0 w-full h-full object-cover z-[1] blur-none"
                  [src]="detailAvatar()!.thumbnailImageUrl"
                  [alt]="detailAvatar()!.name"/>
             @if (detailAvatar()!.imageUrl) {
-              <img class="detail-panel__thumb-high"
+              <img class="absolute inset-0 w-full h-full object-cover z-[2] transition-opacity duration-[350ms]"
+                   [ngClass]="detailHighResLoaded() ? 'opacity-100' : 'opacity-0'"
                    [src]="detailAvatar()!.imageUrl"
                    [alt]="detailAvatar()!.name"
-                   [class.detail-panel__thumb-high--loaded]="detailHighResLoaded()"
                    (load)="detailHighResLoaded.set(true)"
                    (error)="detailHighResLoaded.set(false)"/>
             }
           } @else {
-            <div class="detail-panel__thumb-placeholder">{{ detailAvatar()!.name.charAt(0) }}</div>
+            <div class="w-full h-full flex items-center justify-center text-5xl font-bold text-text-tertiary">{{ detailAvatar()!.name.charAt(0) }}</div>
           }
         }
       </div>
 
-      <div class="detail-panel__body">
-        <div class="detail-panel__title-wrap">
+      <div class="flex-1 overflow-y-auto p-[14px] flex flex-col gap-[14px]">
+        <div class="flex-1 min-w-0">
           <!-- 名前 -->
           @if (detailEditMode()) {
-            <input class="detail-panel__name-input"
+            <input class="w-full bg-container-secondary border border-primary rounded-s text-text text-[13px] font-bold font-[var(--font-sans)] py-1 px-2 outline-none box-border placeholder:text-text-placeholder placeholder:font-normal"
                    [(ngModel)]="detailEditName"
                    maxlength="64"
                    placeholder="アバター名"/>
           } @else {
-            <div class="detail-panel__name" [title]="detailAvatar()!.name">{{ detailAvatar()!.name }}</div>
+            <div class="text-[13px] font-bold text-text truncate py-[5px]" [title]="detailAvatar()!.name">{{ detailAvatar()!.name }}</div>
           }
-          <div class="detail-panel__author">by {{ detailAvatar()!.authorName }}</div>
+          <div class="text-[11px] text-text-tertiary mt-0.5 truncate">by {{ detailAvatar()!.authorName }}</div>
         </div>
 
         <!-- 編集モード: エラー -->
         @if (detailEditMode() && detailEditError()) {
-          <div class="detail-panel__edit-error">{{ detailEditError() }}</div>
+          <div class="text-[11px] text-text-negative bg-[rgba(224,85,85,0.1)] border border-[rgba(224,85,85,0.3)] rounded-s py-1.5 px-2.5 leading-[1.4]">{{ detailEditError() }}</div>
         }
 
         @if (!detailEditMode()) {
-          <div class="detail-panel__row">
-            <span class="detail-panel__badge" [class]="'badge-' + detailAvatar()!.releaseStatus">
+          <div class="flex items-center gap-2.5">
+            <span
+              class="text-[11px] py-0.5 px-2 rounded-[3px] font-medium"
+              [ngClass]="detailAvatar()!.releaseStatus === 'public' ? 'bg-[rgba(86,201,110,0.15)] text-text-positive' : 'bg-[rgba(136,136,170,0.15)] text-text-tertiary'"
+            >
               {{ detailAvatar()!.releaseStatus === 'public' ? '公開' : '非公開' }}
             </span>
-            <span class="detail-panel__version">v{{ detailAvatar()!.version }}</span>
+            <span class="text-[11px] text-text-tertiary">v{{ detailAvatar()!.version }}</span>
           </div>
 
           @if (displayableTags(detailAvatar()!.tags).length > 0) {
-            <div class="detail-panel__section">
-              <div class="detail-panel__section-label">タグ</div>
-              <div class="detail-panel__tags">
+            <div class="flex flex-col gap-1.5">
+              <div class="text-[10px] text-text-placeholder tracking-[0.06em] uppercase">タグ</div>
+              <div class="flex flex-wrap gap-1">
                 @for (tag of displayableTags(detailAvatar()!.tags); track tag) {
-                  <span class="detail-panel__tag">{{ tag }}</span>
+                  <span class="text-[10px] py-0.5 px-[7px] bg-container-secondary text-text-secondary rounded-full border border-[var(--charcoal-color-container-tertiary-default)]">{{ tag }}</span>
                 }
               </div>
             </div>
           }
 
-          <div class="detail-panel__meta-group">
-            <div class="detail-panel__meta">
-              <span class="detail-panel__meta-label">作成日</span>
-              <span class="detail-panel__meta-value">{{ formatDate(detailAvatar()!.createdAt) }}</span>
+          <div class="flex flex-col gap-1.5">
+            <div class="flex justify-between items-center text-[11px]">
+              <span class="text-text-tertiary">作成日</span>
+              <span class="text-text-secondary">{{ formatDate(detailAvatar()!.createdAt) }}</span>
             </div>
-            <div class="detail-panel__meta">
-              <span class="detail-panel__meta-label">更新日</span>
-              <span class="detail-panel__meta-value">{{ formatDate(detailAvatar()!.updatedAt) }}</span>
+            <div class="flex justify-between items-center text-[11px]">
+              <span class="text-text-tertiary">更新日</span>
+              <span class="text-text-secondary">{{ formatDate(detailAvatar()!.updatedAt) }}</span>
             </div>
           </div>
         }
       </div>
 
       @if (!detailEditMode()) {
-        <div class="detail-panel__footer">
-          <button class="detail-panel__switch-btn" (click)="onSwitch(detailAvatar()!.id); closeDetailPanel()">
+        <div class="py-3 px-[14px] border-t border-[var(--charcoal-color-container-secondary-default)] flex-shrink-0">
+          <button class="flex items-center justify-center gap-1.5 w-full py-[9px] px-0 bg-primary text-white border-0 rounded-m text-[13px] font-semibold cursor-pointer transition-colors duration-150 hover:bg-primary-hover" (click)="onSwitch(detailAvatar()!.id); closeDetailPanel()">
             <app-icon name="play" [size]="12"/>切り替え
           </button>
         </div>

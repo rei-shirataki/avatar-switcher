@@ -15,7 +15,6 @@ type ToastKind = 'success' | 'error';
   standalone: true,
   imports: [FormsModule, CommonModule, AvatarCardComponent, IconComponent],
   templateUrl: './avatars-view.component.html',
-  styleUrl: './avatars-view.component.scss',
   schemas: [CUSTOM_ELEMENTS_SCHEMA],
 })
 export class AvatarsViewComponent implements OnInit {

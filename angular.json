@@ -31,7 +31,7 @@
                 "output": "assets"
               }
             ],
-            "styles": ["src/styles.scss"]
+            "styles": ["src/tailwind.css", "src/styles.scss"]
           },
           "configurations": {
             "production": {
@@ -123,6 +123,7 @@
               }
             ],
             "styles": [
+              "projects/overlay-ui/src/tailwind.css",
               "projects/overlay-ui/src/styles.scss"
             ]
           },
@@ -181,6 +182,7 @@
               }
             ],
             "styles": [
+              "projects/overlay-ui/src/tailwind.css",
               "projects/overlay-ui/src/styles.scss"
             ]
           }

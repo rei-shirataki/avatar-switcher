@@ -1,5 +1,6 @@
 import { Component, ElementRef, HostListener, OnInit, ViewChild, computed, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { NgClass } from '@angular/common';
 import {
   EyeHeightService,
   EYE_HEIGHT_DEFAULT,
@@ -18,90 +19,90 @@ interface Preset {
 @Component({
   selector: 'app-height-view',
   standalone: true,
-  imports: [FormsModule],
+  imports: [FormsModule, NgClass],
   template: `
-    <div class="height-view">
-      <h2 class="page-title">身長コントロール</h2>
+    <div class="p-6 h-full overflow-y-auto">
+      <h2 class="m-0 mb-6 text-lg font-bold text-text">身長コントロール</h2>
 
-      <div class="settings-section">
-        <h3 class="section-title">アイハイト (m)</h3>
-        <div class="card">
-          <div class="value-row">
+      <div class="mb-6">
+        <h3 class="m-0 mb-3 text-[11px] font-semibold uppercase tracking-[0.08em] text-text-tertiary">アイハイト (m)</h3>
+        <div class="bg-background border border-[var(--charcoal-color-container-secondary-default)] rounded-l p-4 flex flex-col gap-[14px]">
+          <div class="flex items-center gap-2.5">
             <div
-              class="mode-toggle"
+              class="inline-flex bg-[var(--charcoal-color-dark-neutral--5)] border border-[var(--charcoal-color-container-secondary-default)] rounded-m p-0.5 gap-0.5"
               role="group"
               aria-label="送信モード"
               title="スムーズ: 補間して滑らかに変化 / 普通: 即時反映"
             >
               <button
                 type="button"
-                class="mode-btn"
-                [class.active]="eyeHeight.mode() === 'instant'"
+                class="py-1.5 px-2.5 bg-transparent border-0 rounded-[calc(var(--charcoal-radius-m)_-_2px)] text-[11px] font-semibold font-[var(--font-sans)] cursor-pointer transition-all duration-100 whitespace-nowrap"
+                [ngClass]="eyeHeight.mode() === 'instant' ? 'bg-primary text-white' : 'text-text-tertiary hover:text-text'"
                 (click)="eyeHeight.setMode('instant')"
               >普通</button>
               <button
                 type="button"
-                class="mode-btn"
-                [class.active]="eyeHeight.mode() === 'smooth'"
+                class="py-1.5 px-2.5 bg-transparent border-0 rounded-[calc(var(--charcoal-radius-m)_-_2px)] text-[11px] font-semibold font-[var(--font-sans)] cursor-pointer transition-all duration-100 whitespace-nowrap"
+                [ngClass]="eyeHeight.mode() === 'smooth' ? 'bg-primary text-white' : 'text-text-tertiary hover:text-text'"
                 (click)="eyeHeight.setMode('smooth')"
               >スムーズ</button>
             </div>
             <input
               type="text"
               inputmode="decimal"
-              class="value-input"
+              class="flex-1 bg-[var(--charcoal-color-dark-neutral--5)] border border-[var(--charcoal-color-container-secondary-default)] rounded-m py-2.5 px-3 text-lg font-semibold text-text font-[var(--font-mono)] outline-none transition-colors duration-150 text-right focus:border-primary"
               [value]="displayValue()"
               (change)="onValueChange($any($event.target).value)"
             />
-            <span class="unit">m</span>
+            <span class="text-sm text-text-tertiary font-[var(--font-mono)]">m</span>
             <button
-              class="btn-reset"
+              class="py-2 px-[14px] bg-container-secondary border border-[var(--charcoal-color-container-secondary-default)] rounded-m text-text-secondary text-xs font-[var(--font-sans)] cursor-pointer transition-colors duration-150 whitespace-nowrap enabled:hover:bg-[var(--charcoal-color-dark-neutral--5)] disabled:opacity-60 disabled:cursor-default"
               [disabled]="eyeHeight.fetchingDefault()"
               (click)="reset()"
               title="アバター本来の身長に戻す（取得できなければ 1.6m）"
             >{{ eyeHeight.fetchingDefault() ? '取得中…' : 'リセット' }}</button>
           </div>
 
-          <div class="step-grid">
+          <div class="grid grid-cols-4 gap-1.5">
             @for (step of steps; track step) {
-              <button class="step-btn step-btn--plus" (click)="adjust(step)">
+              <button class="flex-1 py-2 px-1.5 rounded-m border border-[var(--charcoal-color-container-secondary-default)] bg-[var(--charcoal-color-dark-neutral--5)] text-text-secondary text-xs font-[var(--font-mono)] font-semibold cursor-pointer transition-all duration-100 hover:bg-container-secondary hover:text-text active:translate-y-px" (click)="adjust(step)">
                 + {{ step.toFixed(2) }}
               </button>
             }
             @for (step of steps; track step) {
-              <button class="step-btn step-btn--minus" (click)="adjust(-step)">
+              <button class="flex-1 py-2 px-1.5 rounded-m border border-[var(--charcoal-color-container-secondary-default)] bg-[var(--charcoal-color-dark-neutral--5)] text-text-secondary text-xs font-[var(--font-mono)] font-semibold cursor-pointer transition-all duration-100 hover:bg-container-secondary hover:text-text active:translate-y-px" (click)="adjust(-step)">
                 − {{ step.toFixed(2) }}
               </button>
             }
           </div>
 
         </div>
-        <p class="info-box">ワールド移動・アバター変更時は VRChat 側の身長がリセットされます。変更後は再度適用してください。</p>
+        <p class="mt-2 py-2.5 px-[14px] bg-[rgba(245,166,35,0.08)] border border-[rgba(245,166,35,0.25)] rounded-m text-[11px] text-text-notice leading-[1.6]">ワールド移動・アバター変更時は VRChat 側の身長がリセットされます。変更後は再度適用してください。</p>
       </div>
 
-      <div class="settings-section">
-        <div class="section-head">
-          <h3 class="section-title">プリセット</h3>
-          <button class="btn-add-preset" (click)="openSaveDialog()">
+      <div class="mb-6">
+        <div class="flex items-center justify-between mb-3">
+          <h3 class="m-0 text-[11px] font-semibold uppercase tracking-[0.08em] text-text-tertiary">プリセット</h3>
+          <button class="py-1.5 px-3 bg-primary-dim border border-primary rounded-m text-primary text-xs font-semibold font-[var(--font-sans)] cursor-pointer transition-colors duration-150 hover:bg-primary hover:text-white" (click)="openSaveDialog()">
             + 現在値を保存
           </button>
         </div>
-        <div class="card preset-card">
+        <div class="bg-background border border-[var(--charcoal-color-container-secondary-default)] rounded-l p-4 flex flex-col gap-2">
           @if (presets().length === 0) {
-            <p class="empty">プリセットはまだありません。現在値を保存しましょう。</p>
+            <p class="m-0 text-xs text-text-placeholder text-center py-2">プリセットはまだありません。現在値を保存しましょう。</p>
           } @else {
             @for (preset of presets(); track preset.id) {
-              <div class="preset-row">
+              <div class="flex gap-1.5 items-stretch">
                 <button
-                  class="preset-apply"
+                  class="flex-1 flex items-center justify-between py-2.5 px-3 bg-[var(--charcoal-color-dark-neutral--5)] border border-[var(--charcoal-color-container-secondary-default)] rounded-m text-text font-[var(--font-sans)] cursor-pointer transition-all duration-100 hover:bg-container-secondary hover:border-primary"
                   (click)="applyPreset(preset)"
                   (contextmenu)="openContextMenu(preset, $event)"
                 >
-                  <span class="preset-name">{{ preset.name }}</span>
-                  <span class="preset-value">{{ preset.value.toFixed(2) }} m</span>
+                  <span class="text-[13px] font-medium">{{ preset.name }}</span>
+                  <span class="text-xs text-primary font-[var(--font-mono)] font-semibold">{{ preset.value.toFixed(2) }} m</span>
                 </button>
                 <button
-                  class="preset-delete"
+                  class="w-9 bg-[var(--charcoal-color-dark-neutral--5)] border border-[var(--charcoal-color-container-secondary-default)] rounded-m text-text-tertiary text-lg leading-none cursor-pointer transition-all duration-100 hover:bg-[rgba(245,108,108,0.1)] hover:border-[rgba(245,108,108,0.3)] hover:text-text-negative"
                   (click)="deletePreset(preset.id)"
                   title="削除"
                   aria-label="削除"
@@ -113,37 +114,37 @@ interface Preset {
       </div>
 
       @if (eyeHeight.lastError(); as err) {
-        <div class="error-box">{{ err }}</div>
+        <div class="py-3 px-4 bg-[rgba(245,108,108,0.08)] border border-[rgba(245,108,108,0.25)] rounded-m text-xs text-text-negative">{{ err }}</div>
       }
       @if (eyeHeight.scalingAllowed() === false) {
-        <div class="warning-box">このワールドでは身長変更が許可されていないため、VRChat側で反映されない可能性があります</div>
+        <div class="py-3 px-4 bg-[rgba(230,162,60,0.08)] border border-[rgba(230,162,60,0.25)] rounded-m text-xs text-text-notice">このワールドでは身長変更が許可されていないため、VRChat側で反映されない可能性があります</div>
       }
 
       @if (contextMenu(); as menu) {
-        <div class="ctx-menu" [style.left.px]="menu.x" [style.top.px]="menu.y" (click)="$event.stopPropagation()">
-          <button class="ctx-item" (click)="openEditDialog(menu.preset); closeContextMenu()">編集</button>
-          <button class="ctx-item ctx-item--danger" (click)="deletePreset(menu.preset.id); closeContextMenu()">削除</button>
+        <div class="fixed z-[901] bg-background border border-[var(--charcoal-color-container-secondary-default)] rounded-m p-1 shadow-[0_4px_16px_rgba(0,0,0,0.35)] min-w-[120px]" [style.left.px]="menu.x" [style.top.px]="menu.y" (click)="$event.stopPropagation()">
+          <button class="block w-full py-2 px-3 bg-transparent border-0 rounded-[calc(var(--charcoal-radius-m)_-_4px)] text-text text-xs font-[var(--font-sans)] text-left cursor-pointer hover:bg-container-secondary" (click)="openEditDialog(menu.preset); closeContextMenu()">編集</button>
+          <button class="block w-full py-2 px-3 bg-transparent border-0 rounded-[calc(var(--charcoal-radius-m)_-_4px)] text-text-negative text-xs font-[var(--font-sans)] text-left cursor-pointer hover:bg-[rgba(245,108,108,0.1)]" (click)="deletePreset(menu.preset.id); closeContextMenu()">削除</button>
         </div>
       }
 
       @if (dialogOpen()) {
-        <div class="dialog-backdrop" (click)="closeDialog()">
+        <div class="fixed inset-0 bg-[rgba(0,0,0,0.55)] flex items-center justify-center z-[1000] animate-dialog-fade-in" (click)="closeDialog()">
           <div
-            class="dialog"
+            class="w-[min(360px,calc(100vw_-_48px))] bg-background border border-[var(--charcoal-color-container-secondary-default)] rounded-l p-5 flex flex-col gap-[14px] shadow-[0_12px_32px_rgba(0,0,0,0.4)] animate-dialog-slide-in"
             role="dialog"
             aria-modal="true"
             aria-labelledby="preset-dialog-title"
             (click)="$event.stopPropagation()"
             (keydown.escape)="closeDialog()"
           >
-            <h3 id="preset-dialog-title" class="dialog-title">{{ dialogMode() === 'edit' ? 'プリセット編集' : 'プリセット保存' }}</h3>
+            <h3 id="preset-dialog-title" class="m-0 text-sm font-bold text-text">{{ dialogMode() === 'edit' ? 'プリセット編集' : 'プリセット保存' }}</h3>
 
-            <label class="dialog-field">
-              <span class="dialog-label">名前</span>
+            <label class="flex flex-col gap-1.5">
+              <span class="text-[11px] font-semibold uppercase tracking-[0.06em] text-text-tertiary">名前</span>
               <input
                 #nameInput
                 type="text"
-                class="dialog-input"
+                class="bg-[var(--charcoal-color-dark-neutral--5)] border border-[var(--charcoal-color-container-secondary-default)] rounded-m py-[9px] px-3 text-[13px] text-text font-[var(--font-sans)] outline-none transition-colors duration-150 w-full box-border focus:border-primary"
                 [ngModel]="draftName()"
                 (ngModelChange)="draftName.set($event)"
                 (keydown.enter)="confirmSave()"
@@ -154,12 +155,12 @@ interface Preset {
               />
             </label>
 
-            <label class="dialog-field">
-              <span class="dialog-label">身長 (m)</span>
-              <div class="dialog-value-row">
+            <label class="flex flex-col gap-1.5">
+              <span class="text-[11px] font-semibold uppercase tracking-[0.06em] text-text-tertiary">身長 (m)</span>
+              <div class="flex items-center gap-2">
                 <input
                   type="number"
-                  class="dialog-input dialog-input--value"
+                  class="bg-[var(--charcoal-color-dark-neutral--5)] border border-[var(--charcoal-color-container-secondary-default)] rounded-m py-[9px] px-3 text-[13px] text-text font-[var(--font-sans)] outline-none transition-colors duration-150 w-full box-border focus:border-primary font-[var(--font-mono)] text-right font-semibold"
                   [min]="minValue()"
                   [max]="maxValue()"
                   step="0.01"
@@ -167,20 +168,20 @@ interface Preset {
                   (ngModelChange)="draftValue.set($event)"
                   (keydown.enter)="confirmSave()"
                 />
-                <span class="unit">m</span>
+                <span class="text-sm text-text-tertiary font-[var(--font-mono)]">m</span>
               </div>
-              <span class="dialog-hint">{{ minValue() }} 〜 {{ maxValue() }} m</span>
+              <span class="text-[10px] text-text-placeholder">{{ minValue() }} 〜 {{ maxValue() }} m</span>
             </label>
 
             @if (dialogError()) {
-              <p class="dialog-error">{{ dialogError() }}</p>
+              <p class="m-0 text-[11px] text-text-negative">{{ dialogError() }}</p>
             }
 
-            <div class="dialog-actions">
-              <button class="dialog-btn dialog-btn--ghost" (click)="closeDialog()">
+            <div class="flex gap-2 justify-end mt-1">
+              <button class="py-2 px-[18px] rounded-m text-xs font-semibold font-[var(--font-sans)] cursor-pointer transition-all duration-100 border border-[var(--charcoal-color-container-secondary-default)] bg-container-secondary text-text-secondary hover:bg-[var(--charcoal-color-dark-neutral--5)]" (click)="closeDialog()">
                 キャンセル
               </button>
-              <button class="dialog-btn dialog-btn--primary" (click)="confirmSave()">
+              <button class="py-2 px-[18px] rounded-m text-xs font-semibold font-[var(--font-sans)] cursor-pointer transition-all duration-100 border border-primary bg-primary text-white hover:brightness-[1.08]" (click)="confirmSave()">
                 保存
               </button>
             </div>
@@ -190,46 +191,8 @@ interface Preset {
     </div>
   `,
   styles: [`
-    .height-view { padding: 24px; height: 100%; overflow-y: auto; }
-    .page-title {
-      margin: 0 0 24px;
-      font-size: 18px;
-      font-weight: 700;
-      color: var(--charcoal-color-text-default);
-    }
-    .settings-section { margin-bottom: 24px; }
-    .section-head {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 12px;
-    }
-    .section-title {
-      margin: 0 0 12px;
-      font-size: 11px;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      color: var(--charcoal-color-text-tertiary-default);
-    }
-    .section-head .section-title { margin: 0; }
-    .card {
-      background: var(--charcoal-color-background-default);
-      border: 1px solid var(--charcoal-color-container-secondary-default);
-      border-radius: var(--charcoal-radius-l);
-      padding: 16px;
-      display: flex;
-      flex-direction: column;
-      gap: 14px;
-    }
-    .value-row {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
-
-    /* number 型のネイティブスピナー（上下矢印）を非表示。
-       増減操作は独自の step ボタン群で行うため不要。 */
+    /* number 型のネイティブスピナー（上下矢印）を非表示。増減操作は独自のstepボタン群で行うため不要。
+       属性セレクタ+ベンダープレフィックス擬似要素のためTailwindユーティリティで表現できない。 */
     input[type="number"] {
       -moz-appearance: textfield;
       appearance: textfield;
@@ -239,335 +202,6 @@ interface Preset {
       -webkit-appearance: none;
       appearance: none;
       margin: 0;
-    }
-
-    /* 送信モード切替トグル（普通 / スムーズ） */
-    .mode-toggle {
-      display: inline-flex;
-      background: var(--charcoal-color-dark-neutral--5);
-      border: 1px solid var(--charcoal-color-container-secondary-default);
-      border-radius: var(--charcoal-radius-m);
-      padding: 2px;
-      gap: 2px;
-    }
-    .mode-btn {
-      padding: 6px 10px;
-      background: transparent;
-      border: none;
-      border-radius: calc(var(--charcoal-radius-m) - 2px);
-      color: var(--charcoal-color-text-tertiary-default);
-      font-size: 11px;
-      font-weight: 600;
-      font-family: var(--font-sans);
-      cursor: pointer;
-      transition: all 0.12s;
-      white-space: nowrap;
-    }
-    .mode-btn:hover { color: var(--charcoal-color-text-default); }
-    .mode-btn.active {
-      background: var(--color-primary);
-      color: var(--color-bg, #fff);
-    }
-
-    .value-input {
-      flex: 1;
-      background: var(--charcoal-color-dark-neutral--5);
-      border: 1px solid var(--charcoal-color-container-secondary-default);
-      border-radius: var(--charcoal-radius-m);
-      padding: 10px 12px;
-      font-size: 18px;
-      font-weight: 600;
-      color: var(--charcoal-color-text-default);
-      font-family: var(--font-mono);
-      outline: none;
-      transition: border-color 0.15s;
-      text-align: right;
-    }
-    .value-input:focus { border-color: var(--color-primary); }
-    .unit {
-      font-size: 14px;
-      color: var(--charcoal-color-text-tertiary-default);
-      font-family: var(--font-mono);
-    }
-    .btn-reset {
-      padding: 8px 14px;
-      background: var(--charcoal-color-container-secondary-default);
-      border: 1px solid var(--charcoal-color-container-secondary-default);
-      border-radius: var(--charcoal-radius-m);
-      color: var(--charcoal-color-text-secondary-default);
-      font-size: 12px;
-      font-family: var(--font-sans);
-      cursor: pointer;
-      transition: background 0.15s;
-      white-space: nowrap;
-    }
-    .btn-reset:hover { background: var(--charcoal-color-dark-neutral--5); }
-    .btn-reset:disabled {
-      opacity: 0.6;
-      cursor: default;
-    }
-    .btn-reset:disabled:hover { background: var(--charcoal-color-container-secondary-default); }
-
-    .step-grid {
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 6px;
-    }
-    .step-btn {
-      flex: 1;
-      padding: 8px 6px;
-      border-radius: var(--charcoal-radius-m);
-      border: 1px solid var(--charcoal-color-container-secondary-default);
-      background: var(--charcoal-color-dark-neutral--5);
-      color: var(--charcoal-color-text-secondary-default);
-      font-size: 12px;
-      font-family: var(--font-mono);
-      font-weight: 600;
-      cursor: pointer;
-      transition: all 0.12s;
-    }
-    .step-btn:hover {
-      background: var(--charcoal-color-container-secondary-default);
-      color: var(--charcoal-color-text-default);
-    }
-    .step-btn:active { transform: translateY(1px); }
-
-    .btn-add-preset {
-      padding: 6px 12px;
-      background: var(--color-primary-dim);
-      border: 1px solid var(--color-primary);
-      border-radius: var(--charcoal-radius-m);
-      color: var(--color-primary);
-      font-size: 12px;
-      font-weight: 600;
-      font-family: var(--font-sans);
-      cursor: pointer;
-      transition: background 0.15s;
-    }
-    .btn-add-preset:hover { background: var(--color-primary); color: var(--color-bg, #fff); }
-
-    .preset-card { gap: 8px; }
-    .empty {
-      margin: 0;
-      font-size: 12px;
-      color: var(--charcoal-color-text-placeholder-default);
-      text-align: center;
-      padding: 8px 0;
-    }
-    .preset-row {
-      display: flex;
-      gap: 6px;
-      align-items: stretch;
-    }
-    .preset-apply {
-      flex: 1;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 10px 12px;
-      background: var(--charcoal-color-dark-neutral--5);
-      border: 1px solid var(--charcoal-color-container-secondary-default);
-      border-radius: var(--charcoal-radius-m);
-      color: var(--charcoal-color-text-default);
-      font-family: var(--font-sans);
-      cursor: pointer;
-      transition: all 0.12s;
-    }
-    .preset-apply:hover {
-      background: var(--charcoal-color-container-secondary-default);
-      border-color: var(--color-primary);
-    }
-    .preset-name { font-size: 13px; font-weight: 500; }
-    .preset-value {
-      font-size: 12px;
-      color: var(--color-primary);
-      font-family: var(--font-mono);
-      font-weight: 600;
-    }
-    .preset-delete {
-      width: 36px;
-      background: var(--charcoal-color-dark-neutral--5);
-      border: 1px solid var(--charcoal-color-container-secondary-default);
-      border-radius: var(--charcoal-radius-m);
-      color: var(--charcoal-color-text-tertiary-default);
-      font-size: 18px;
-      line-height: 1;
-      cursor: pointer;
-      transition: all 0.12s;
-    }
-    .preset-delete:hover {
-      background: rgba(245, 108, 108, 0.1);
-      border-color: rgba(245, 108, 108, 0.3);
-      color: var(--charcoal-color-text-negative-default);
-    }
-
-    .info-box {
-      margin: 8px 0 0;
-      padding: 10px 14px;
-      background: rgba(245, 166, 35, 0.08);
-      border: 1px solid rgba(245, 166, 35, 0.25);
-      border-radius: var(--charcoal-radius-m);
-      font-size: 11px;
-      color: var(--charcoal-color-text-notice-default);
-      line-height: 1.6;
-    }
-
-    .error-box {
-      padding: 12px 16px;
-      background: rgba(245, 108, 108, 0.08);
-      border: 1px solid rgba(245, 108, 108, 0.25);
-      border-radius: var(--charcoal-radius-m);
-      font-size: 12px;
-      color: var(--charcoal-color-text-negative-default);
-    }
-
-    .warning-box {
-      padding: 12px 16px;
-      background: rgba(230, 162, 60, 0.08);
-      border: 1px solid rgba(230, 162, 60, 0.25);
-      border-radius: var(--charcoal-radius-m);
-      font-size: 12px;
-      color: var(--charcoal-color-text-notice-default);
-    }
-
-    /* ---- Custom modal dialog ---- */
-    .dialog-backdrop {
-      position: fixed;
-      inset: 0;
-      background: rgba(0, 0, 0, 0.55);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: 1000;
-      animation: dialog-fade-in 0.12s ease-out;
-    }
-    @keyframes dialog-fade-in {
-      from { opacity: 0; }
-      to { opacity: 1; }
-    }
-    .dialog {
-      width: min(360px, calc(100vw - 48px));
-      background: var(--charcoal-color-background-default);
-      border: 1px solid var(--charcoal-color-container-secondary-default);
-      border-radius: var(--charcoal-radius-l);
-      padding: 20px;
-      display: flex;
-      flex-direction: column;
-      gap: 14px;
-      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
-      animation: dialog-slide-in 0.15s ease-out;
-    }
-    @keyframes dialog-slide-in {
-      from { transform: translateY(8px); opacity: 0; }
-      to { transform: translateY(0); opacity: 1; }
-    }
-    .dialog-title {
-      margin: 0;
-      font-size: 14px;
-      font-weight: 700;
-      color: var(--charcoal-color-text-default);
-    }
-    .dialog-field {
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-    }
-    .dialog-label {
-      font-size: 11px;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-      color: var(--charcoal-color-text-tertiary-default);
-    }
-    .dialog-input {
-      background: var(--charcoal-color-dark-neutral--5);
-      border: 1px solid var(--charcoal-color-container-secondary-default);
-      border-radius: var(--charcoal-radius-m);
-      padding: 9px 12px;
-      font-size: 13px;
-      color: var(--charcoal-color-text-default);
-      font-family: var(--font-sans);
-      outline: none;
-      transition: border-color 0.15s;
-      width: 100%;
-      box-sizing: border-box;
-    }
-    .dialog-input:focus { border-color: var(--color-primary); }
-    .dialog-input--value {
-      font-family: var(--font-mono);
-      text-align: right;
-      font-weight: 600;
-    }
-    .dialog-value-row {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-    .dialog-hint {
-      font-size: 10px;
-      color: var(--charcoal-color-text-placeholder-default);
-    }
-    .dialog-error {
-      margin: 0;
-      font-size: 11px;
-      color: var(--charcoal-color-text-negative-default);
-    }
-    .dialog-actions {
-      display: flex;
-      gap: 8px;
-      justify-content: flex-end;
-      margin-top: 4px;
-    }
-    .dialog-btn {
-      padding: 8px 18px;
-      border-radius: var(--charcoal-radius-m);
-      font-size: 12px;
-      font-weight: 600;
-      font-family: var(--font-sans);
-      cursor: pointer;
-      transition: all 0.12s;
-      border: 1px solid var(--charcoal-color-container-secondary-default);
-    }
-    .dialog-btn--ghost {
-      background: var(--charcoal-color-container-secondary-default);
-      color: var(--charcoal-color-text-secondary-default);
-    }
-    .dialog-btn--ghost:hover { background: var(--charcoal-color-dark-neutral--5); }
-    .dialog-btn--primary {
-      background: var(--color-primary);
-      border-color: var(--color-primary);
-      color: var(--color-bg, #fff);
-    }
-    .dialog-btn--primary:hover { filter: brightness(1.08); }
-
-    /* ---- Context menu ---- */
-    .ctx-menu {
-      position: fixed;
-      z-index: 901;
-      background: var(--charcoal-color-background-default);
-      border: 1px solid var(--charcoal-color-container-secondary-default);
-      border-radius: var(--charcoal-radius-m);
-      padding: 4px;
-      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
-      min-width: 120px;
-    }
-    .ctx-item {
-      display: block;
-      width: 100%;
-      padding: 8px 12px;
-      background: transparent;
-      border: none;
-      border-radius: calc(var(--charcoal-radius-m) - 4px);
-      color: var(--charcoal-color-text-default);
-      font-size: 12px;
-      font-family: var(--font-sans);
-      text-align: left;
-      cursor: pointer;
-      &:hover { background: var(--charcoal-color-container-secondary-default); }
-    }
-    .ctx-item--danger {
-      color: var(--charcoal-color-text-negative-default);
-      &:hover { background: rgba(245, 108, 108, 0.1); }
     }
   `],
 })

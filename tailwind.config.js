@@ -33,9 +33,16 @@ module.exports = {
       // 各コンポーネントの@keyframesをここに集約する。spinはTailwind標準のanimate-spinをそのまま使う。
       keyframes: {
         'fade-in': { from: { opacity: '0' }, to: { opacity: '1' } },
+        'dialog-fade-in': { from: { opacity: '0' }, to: { opacity: '1' } },
+        'dialog-slide-in': {
+          from: { transform: 'translateY(8px)', opacity: '0' },
+          to: { transform: 'translateY(0)', opacity: '1' },
+        },
       },
       animation: {
         'fade-in': 'fade-in 0.15s ease',
+        'dialog-fade-in': 'dialog-fade-in 0.12s ease-out',
+        'dialog-slide-in': 'dialog-slide-in 0.15s ease-out',
       },
     },
   },

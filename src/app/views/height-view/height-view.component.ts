@@ -195,7 +195,7 @@ interface Preset {
       margin: 0 0 24px;
       font-size: 18px;
       font-weight: 700;
-      color: var(--color-text-1);
+      color: var(--charcoal-color-text-default);
     }
     .settings-section { margin-bottom: 24px; }
     .section-head {
@@ -210,12 +210,12 @@ interface Preset {
       font-weight: 600;
       text-transform: uppercase;
       letter-spacing: 0.08em;
-      color: var(--color-text-3);
+      color: var(--charcoal-color-text-tertiary-default);
     }
     .section-head .section-title { margin: 0; }
     .card {
-      background: var(--color-surface-2);
-      border: 1px solid var(--color-surface-3);
+      background: var(--charcoal-color-background-default);
+      border: 1px solid var(--charcoal-color-container-secondary-default);
       border-radius: var(--radius-lg);
       padding: 16px;
       display: flex;
@@ -244,8 +244,8 @@ interface Preset {
     /* 送信モード切替トグル（普通 / スムーズ） */
     .mode-toggle {
       display: inline-flex;
-      background: var(--color-surface-1);
-      border: 1px solid var(--color-surface-3);
+      background: var(--charcoal-color-dark-neutral--5);
+      border: 1px solid var(--charcoal-color-container-secondary-default);
       border-radius: var(--radius-md);
       padding: 2px;
       gap: 2px;
@@ -255,7 +255,7 @@ interface Preset {
       background: transparent;
       border: none;
       border-radius: calc(var(--radius-md) - 2px);
-      color: var(--color-text-3);
+      color: var(--charcoal-color-text-tertiary-default);
       font-size: 11px;
       font-weight: 600;
       font-family: var(--font-sans);
@@ -263,7 +263,7 @@ interface Preset {
       transition: all 0.12s;
       white-space: nowrap;
     }
-    .mode-btn:hover { color: var(--color-text-1); }
+    .mode-btn:hover { color: var(--charcoal-color-text-default); }
     .mode-btn.active {
       background: var(--color-primary);
       color: var(--color-bg, #fff);
@@ -271,13 +271,13 @@ interface Preset {
 
     .value-input {
       flex: 1;
-      background: var(--color-surface-1);
-      border: 1px solid var(--color-surface-3);
+      background: var(--charcoal-color-dark-neutral--5);
+      border: 1px solid var(--charcoal-color-container-secondary-default);
       border-radius: var(--radius-md);
       padding: 10px 12px;
       font-size: 18px;
       font-weight: 600;
-      color: var(--color-text-1);
+      color: var(--charcoal-color-text-default);
       font-family: var(--font-mono);
       outline: none;
       transition: border-color 0.15s;
@@ -286,27 +286,27 @@ interface Preset {
     .value-input:focus { border-color: var(--color-primary); }
     .unit {
       font-size: 14px;
-      color: var(--color-text-3);
+      color: var(--charcoal-color-text-tertiary-default);
       font-family: var(--font-mono);
     }
     .btn-reset {
       padding: 8px 14px;
-      background: var(--color-surface-3);
-      border: 1px solid var(--color-surface-3);
+      background: var(--charcoal-color-container-secondary-default);
+      border: 1px solid var(--charcoal-color-container-secondary-default);
       border-radius: var(--radius-md);
-      color: var(--color-text-2);
+      color: var(--charcoal-color-text-secondary-default);
       font-size: 12px;
       font-family: var(--font-sans);
       cursor: pointer;
       transition: background 0.15s;
       white-space: nowrap;
     }
-    .btn-reset:hover { background: var(--color-surface-1); }
+    .btn-reset:hover { background: var(--charcoal-color-dark-neutral--5); }
     .btn-reset:disabled {
       opacity: 0.6;
       cursor: default;
     }
-    .btn-reset:disabled:hover { background: var(--color-surface-3); }
+    .btn-reset:disabled:hover { background: var(--charcoal-color-container-secondary-default); }
 
     .step-grid {
       display: grid;
@@ -317,9 +317,9 @@ interface Preset {
       flex: 1;
       padding: 8px 6px;
       border-radius: var(--radius-md);
-      border: 1px solid var(--color-surface-3);
-      background: var(--color-surface-1);
-      color: var(--color-text-2);
+      border: 1px solid var(--charcoal-color-container-secondary-default);
+      background: var(--charcoal-color-dark-neutral--5);
+      color: var(--charcoal-color-text-secondary-default);
       font-size: 12px;
       font-family: var(--font-mono);
       font-weight: 600;
@@ -327,8 +327,8 @@ interface Preset {
       transition: all 0.12s;
     }
     .step-btn:hover {
-      background: var(--color-surface-3);
-      color: var(--color-text-1);
+      background: var(--charcoal-color-container-secondary-default);
+      color: var(--charcoal-color-text-default);
     }
     .step-btn:active { transform: translateY(1px); }
 
@@ -350,7 +350,7 @@ interface Preset {
     .empty {
       margin: 0;
       font-size: 12px;
-      color: var(--color-text-4);
+      color: var(--charcoal-color-text-placeholder-default);
       text-align: center;
       padding: 8px 0;
     }
@@ -365,16 +365,16 @@ interface Preset {
       align-items: center;
       justify-content: space-between;
       padding: 10px 12px;
-      background: var(--color-surface-1);
-      border: 1px solid var(--color-surface-3);
+      background: var(--charcoal-color-dark-neutral--5);
+      border: 1px solid var(--charcoal-color-container-secondary-default);
       border-radius: var(--radius-md);
-      color: var(--color-text-1);
+      color: var(--charcoal-color-text-default);
       font-family: var(--font-sans);
       cursor: pointer;
       transition: all 0.12s;
     }
     .preset-apply:hover {
-      background: var(--color-surface-3);
+      background: var(--charcoal-color-container-secondary-default);
       border-color: var(--color-primary);
     }
     .preset-name { font-size: 13px; font-weight: 500; }
@@ -386,10 +386,10 @@ interface Preset {
     }
     .preset-delete {
       width: 36px;
-      background: var(--color-surface-1);
-      border: 1px solid var(--color-surface-3);
+      background: var(--charcoal-color-dark-neutral--5);
+      border: 1px solid var(--charcoal-color-container-secondary-default);
       border-radius: var(--radius-md);
-      color: var(--color-text-3);
+      color: var(--charcoal-color-text-tertiary-default);
       font-size: 18px;
       line-height: 1;
       cursor: pointer;
@@ -398,7 +398,7 @@ interface Preset {
     .preset-delete:hover {
       background: rgba(245, 108, 108, 0.1);
       border-color: rgba(245, 108, 108, 0.3);
-      color: var(--color-error);
+      color: var(--charcoal-color-text-negative-default);
     }
 
     .info-box {
@@ -408,7 +408,7 @@ interface Preset {
       border: 1px solid rgba(245, 166, 35, 0.25);
       border-radius: var(--radius-md);
       font-size: 11px;
-      color: var(--color-warning);
+      color: var(--charcoal-color-text-notice-default);
       line-height: 1.6;
     }
 
@@ -418,7 +418,7 @@ interface Preset {
       border: 1px solid rgba(245, 108, 108, 0.25);
       border-radius: var(--radius-md);
       font-size: 12px;
-      color: var(--color-error);
+      color: var(--charcoal-color-text-negative-default);
     }
 
     .warning-box {
@@ -427,7 +427,7 @@ interface Preset {
       border: 1px solid rgba(230, 162, 60, 0.25);
       border-radius: var(--radius-md);
       font-size: 12px;
-      color: var(--color-warning);
+      color: var(--charcoal-color-text-notice-default);
     }
 
     /* ---- Custom modal dialog ---- */
@@ -447,8 +447,8 @@ interface Preset {
     }
     .dialog {
       width: min(360px, calc(100vw - 48px));
-      background: var(--color-surface-2);
-      border: 1px solid var(--color-surface-3);
+      background: var(--charcoal-color-background-default);
+      border: 1px solid var(--charcoal-color-container-secondary-default);
       border-radius: var(--radius-lg);
       padding: 20px;
       display: flex;
@@ -465,7 +465,7 @@ interface Preset {
       margin: 0;
       font-size: 14px;
       font-weight: 700;
-      color: var(--color-text-1);
+      color: var(--charcoal-color-text-default);
     }
     .dialog-field {
       display: flex;
@@ -477,15 +477,15 @@ interface Preset {
       font-weight: 600;
       text-transform: uppercase;
       letter-spacing: 0.06em;
-      color: var(--color-text-3);
+      color: var(--charcoal-color-text-tertiary-default);
     }
     .dialog-input {
-      background: var(--color-surface-1);
-      border: 1px solid var(--color-surface-3);
+      background: var(--charcoal-color-dark-neutral--5);
+      border: 1px solid var(--charcoal-color-container-secondary-default);
       border-radius: var(--radius-md);
       padding: 9px 12px;
       font-size: 13px;
-      color: var(--color-text-1);
+      color: var(--charcoal-color-text-default);
       font-family: var(--font-sans);
       outline: none;
       transition: border-color 0.15s;
@@ -505,12 +505,12 @@ interface Preset {
     }
     .dialog-hint {
       font-size: 10px;
-      color: var(--color-text-4);
+      color: var(--charcoal-color-text-placeholder-default);
     }
     .dialog-error {
       margin: 0;
       font-size: 11px;
-      color: var(--color-error);
+      color: var(--charcoal-color-text-negative-default);
     }
     .dialog-actions {
       display: flex;
@@ -526,13 +526,13 @@ interface Preset {
       font-family: var(--font-sans);
       cursor: pointer;
       transition: all 0.12s;
-      border: 1px solid var(--color-surface-3);
+      border: 1px solid var(--charcoal-color-container-secondary-default);
     }
     .dialog-btn--ghost {
-      background: var(--color-surface-3);
-      color: var(--color-text-2);
+      background: var(--charcoal-color-container-secondary-default);
+      color: var(--charcoal-color-text-secondary-default);
     }
-    .dialog-btn--ghost:hover { background: var(--color-surface-1); }
+    .dialog-btn--ghost:hover { background: var(--charcoal-color-dark-neutral--5); }
     .dialog-btn--primary {
       background: var(--color-primary);
       border-color: var(--color-primary);
@@ -544,8 +544,8 @@ interface Preset {
     .ctx-menu {
       position: fixed;
       z-index: 901;
-      background: var(--color-surface-2);
-      border: 1px solid var(--color-surface-3);
+      background: var(--charcoal-color-background-default);
+      border: 1px solid var(--charcoal-color-container-secondary-default);
       border-radius: var(--radius-md);
       padding: 4px;
       box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
@@ -558,15 +558,15 @@ interface Preset {
       background: transparent;
       border: none;
       border-radius: calc(var(--radius-md) - 4px);
-      color: var(--color-text-1);
+      color: var(--charcoal-color-text-default);
       font-size: 12px;
       font-family: var(--font-sans);
       text-align: left;
       cursor: pointer;
-      &:hover { background: var(--color-surface-3); }
+      &:hover { background: var(--charcoal-color-container-secondary-default); }
     }
     .ctx-item--danger {
-      color: var(--color-error);
+      color: var(--charcoal-color-text-negative-default);
       &:hover { background: rgba(245, 108, 108, 0.1); }
     }
   `],

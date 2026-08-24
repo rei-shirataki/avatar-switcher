@@ -8,7 +8,7 @@
   margin: 0 0 24px;
   font-size: 18px;
   font-weight: 700;
-  color: var(--color-text-1);
+  color: var(--charcoal-color-text-default);
 }
 
 .settings-section {
@@ -21,12 +21,12 @@
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: var(--color-text-3);
+  color: var(--charcoal-color-text-tertiary-default);
 }
 
 .account-card {
-  background: var(--color-surface-2);
-  border: 1px solid var(--color-surface-3);
+  background: var(--charcoal-color-background-default);
+  border: 1px solid var(--charcoal-color-container-secondary-default);
   border-radius: var(--radius-lg);
   padding: 16px;
   display: flex;
@@ -41,7 +41,7 @@
   border-radius: 50%;
   object-fit: cover;
   flex-shrink: 0;
-  background: var(--color-surface-3);
+  background: var(--charcoal-color-container-secondary-default);
 
   // 画像読み込み失敗時 (onAvatarError) に付与される。
   // src を外しても要素サイズと背景色だけ残し、broken icon は表示しない。
@@ -58,7 +58,7 @@
 .account-name {
   font-size: 15px;
   font-weight: 600;
-  color: var(--color-text-1);
+  color: var(--charcoal-color-text-default);
 }
 
 
@@ -67,7 +67,7 @@
   background: rgba(245, 108, 108, 0.1);
   border: 1px solid rgba(245, 108, 108, 0.3);
   border-radius: var(--radius-md);
-  color: var(--color-error);
+  color: var(--charcoal-color-text-negative-default);
   font-size: 12px;
   font-family: var(--font-sans);
   cursor: pointer;
@@ -81,8 +81,8 @@
 // ---- Overlay section ----
 
 .settings-card {
-  background: var(--color-surface-2);
-  border: 1px solid var(--color-surface-3);
+  background: var(--charcoal-color-background-default);
+  border: 1px solid var(--charcoal-color-container-secondary-default);
   border-radius: var(--radius-lg);
   padding: 16px;
   display: flex;
@@ -105,7 +105,7 @@
 
 .setting-label {
   font-size: 13px;
-  color: var(--color-text-2);
+  color: var(--charcoal-color-text-secondary-default);
 }
 
 .setting-value {
@@ -116,7 +116,7 @@
 .setting-hint {
   margin: 0;
   font-size: 11px;
-  color: var(--color-text-4);
+  color: var(--charcoal-color-text-placeholder-default);
 }
 
 .status-badge {
@@ -124,11 +124,11 @@
   padding: 2px 10px;
   border-radius: var(--radius-sm);
   background: rgba(136, 136, 170, 0.1);
-  color: var(--color-text-3);
+  color: var(--charcoal-color-text-tertiary-default);
 
   &--on {
     background: rgba(86, 201, 110, 0.1);
-    color: var(--color-success);
+    color: var(--charcoal-color-text-positive-default);
   }
 }
 
@@ -141,9 +141,9 @@
   flex: 1;
   padding: 4px 20px;
   border-radius: var(--radius-md);
-  border: 1px solid var(--color-surface-3);
-  background: var(--color-surface-3);
-  color: var(--color-text-3);
+  border: 1px solid var(--charcoal-color-container-secondary-default);
+  background: var(--charcoal-color-container-secondary-default);
+  color: var(--charcoal-color-text-tertiary-default);
   font-size: 12px;
   font-weight: 600;
   font-family: var(--font-sans);
@@ -169,7 +169,7 @@
   border: 1px solid rgba(245, 166, 35, 0.25);
   border-radius: var(--radius-md);
   font-size: 12px;
-  color: var(--color-warning);
+  color: var(--charcoal-color-text-notice-default);
 }
 
 // ---- License section ----
@@ -184,9 +184,9 @@
   flex-shrink: 0;
   padding: 4px 16px;
   border-radius: var(--radius-md);
-  border: 1px solid var(--color-surface-3);
-  background: var(--color-surface-3);
-  color: var(--color-text-3);
+  border: 1px solid var(--charcoal-color-container-secondary-default);
+  background: var(--charcoal-color-container-secondary-default);
+  color: var(--charcoal-color-text-tertiary-default);
   font-size: 12px;
   font-weight: 600;
   font-family: var(--font-sans);
@@ -198,19 +198,19 @@
 
 .license-type {
   font-size: 11px;
-  color: var(--color-text-4);
+  color: var(--charcoal-color-text-placeholder-default);
 }
 
 .license-text {
   margin: 0;
   padding: 12px;
-  background: var(--color-surface-1);
-  border: 1px solid var(--color-surface-3);
+  background: var(--charcoal-color-dark-neutral--5);
+  border: 1px solid var(--charcoal-color-container-secondary-default);
   border-radius: var(--radius-md);
   font-family: var(--font-mono, monospace);
   font-size: 11px;
   line-height: 1.5;
-  color: var(--color-text-3);
+  color: var(--charcoal-color-text-tertiary-default);
   white-space: pre-wrap;
   word-break: break-word;
 }

@@ -1,8 +1,8 @@
 .avatar-card {
   display: flex;
   flex-direction: column;
-  background: var(--color-surface-2);
-  border: 1px solid var(--color-surface-3);
+  background: var(--charcoal-color-background-default);
+  border: 1px solid var(--charcoal-color-container-secondary-default);
   border-radius: var(--radius-md);
   transition: border-color 0.15s, transform 0.15s, box-shadow 0.15s;
   cursor: default;
@@ -35,7 +35,7 @@
     position: relative;
     width: 100%;
     aspect-ratio: 1 / 1;
-    background: var(--color-surface-3);
+    background: var(--charcoal-color-container-secondary-default);
     overflow: hidden;
     border-radius: var(--radius-md) var(--radius-md) 0 0;
 
@@ -54,8 +54,8 @@
     justify-content: center;
     font-size: 36px;
     font-weight: 700;
-    color: var(--color-text-3);
-    background: var(--color-surface-4);
+    color: var(--charcoal-color-text-tertiary-default);
+    background: var(--charcoal-color-container-tertiary-default);
   }
 
   &__select-ring {
@@ -125,7 +125,7 @@
   &__name {
     font-size: 12px;
     font-weight: 600;
-    color: var(--color-text-1);
+    color: var(--charcoal-color-text-default);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -133,7 +133,7 @@
 
   &__author {
     font-size: 11px;
-    color: var(--color-text-2);
+    color: var(--charcoal-color-text-secondary-default);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -155,12 +155,12 @@
 
     &.badge-public {
       background: rgba(86, 201, 110, 0.15);
-      color: var(--color-success);
+      color: var(--charcoal-color-text-positive-default);
     }
 
     &.badge-private {
       background: rgba(136, 136, 170, 0.15);
-      color: var(--color-text-3);
+      color: var(--charcoal-color-text-tertiary-default);
     }
   }
 
@@ -171,9 +171,9 @@
   &__folder-btn {
     width: 20px;
     height: 20px;
-    background: var(--color-surface-3);
-    border: 1px solid var(--color-surface-3);
-    color: var(--color-text-2);
+    background: var(--charcoal-color-container-secondary-default);
+    border: 1px solid var(--charcoal-color-container-secondary-default);
+    color: var(--charcoal-color-text-secondary-default);
     cursor: pointer;
     padding: 0;
     display: flex;
@@ -200,8 +200,8 @@
     bottom: calc(100% + 4px);
     right: 0;
     min-width: 140px;
-    background: var(--color-surface-2);
-    border: 1px solid var(--color-surface-3);
+    background: var(--charcoal-color-background-default);
+    border: 1px solid var(--charcoal-color-container-secondary-default);
     border-radius: var(--radius-md);
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
     z-index: 50;
@@ -216,14 +216,14 @@
     padding: 7px 10px;
     background: none;
     border: none;
-    color: var(--color-text-2);
+    color: var(--charcoal-color-text-secondary-default);
     font-size: 11px;
     font-family: var(--font-sans);
     cursor: pointer;
     text-align: left;
     transition: background 0.1s;
 
-    &:hover { background: var(--color-surface-3); }
+    &:hover { background: var(--charcoal-color-container-secondary-default); }
     &--checked { color: var(--color-primary); }
   }
 

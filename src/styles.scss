@@ -27,10 +27,18 @@ html, body {
   overflow: hidden;
   background: transparent;
   font-family: var(--font-sans);
-  font-size: 13px;
   color: var(--charcoal-color-text-default);
   user-select: none;
   -webkit-user-select: none;
+}
+
+// Tailwindのrem系ユーティリティ(p-1, gap-2 等)はhtml要素のfont-sizeを基準に
+// 計算されるため、ここに13pxを指定するとpadding/gapが軒並み縮んでしまう
+// (例: p-1は本来4pxのはずが4px×13/16=3.25pxになる)。アプリ全体の基本文字
+// サイズ13pxはbodyだけに指定し、rem計算の基準となるhtmlは既定の16pxのまま
+// にしておく。
+body {
+  font-size: 13px;
 }
 
 * {

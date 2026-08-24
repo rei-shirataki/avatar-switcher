@@ -7,36 +7,12 @@
 @import '@fontsource/inter/700.css';
 
 :root {
-  /* Surface layers */
-  --color-surface-0: #0a0a0f;
-  --color-surface-1: #111118;
-  --color-surface-2: #18181f;
-  --color-surface-3: #222230;
-  --color-surface-4: #2a2a3a;
-
-  /* Primary accent */
+  /* Primary accent(charcoal標準パレットに対応する色がないため専用トークンとして維持。
+     tailwind.config.jsのtheme.extend.colors.primaryからも参照される) */
   --color-primary:        #7c6af7;
   --color-primary-hover:  #9485f9;
   --color-primary-active: #6455e8;
   --color-primary-dim:    rgba(124, 106, 247, 0.15);
-
-  /* Text */
-  --color-text-1: #f0f0f8;
-  --color-text-2: #c8c8de;
-  --color-text-3: #8888aa;
-  --color-text-4: #555570;
-
-  /* Semantic */
-  --color-success: #56c96e;
-  --color-warning: #f5a623;
-  --color-error:   #f56c6c;
-  --color-info:    #409eff;
-
-  /* Geometry */
-  --radius-sm:  4px;
-  --radius-md:  8px;
-  --radius-lg:  12px;
-  --radius-xl:  16px;
 
   /* Typography */
   --font-sans: 'Inter', 'Segoe UI', system-ui, sans-serif;
@@ -52,7 +28,7 @@ html, body {
   background: transparent;
   font-family: var(--font-sans);
   font-size: 13px;
-  color: var(--color-text-1);
+  color: var(--charcoal-color-text-default);
   user-select: none;
   -webkit-user-select: none;
 }
@@ -69,10 +45,10 @@ html, body {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: var(--color-surface-3);
+  background: var(--charcoal-color-container-secondary-default);
   border-radius: 2px;
   &:hover {
-    background: var(--color-surface-4);
+    background: var(--charcoal-color-container-tertiary-default);
   }
 }
 

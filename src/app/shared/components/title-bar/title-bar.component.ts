@@ -7,25 +7,24 @@ import { IconComponent } from '../icon/icon.component';
   standalone: true,
   imports: [IconComponent],
   template: `
-    <div class="title-bar bg-[var(--charcoal-color-dark-neutral--5)]" data-tauri-drag-region>
-      <div class="title-bar__logo" data-tauri-drag-region>
-        <app-icon name="logo" [size]="16" class="title-bar__icon" data-tauri-drag-region/>
-        <span class="title-bar__name text-text-secondary" data-tauri-drag-region>AvatarSwitcher</span>
+    <div class="flex items-center justify-between h-9 py-0 pr-2 pl-3 border-b border-[var(--charcoal-color-container-secondary-default)] flex-shrink-0 select-none bg-[var(--charcoal-color-dark-neutral--5)]" data-tauri-drag-region>
+      <div class="flex items-center gap-1.5 cursor-default" data-tauri-drag-region>
+        <app-icon name="logo" [size]="16" class="text-primary" data-tauri-drag-region/>
+        <span class="text-xs font-semibold tracking-[0.03em] text-text-secondary" data-tauri-drag-region>AvatarSwitcher</span>
       </div>
-      <div class="title-bar__controls">
-        <button class="ctrl-btn bg-transparent rounded-s text-text-tertiary hover:bg-container-secondary hover:text-text ctrl-btn--min" (click)="minimize()" title="最小化">
+      <div class="flex gap-0.5">
+        <button class="w-8 h-7 border-0 cursor-pointer flex items-center justify-center transition-colors duration-150 p-0 bg-transparent rounded-s text-text-tertiary hover:bg-container-secondary hover:text-text" (click)="minimize()" title="最小化">
           <app-icon name="minimize" [size]="10"/>
         </button>
-        <button class="ctrl-btn bg-transparent rounded-s text-text-tertiary hover:bg-container-secondary hover:text-text ctrl-btn--max" (click)="maximize()" title="最大化">
+        <button class="w-8 h-7 border-0 cursor-pointer flex items-center justify-center transition-colors duration-150 p-0 bg-transparent rounded-s text-text-tertiary hover:bg-container-secondary hover:text-text" (click)="maximize()" title="最大化">
           <app-icon name="maximize" [size]="10"/>
         </button>
-        <button class="ctrl-btn bg-transparent rounded-s text-text-tertiary hover:bg-container-secondary hover:text-text ctrl-btn--close" (click)="close()" title="閉じる">
+        <button class="w-8 h-7 border-0 cursor-pointer flex items-center justify-center transition-colors duration-150 p-0 bg-transparent rounded-s text-text-tertiary hover:bg-[#c42b1c] hover:text-white" (click)="close()" title="閉じる">
           <app-icon name="close" [size]="10"/>
         </button>
       </div>
     </div>
   `,
-  styleUrl: './title-bar.component.scss',
 })
 export class TitleBarComponent {
   async minimize() { await getCurrentWindow().minimize(); }

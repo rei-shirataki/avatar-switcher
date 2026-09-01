@@ -5,6 +5,7 @@ import { coerceFiniteNumber } from '../utils/number.util';
 
 const STORAGE_KEY_VALUE = 'avatar-switcher.eyeheight.value';
 const STORAGE_KEY_MODE = 'avatar-switcher.eyeheight.mode';
+const STORAGE_KEY_LIMIT_ENABLED = 'avatar-switcher.eyeheight.limitEnabled';
 
 /** Rust `osc_query_avatar_scale_snapshot` の戻り値。VRChat の OSCQuery HTTP
  *  サーバーへ能動的に問い合わせて取得した EyeHeightAsMeters / ScaleFactor /
@@ -17,9 +18,23 @@ interface AvatarScaleSnapshot {
   scale_modified: boolean | null;
 }
 
+/** Rust `eye_height_settings_get`/`set` の型（#55）。SteamVRオーバーレイとも
+ *  WSブリッジ経由で共有されるため、真の情報源はRust storage側にある。 */
+interface EyeHeightSettings {
+  limitEnabled: boolean;
+}
+
 export const EYE_HEIGHT_DEFAULT = 1.6;
 export const EYE_HEIGHT_MIN = 0.2;
 export const EYE_HEIGHT_MAX = 5.0;
+
+/** 設定で上限適用をオフにした場合でも残す最小限のセーフガード。
+ *  VRChat の OSC 書き込みは EYE_HEIGHT_MIN/MAX の制限を受けないため、意図的に
+ *  範囲外の身長を試したいユーザーのためにオフを許可するが、0 以下や桁外れの値は
+ *  UI 表示崩壊・意図しない暴走の原因になるため下限だけは死守する。上限は
+ *  「実質無制限」とみなせる程度に広く取っている。 */
+export const EYE_HEIGHT_SAFE_MIN = 0.01;
+export const EYE_HEIGHT_SAFE_MAX = 100;
 
 /** 自前の OSC 送信後、この期間内に VRChat から届くエコーは applyExternalValue で無視する。
  *  スムーズ終端で _isSmoothing=false に戻った直後に届く中間値エコーが _target を
@@ -93,6 +108,9 @@ export class EyeHeightService {
   /** スムーズ補間が進行中か。UI 表示の出し分けに使う signal。 */
   private readonly _isSmoothing = signal<boolean>(false);
   private readonly _mode = signal<EyeHeightMode>(DEFAULT_MODE);
+  /** true: EYE_HEIGHT_MIN/MAX(0.2〜5.0m)でクランプする（既定）。
+   *  false: EYE_HEIGHT_SAFE_MIN/MAX の広い範囲でのみクランプする。 */
+  private readonly _limitEnabled = signal<boolean>(true);
   private readonly _lastError = signal<string | null>(null);
   /** getAvatarDefault() が能動フェッチ中かどうか。リセットボタンの連打防止・
    *  進行状況表示に使う signal。 */
@@ -114,13 +132,17 @@ export class EyeHeightService {
   readonly target = this._target.asReadonly();
   readonly isSmoothing = this._isSmoothing.asReadonly();
   readonly mode = this._mode.asReadonly();
+  readonly limitEnabled = this._limitEnabled.asReadonly();
   readonly lastError = this._lastError.asReadonly();
   readonly fetchingDefault = this._fetchingDefault.asReadonly();
-  // アプリの静的クランプ(EYE_HEIGHT_MIN/MAX)とワールドの範囲、より厳しい方を
-  // 採用する。normalize() は静的クランプしかかけないため、UI がこれより緩い
-  // 範囲を受理すると「入力は通ったのに送信時に無言で丸められる」ズレが起きる。
-  readonly worldMinHeight = computed(() => Math.max(this._worldMinHeight() ?? EYE_HEIGHT_MIN, EYE_HEIGHT_MIN));
-  readonly worldMaxHeight = computed(() => Math.min(this._worldMaxHeight() ?? EYE_HEIGHT_MAX, EYE_HEIGHT_MAX));
+  // アプリの静的クランプ(limitEnabled に応じて EYE_HEIGHT_MIN/MAX または
+  // EYE_HEIGHT_SAFE_MIN/MAX)とワールドの範囲、より厳しい方を採用する。
+  // normalize() は静的クランプしかかけないため、UI がこれより緩い範囲を受理すると
+  // 「入力は通ったのに送信時に無言で丸められる」ズレが起きる。
+  private readonly appMin = computed(() => (this._limitEnabled() ? EYE_HEIGHT_MIN : EYE_HEIGHT_SAFE_MIN));
+  private readonly appMax = computed(() => (this._limitEnabled() ? EYE_HEIGHT_MAX : EYE_HEIGHT_SAFE_MAX));
+  readonly worldMinHeight = computed(() => Math.max(this._worldMinHeight() ?? this.appMin(), this.appMin()));
+  readonly worldMaxHeight = computed(() => Math.min(this._worldMaxHeight() ?? this.appMax(), this.appMax()));
   /** null = 未受信（不明）。false のときだけ警告表示に使う。 */
   readonly scalingAllowed = this._scalingAllowed.asReadonly();
 
@@ -170,6 +192,15 @@ export class EyeHeightService {
   private _lastAvatarChangeAt = Number.NEGATIVE_INFINITY;
 
   constructor(private tauri: TauriService) {
+    // limitEnabled の真の情報源はRust storage（SteamVRオーバーレイとWSブリッジ経由で
+    // 共有するため、別プロセスで完結するlocalStorageだけでは同期できない）。
+    // ここではTauri起動の非同期取得を待たずに済むよう、直前セッションの値を
+    // localStorageにキャッシュしておき clamp() の初期値として使う（ちらつき防止）。
+    // clamp() が参照するため、保存値の normalize より先に読み込む。
+    const cachedLimitEnabled = localStorage.getItem(STORAGE_KEY_LIMIT_ENABLED);
+    if (cachedLimitEnabled === 'true' || cachedLimitEnabled === 'false') {
+      this._limitEnabled.set(cachedLimitEnabled === 'true');
+    }
     const saved = parseFloat(localStorage.getItem(STORAGE_KEY_VALUE) ?? '');
     if (Number.isFinite(saved)) {
       this._value.set(this.normalize(saved));
@@ -220,6 +251,30 @@ export class EyeHeightService {
       if (!this.isAvatarSettling()) this._scalingAllowed.set(e.payload);
     }));
 
+    // limitEnabled の真の値をRust storageから取得する。localStorageキャッシュと
+    // ズレていた場合（デスクトップUIがこの設定の唯一の書き込み元で、書き込み時に
+    // localStorage/Rust storage両方へ同時保存しているため実際にはほぼ起きないが、
+    // 前回セッションが保存に失敗した場合等の保険）は上書きし、現在値が新しい範囲を
+    // 外れていればローカル状態のみ再クランプする。ユーザー操作を伴わないアプリ起動
+    // 時に OSC を送信して VRChat 側の身長を勝手に変えてしまわないよう、setValue()
+    // は使わず _value/_target を直接更新するに留める（表示とクランプ範囲の食い違い
+    // は解消しつつ、送信は次のユーザー操作まで待つ）。
+    this.tauri
+      .invoke<EyeHeightSettings>('eye_height_settings_get')
+      .then(s => {
+        this._limitEnabled.set(s.limitEnabled);
+        localStorage.setItem(STORAGE_KEY_LIMIT_ENABLED, String(s.limitEnabled));
+        const renormalized = this.normalize(this._target());
+        if (renormalized !== this._target()) {
+          this._value.set(renormalized);
+          this._target.set(renormalized);
+          this.persistValue(renormalized);
+        }
+      })
+      .catch(() => {
+        // 起動直後にRust側が未初期化等でも、キャッシュ済みの既定値で動作を継続する。
+      });
+
     // dev HMR 等でサービスが再構築される際にリスナーと interval を確実に解放する。
     // providedIn:'root' でも DestroyRef は機能する。
     inject(DestroyRef).onDestroy(() => {
@@ -249,6 +304,23 @@ export class EyeHeightService {
     this.cancelSmooth();
     this._mode.set(mode);
     localStorage.setItem(STORAGE_KEY_MODE, mode);
+  }
+
+  /** 上限適用のオン/オフを切り替えて永続化する。Rust storageにも保存し、
+   *  接続中のSteamVRオーバーレイへリアルタイムに反映させる（#55）。
+   *  オフ→オンに切り替えた際、現在値が EYE_HEIGHT_MIN/MAX を外れていれば
+   *  再クランプして丸める（送信内容と表示値の食い違いを防ぐ）。範囲内なら
+   *  無駄な OSC 再送信・エコー抑止ウィンドウの発生を避けるためスキップする。 */
+  setLimitEnabled(enabled: boolean): void {
+    this._limitEnabled.set(enabled);
+    localStorage.setItem(STORAGE_KEY_LIMIT_ENABLED, String(enabled));
+    this.tauri
+      .invoke('eye_height_settings_set', { settings: { limitEnabled: enabled } satisfies EyeHeightSettings })
+      .catch(e => this._lastError.set(`上限設定の保存に失敗: ${String(e)}`));
+    const renormalized = this.normalize(this._target());
+    if (renormalized !== this._target()) {
+      void this.setValue(renormalized);
+    }
   }
 
   /** ユーザ操作で値をセットし VRChat へ送信する。
@@ -496,6 +568,6 @@ export class EyeHeightService {
   }
 
   private clamp(v: number): number {
-    return Math.max(EYE_HEIGHT_MIN, Math.min(EYE_HEIGHT_MAX, v));
+    return Math.max(this.appMin(), Math.min(this.appMax(), v));
   }
 }

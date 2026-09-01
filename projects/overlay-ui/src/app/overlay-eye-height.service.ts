@@ -8,6 +8,10 @@ const RESET_TIMEOUT_MS = 3000;
 
 const EYE_HEIGHT_MIN = 0.2;
 const EYE_HEIGHT_MAX = 5.0;
+/** eye-height.service.ts::EYE_HEIGHT_SAFE_MIN/MAX と同じ、上限適用オフ時の
+ *  最小限のセーフガード（#55）。 */
+const EYE_HEIGHT_SAFE_MIN = 0.01;
+const EYE_HEIGHT_SAFE_MAX = 100;
 
 /** 送信モード。eye-height.service.ts::EyeHeightMode と同じ意味。
  *  - `instant`: 目標値を1発で送る。
@@ -69,6 +73,10 @@ export class OverlayEyeHeightService {
   private readonly _isSmoothing = signal(false);
   private readonly _mode = signal<EyeHeightMode>(DEFAULT_MODE);
   private readonly _resetting = signal(false);
+  /** デスクトップUIの設定画面でのみ変更可能（#55）。overlay-ui側は表示のみで、
+   *  接続直後の能動取得(getEyeHeightSettings)と変更時のpush(onEyeHeightSettingsUpdate)
+   *  で追随する。 */
+  private readonly _limitEnabled = signal(true);
 
   readonly value = this._value.asReadonly();
   readonly isSmoothing = this._isSmoothing.asReadonly();
@@ -89,6 +97,7 @@ export class OverlayEyeHeightService {
       this._value.set(v);
       this._target.set(v);
     });
+    this.bridge.onEyeHeightSettingsUpdate((limitEnabled) => this._limitEnabled.set(limitEnabled));
   }
 
   /** モードを切り替える。進行中のスムージングはキャンセルする。 */
@@ -174,6 +183,9 @@ export class OverlayEyeHeightService {
   }
 
   private clamp(v: number): number {
-    return Math.max(EYE_HEIGHT_MIN, Math.min(EYE_HEIGHT_MAX, v));
+    const [min, max] = this._limitEnabled()
+      ? [EYE_HEIGHT_MIN, EYE_HEIGHT_MAX]
+      : [EYE_HEIGHT_SAFE_MIN, EYE_HEIGHT_SAFE_MAX];
+    return Math.max(min, Math.min(max, v));
   }
 }

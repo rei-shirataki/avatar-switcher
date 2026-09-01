@@ -3,13 +3,14 @@ use std::collections::HashMap;
 use tauri::AppHandle;
 use tauri_plugin_store::StoreExt;
 use tokio::sync::Mutex;
-use crate::storage::{AvatarFolder, AvatarOverride, OverlaySettings, OverlayUiState};
+use crate::storage::{AvatarFolder, AvatarOverride, EyeHeightSettings, OverlaySettings, OverlayUiState};
 
 const STORE_PATH: &str = "app-settings.json";
 const FOLDERS_KEY: &str = "avatar_folders";
 const OVERRIDES_KEY: &str = "avatar_overrides";
 const OVERLAY_SETTINGS_KEY: &str = "overlay_settings";
 const OVERLAY_UI_STATE_KEY: &str = "overlay_ui_state";
+const EYE_HEIGHT_SETTINGS_KEY: &str = "eye_height_settings";
 
 // 並列 invoke の read-modify-write 競合を防ぐためのプロセス全体ロック。
 // tauri-plugin-store は単一 set/get 単位でしか同期しないため、
@@ -17,6 +18,7 @@ const OVERLAY_UI_STATE_KEY: &str = "overlay_ui_state";
 static FOLDERS_LOCK: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
 static OVERRIDES_LOCK: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
 static OVERLAY_SETTINGS_LOCK: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
+static EYE_HEIGHT_SETTINGS_LOCK: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
 
 fn load_folders(app: &AppHandle) -> Vec<AvatarFolder> {
     app.store(STORE_PATH)
@@ -237,6 +239,48 @@ pub async fn overlay_settings_get(app: AppHandle) -> Result<OverlaySettings, Str
 pub async fn overlay_settings_set(app: AppHandle, settings: OverlaySettings) -> Result<(), String> {
     let _guard = OVERLAY_SETTINGS_LOCK.lock().await;
     save_overlay_settings(&app, &settings);
+    Ok(())
+}
+
+// ── Eye height settings (身長変更の上限適用オン/オフ) ───────────────────────────
+
+fn load_eye_height_settings(app: &AppHandle) -> EyeHeightSettings {
+    app.store(STORE_PATH)
+        .ok()
+        .and_then(|store| {
+            store
+                .get(EYE_HEIGHT_SETTINGS_KEY)
+                .and_then(|v| serde_json::from_value(v.clone()).ok())
+        })
+        .unwrap_or_default()
+}
+
+fn save_eye_height_settings(app: &AppHandle, settings: &EyeHeightSettings) {
+    if let Ok(store) = app.store(STORE_PATH) {
+        if let Ok(value) = serde_json::to_value(settings) {
+            store.set(EYE_HEIGHT_SETTINGS_KEY, value);
+            store.save().ok();
+        }
+    }
+}
+
+#[tauri::command]
+pub async fn eye_height_settings_get(app: AppHandle) -> Result<EyeHeightSettings, String> {
+    Ok(load_eye_height_settings(&app))
+}
+
+/// デスクトップUIから呼ばれる。overlay-uiとはSteamVR WSブリッジ経由でしか通信
+/// できない（別プロセスでlocalStorageを共有できないため）ため、保存に加えて
+/// `steamvr::bridge` の接続中クライアント全員へ即座にpushし、VR内パネルの
+/// クランプ範囲もリアルタイムに切り替える。
+#[tauri::command]
+pub async fn eye_height_settings_set(
+    app: AppHandle,
+    settings: EyeHeightSettings,
+) -> Result<(), String> {
+    let _guard = EYE_HEIGHT_SETTINGS_LOCK.lock().await;
+    save_eye_height_settings(&app, &settings);
+    crate::steamvr::bridge::broadcast_eye_height_settings(settings.limit_enabled);
     Ok(())
 }
 

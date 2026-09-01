@@ -24,6 +24,7 @@ type ServerMessage =
   | { type: 'avatar-changed'; avatarId: string }
   | { type: 'folders.list-result'; folders: AvatarFolder[] }
   | { type: 'eyeheight-update'; value: number }
+  | { type: 'eyeheight-settings.update'; limitEnabled: boolean }
   | ({ type: 'ui-state.get-result' } & UiState)
   | { type: 'error'; message: string };
 
@@ -139,6 +140,22 @@ export class OverlayBridgeService {
    */
   queryEyeHeight(): void {
     this.send({ type: 'eyeheight.query' });
+  }
+
+  onEyeHeightSettingsUpdate(handler: (limitEnabled: boolean) => void): void {
+    this.messages$
+      .pipe(filter((m): m is Extract<ServerMessage, { type: 'eyeheight-settings.update' }> => m.type === 'eyeheight-settings.update'))
+      .subscribe((m) => handler(m.limitEnabled));
+  }
+
+  /**
+   * 接続直後の初回同期用（#55）。身長変更の上限適用オン/オフはデスクトップUIの
+   * 設定画面でのみ変更できるため、overlay-ui側は現在値を能動取得するだけで良い。
+   * fire-and-forgetで、応答はonEyeHeightSettingsUpdate経由で届く
+   * （デスクトップUIでの変更時のpushと同じ型を再利用している）。
+   */
+  getEyeHeightSettings(): void {
+    this.send({ type: 'eyeheight-settings.get' });
   }
 
   /**

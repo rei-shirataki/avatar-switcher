@@ -79,6 +79,27 @@ impl Default for OverlayUiState {
     }
 }
 
+/// アイハイト変更の上限適用設定。デスクトップUI (`eye-height.service.ts`) と
+/// SteamVRオーバーレイ (`overlay-eye-height.service.ts`) の両方から参照される。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EyeHeightSettings {
+    #[serde(default = "default_eye_height_limit_enabled")]
+    pub limit_enabled: bool,
+}
+
+fn default_eye_height_limit_enabled() -> bool {
+    true
+}
+
+impl Default for EyeHeightSettings {
+    fn default() -> Self {
+        Self {
+            limit_enabled: default_eye_height_limit_enabled(),
+        }
+    }
+}
+
 /// ローカルで管理するアバター表示オーバーライド（名前・サムネイル）
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AvatarOverride {

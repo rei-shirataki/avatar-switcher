@@ -46,9 +46,33 @@ pub(crate) fn broadcast_eye_height(value: f32) {
 /// 送ってくる前提のため、こちらには適用していない）。
 const EYE_HEIGHT_MIN: f32 = 0.2;
 const EYE_HEIGHT_MAX: f32 = 5.0;
+/// `eye-height.service.ts::EYE_HEIGHT_SAFE_MIN/MAX`と同じ、上限適用オフ時の
+/// 最小限のセーフガード（#55）。
+const EYE_HEIGHT_SAFE_MIN: f32 = 0.01;
+const EYE_HEIGHT_SAFE_MAX: f32 = 100.0;
+
+/// 身長変更の上限適用オン/オフ設定（#55）。`steamvr::init` で起動時に
+/// storageの値へ同期し、以降はデスクトップUIでの変更を
+/// `broadcast_eye_height_settings` 経由でリアルタイムに反映する。
+/// `EyeHeightReset` の丸め範囲はここを見て決める。
+pub(crate) static EYE_HEIGHT_LIMIT_ENABLED: AtomicBool = AtomicBool::new(true);
 
 fn normalize_eye_height(v: f32) -> f32 {
-    (v.clamp(EYE_HEIGHT_MIN, EYE_HEIGHT_MAX) * 100.0).round() / 100.0
+    let (min, max) = if EYE_HEIGHT_LIMIT_ENABLED.load(Ordering::Relaxed) {
+        (EYE_HEIGHT_MIN, EYE_HEIGHT_MAX)
+    } else {
+        (EYE_HEIGHT_SAFE_MIN, EYE_HEIGHT_SAFE_MAX)
+    };
+    (v.clamp(min, max) * 100.0).round() / 100.0
+}
+
+/// デスクトップUIで上限適用設定が変更された際に呼ばれる
+/// (`storage::commands::eye_height_settings_set`)。内部状態を更新した上で
+/// 接続中の全クライアント（overlay-ui）へ push し、VR内パネルのクランプ範囲を
+/// リアルタイムに切り替える。購読者がいない場合の送信失敗は無視してよい。
+pub(crate) fn broadcast_eye_height_settings(limit_enabled: bool) {
+    EYE_HEIGHT_LIMIT_ENABLED.store(limit_enabled, Ordering::Relaxed);
+    let _ = PUSH_TX.send(ServerMessage::EyeHeightSettingsUpdate { limit_enabled });
 }
 
 /// hello メッセージの受信を待つ最大時間。これを過ぎたら未認証とみなし切断する。
@@ -230,6 +254,9 @@ async fn handle_message(app: &AppHandle, text: &str) -> Option<ServerMessage> {
             broadcast_eye_height(value);
             None
         }
+        Ok(ClientMessage::EyeHeightSettingsGet) => Some(ServerMessage::EyeHeightSettingsUpdate {
+            limit_enabled: EYE_HEIGHT_LIMIT_ENABLED.load(Ordering::Relaxed),
+        }),
         Ok(ClientMessage::UiStateGet) => {
             let state = storage::commands::load_overlay_ui_state(app);
             Some(ServerMessage::UiStateGetResult {

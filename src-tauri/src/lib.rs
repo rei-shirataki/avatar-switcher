@@ -146,6 +146,9 @@ pub fn run() {
             // Storage (overlay settings, #28)
             storage::commands::overlay_settings_get,
             storage::commands::overlay_settings_set,
+            // Storage (eye height settings, #55)
+            storage::commands::eye_height_settings_get,
+            storage::commands::eye_height_settings_set,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

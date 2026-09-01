@@ -3,6 +3,7 @@ import { NgClass } from '@angular/common';
 import { getVersion } from '@tauri-apps/api/app';
 import { VRChatAuthService } from '../../core/services/vrchat-auth.service';
 import { TauriService } from '../../core/services/tauri.service';
+import { EyeHeightService, EYE_HEIGHT_MIN, EYE_HEIGHT_MAX } from '../../core/services/eye-height.service';
 import { Router } from '@angular/router';
 import { VRCUser } from '../../core/models/auth.model';
 
@@ -196,6 +197,32 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.`,
       </div>
 
       <div class="mb-6">
+        <h3 class="m-0 mb-3 text-[11px] font-semibold uppercase tracking-[0.08em] text-text-tertiary">身長コントロール</h3>
+        <div class="bg-background border border-[var(--charcoal-color-container-secondary-default)] rounded-ch-l p-4 flex flex-col gap-3 mb-3">
+          <div class="flex flex-col items-stretch gap-2">
+            <span class="text-[13px] text-text-secondary">身長変更の上限 ({{ heightLimitMin }}〜{{ heightLimitMax }}m)</span>
+            <div class="flex gap-2">
+              <button
+                class="flex-1 py-1 px-5 rounded-ch-m text-xs font-semibold font-[var(--font-sans)] cursor-pointer transition-all duration-150"
+                [ngClass]="eyeHeight.limitEnabled() ? 'bg-primary-dim border border-primary text-primary' : 'bg-container-secondary border border-[var(--charcoal-color-container-secondary-default)] text-text-tertiary'"
+                (click)="eyeHeight.setLimitEnabled(true)"
+              >
+                適用する
+              </button>
+              <button
+                class="flex-1 py-1 px-5 rounded-ch-m text-xs font-semibold font-[var(--font-sans)] cursor-pointer transition-all duration-150"
+                [ngClass]="!eyeHeight.limitEnabled() ? 'bg-primary-dim border border-primary text-primary' : 'bg-container-secondary border border-[var(--charcoal-color-container-secondary-default)] text-text-tertiary'"
+                (click)="eyeHeight.setLimitEnabled(false)"
+              >
+                適用しない
+              </button>
+            </div>
+            <p class="m-0 text-[11px] text-text-placeholder">オフにすると範囲外の身長も指定できます（VRChat側の書き込みはこの上限の制限を受けません）</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="mb-6">
         <h3 class="m-0 mb-3 text-[11px] font-semibold uppercase tracking-[0.08em] text-text-tertiary">このアプリについて</h3>
         <div class="bg-background border border-[var(--charcoal-color-container-secondary-default)] rounded-ch-l p-4 flex flex-col gap-3 mb-3">
           <div class="flex items-center justify-between">
@@ -233,11 +260,14 @@ export class SettingsViewComponent implements OnInit {
   readonly placementMode = signal<OverlayPlacementMode>('hand');
   readonly licenses = LICENSES;
   readonly expandedLicense = signal<number | null>(null);
+  readonly heightLimitMin = EYE_HEIGHT_MIN;
+  readonly heightLimitMax = EYE_HEIGHT_MAX;
 
   private pollHandle: ReturnType<typeof setInterval> | null = null;
 
   constructor(
     public auth: VRChatAuthService,
+    public eyeHeight: EyeHeightService,
     private tauri: TauriService,
     private router: Router,
   ) {

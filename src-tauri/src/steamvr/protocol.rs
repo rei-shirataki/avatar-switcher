@@ -68,6 +68,13 @@ pub enum ClientMessage {
     /// 結果は`EyeHeightUpdate` broadcastで受け取る（`EyeHeightSet`と同じ設計）。
     #[serde(rename = "eyeheight.reset")]
     EyeHeightReset,
+    /// 接続直後の初回同期用。身長変更の上限適用オン/オフ設定
+    /// （デスクトップUIの設定画面でのみ変更可能、overlay-ui側は表示のみ）を取得する。
+    /// 応答・変更時のpushはどちらも `ServerMessage::EyeHeightSettingsUpdate` で届く
+    /// （`ui-state.get`とは異なり、変更元がoverlay-ui自身ではなくデスクトップUI側の
+    /// ため、get専用の応答型を分けず設定変更時のbroadcastと同じ型に統一している）。
+    #[serde(rename = "eyeheight-settings.get")]
+    EyeHeightSettingsGet,
     /// overlay-uiのUI状態（ソートモード・選択中タブ）を取得する。overlay-sidecarは
     /// CEFプロセスごとに新しいキャッシュディレクトリを使う（`Program.cs::InitCef`の
     /// コメント参照）ため、ブラウザのlocalStorageは再起動をまたいで永続化できない。
@@ -115,6 +122,10 @@ pub enum ServerMessage {
     /// （#27、`AvatarChanged`と同じ仕組み）。
     #[serde(rename = "eyeheight-update", rename_all = "camelCase")]
     EyeHeightUpdate { value: f32 },
+    /// `EyeHeightSettingsGet` の応答、およびデスクトップUIでの設定変更時に
+    /// 接続中の全クライアントへ push される（#55）。
+    #[serde(rename = "eyeheight-settings.update", rename_all = "camelCase")]
+    EyeHeightSettingsUpdate { limit_enabled: bool },
     #[serde(rename = "ui-state.get-result", rename_all = "camelCase")]
     UiStateGetResult {
         sort_mode: String,
@@ -176,6 +187,20 @@ mod tests {
             serde_json::from_str::<ClientMessage>(json),
             Ok(ClientMessage::EyeHeightReset)
         ));
+    }
+
+    #[test]
+    fn eye_height_settings_roundtrip() {
+        let get_json = r#"{"type":"eyeheight-settings.get"}"#;
+        assert!(matches!(
+            serde_json::from_str::<ClientMessage>(get_json),
+            Ok(ClientMessage::EyeHeightSettingsGet)
+        ));
+
+        let json = serde_json::to_string(&ServerMessage::EyeHeightSettingsUpdate { limit_enabled: false })
+            .unwrap();
+        assert!(json.contains("\"eyeheight-settings.update\""), "typeタグが不正: {json}");
+        assert!(json.contains("\"limitEnabled\":false"), "limitEnabledがcamelCaseでない: {json}");
     }
 
     #[test]

@@ -27,6 +27,7 @@ export class App implements OnInit {
         // Promise.allには含めない。受動OSCイベント任せだと身長を一度も変更して
         // いない場合に表示が「—」のまま固まるため、接続直後に能動フェッチする。
         this.bridge.queryEyeHeight();
+        this.bridge.getEyeHeightSettings();
         return Promise.all([
           this.avatarService.refresh(),
           this.avatarService.refreshFolders(),

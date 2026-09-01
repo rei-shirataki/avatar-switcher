@@ -28,6 +28,13 @@ pub(crate) async fn init(app: &AppHandle) {
         .await
         .map(|s| s.placement_mode)
         .unwrap_or_default();
+    // 身長変更の上限適用設定（#55）。以降の変更は
+    // `storage::commands::eye_height_settings_set` からの broadcast で追随する。
+    let eye_height_limit_enabled = crate::storage::commands::eye_height_settings_get(app.clone())
+        .await
+        .map(|s| s.limit_enabled)
+        .unwrap_or(true);
+    bridge::EYE_HEIGHT_LIMIT_ENABLED.store(eye_height_limit_enabled, std::sync::atomic::Ordering::Relaxed);
     match bridge::start(app.clone(), std::sync::Arc::from(token.as_str())).await {
         Ok(port) => {
             log::info!("[steamvr] WSブリッジ起動 (port={})", port);

@@ -210,7 +210,7 @@ fn dispatch_message(msg: OscMessage, app: &AppHandle) {
         OSC_ADDR_EYE_HEIGHT_PARAM | OSC_ADDR_EYE_HEIGHT_DIRECT => {
             if let Some(OscType::Float(v)) = msg.args.first() {
                 let _ = app.emit(EVENT_EYE_HEIGHT, *v);
-                crate::steamvr::bridge::broadcast_eye_height(*v);
+                crate::steamvr::bridge::broadcast_eye_height(*v, false);
             }
         }
         OSC_ADDR_SCALE_FACTOR => {

@@ -86,21 +86,37 @@ export class OverlayEyeHeightService {
   private smoothTimer: ReturnType<typeof setInterval> | null = null;
   /** 直近のスムーズ補間終了時刻(performance.now())。ECHO_SUPPRESS_MSの起点。 */
   private _smoothEndedAt = Number.NEGATIVE_INFINITY;
+  /** reset()のフォールバックタイマー。reset応答(isReset)が先に届いた場合はここで
+   *  clearTimeoutする。クリアし忘れると、次のreset()呼び出しの途中でこの孤立タイマーが
+   *  発火し、進行中の2回目のreset応答を通常のechoとして扱ってしまう。 */
+  private resetTimeoutHandle: ReturnType<typeof setTimeout> | null = null;
 
   constructor() {
-    this.bridge.onEyeHeightUpdate((v) => {
-      // reset()の応答は必ず1回だけ届く明示的な結果であり、直前のcancelSmooth()が
-      // 更新した_smoothEndedAtにたまたま重なってECHO_SUPPRESS_MS抑止に飲まれると
-      // リセット後の値がVR内表示に反映されないまま固まってしまうため、
-      // 抑止判定より先に見ておく（詳細はreset()のコメント参照）。
-      const wasResetting = this._resetting();
-      this._resetting.set(false);
-      if (!wasResetting) {
-        // 補間の実行中・終了直後は自前の値を信頼し、遅れて届く中間値エコーで
-        // 巻き戻さない（詳細はECHO_SUPPRESS_MSのコメント参照）。
-        if (this._isSmoothing()) return;
-        if (performance.now() - this._smoothEndedAt < ECHO_SUPPRESS_MS) return;
+    this.bridge.onEyeHeightUpdate((v, isReset) => {
+      // isResetはeyeheight.reset自身の応答である場合のみRust側がtrueを立てる
+      // (protocol.rs::ServerMessage::EyeHeightUpdate参照)。「_resettingフラグが
+      // 立っている間に届いた最初の更新」を reset応答とみなす方式だと、
+      // step()中のOSCエコーがreset応答より先に届いた場合に誤って消費されてしまう
+      // （そのエコー自体はisSmoothing/ECHO_SUPPRESS_MSの抑止対象のはずだが、
+      // isResetを見ない旧実装ではその判定自体がバイパスされていた）。
+      if (isReset) {
+        // reset()の応答は必ず1回だけ届く明示的な結果であり、直前のcancelSmooth()が
+        // 更新した_smoothEndedAtにたまたま重なってECHO_SUPPRESS_MS抑止に飲まれると
+        // リセット後の値がVR内表示に反映されないまま固まってしまうため、
+        // 抑止判定を無条件でバイパスする（詳細はreset()のコメント参照）。
+        this._resetting.set(false);
+        if (this.resetTimeoutHandle !== null) {
+          clearTimeout(this.resetTimeoutHandle);
+          this.resetTimeoutHandle = null;
+        }
+        this._value.set(v);
+        this._target.set(v);
+        return;
       }
+      // 補間の実行中・終了直後は自前の値を信頼し、遅れて届く中間値エコーで
+      // 巻き戻さない（詳細はECHO_SUPPRESS_MSのコメント参照）。
+      if (this._isSmoothing()) return;
+      if (performance.now() - this._smoothEndedAt < ECHO_SUPPRESS_MS) return;
       this._value.set(v);
       this._target.set(v);
     });
@@ -186,7 +202,10 @@ export class OverlayEyeHeightService {
     this.cancelSmooth();
     this._resetting.set(true);
     this.bridge.resetEyeHeight();
-    setTimeout(() => this._resetting.set(false), RESET_TIMEOUT_MS);
+    this.resetTimeoutHandle = setTimeout(() => {
+      this._resetting.set(false);
+      this.resetTimeoutHandle = null;
+    }, RESET_TIMEOUT_MS);
   }
 
   private clamp(v: number): number {

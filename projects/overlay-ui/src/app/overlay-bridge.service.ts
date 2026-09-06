@@ -23,7 +23,7 @@ type ServerMessage =
   | { type: 'avatars.select-result'; avatarId: string }
   | { type: 'avatar-changed'; avatarId: string }
   | { type: 'folders.list-result'; folders: AvatarFolder[] }
-  | { type: 'eyeheight-update'; value: number }
+  | { type: 'eyeheight-update'; value: number; isReset: boolean }
   | { type: 'eyeheight-settings.update'; limitEnabled: boolean }
   | ({ type: 'ui-state.get-result' } & UiState)
   | { type: 'error'; message: string };
@@ -126,10 +126,11 @@ export class OverlayBridgeService {
     return reply;
   }
 
-  onEyeHeightUpdate(handler: (value: number) => void): void {
+  /** `isReset`は`eyeheight.reset`自身の応答である場合のみtrue（詳細はServerMessage参照）。 */
+  onEyeHeightUpdate(handler: (value: number, isReset: boolean) => void): void {
     this.messages$
       .pipe(filter((m): m is Extract<ServerMessage, { type: 'eyeheight-update' }> => m.type === 'eyeheight-update'))
-      .subscribe((m) => handler(m.value));
+      .subscribe((m) => handler(m.value, m.isReset));
   }
 
   /** #27: fire-and-forgetのため応答を待たない。反映値はonEyeHeightUpdateで受け取る。 */

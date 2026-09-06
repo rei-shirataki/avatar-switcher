@@ -35,9 +35,12 @@ pub(crate) fn broadcast_avatar_changed(avatar_id: String) {
     let _ = PUSH_TX.send(ServerMessage::AvatarChanged { avatar_id });
 }
 
-/// `osc/mod.rs` の `EyeHeightAsMeters`/`eyeheight` 受信ハンドラから呼ばれる（#27）。
-pub(crate) fn broadcast_eye_height(value: f32) {
-    let _ = PUSH_TX.send(ServerMessage::EyeHeightUpdate { value });
+/// `osc/mod.rs` の `EyeHeightAsMeters`/`eyeheight` 受信ハンドラ、および本ファイルの
+/// `EyeHeightQuery`/`EyeHeightReset` 応答から呼ばれる（#27）。`is_reset`は
+/// `EyeHeightReset`自身の応答である場合のみ`true`を渡す（詳細はServerMessage::
+/// EyeHeightUpdateのコメント参照）。
+pub(crate) fn broadcast_eye_height(value: f32, is_reset: bool) {
+    let _ = PUSH_TX.send(ServerMessage::EyeHeightUpdate { value, is_reset });
 }
 
 /// `eye-height.service.ts::normalize`と同じ範囲・丸め。`eyeheight.reset`は
@@ -213,7 +216,7 @@ async fn handle_message(app: &AppHandle, text: &str) -> Option<ServerMessage> {
                 Ok(snapshot) => match snapshot.eye_height {
                     Some(value) => {
                         log::info!("[steamvr] eyeheight.query 応答: value={}", value);
-                        broadcast_eye_height(value);
+                        broadcast_eye_height(value, false);
                     }
                     None => log::info!("[steamvr] eyeheight.query: eye_height を取得できませんでした"),
                 },
@@ -241,7 +244,7 @@ async fn handle_message(app: &AppHandle, text: &str) -> Option<ServerMessage> {
                 });
             }
             log::info!("[steamvr] eyeheight.reset 応答: value={}", value);
-            broadcast_eye_height(value);
+            broadcast_eye_height(value, true);
             None
         }
         Ok(ClientMessage::EyeHeightSettingsGet) => Some(ServerMessage::EyeHeightSettingsUpdate {

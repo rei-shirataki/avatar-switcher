@@ -40,7 +40,6 @@ fn main() {
             ServiceEvent::SearchStopped(s) => {
                 println!("[{:>7.3}s] SearchStopped {}", t, s);
             }
-            _ => {}
         }
     }
     println!("[{:>7.3}s] タイムアウトまたは終了", start.elapsed().as_secs_f64());

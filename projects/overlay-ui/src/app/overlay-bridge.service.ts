@@ -38,6 +38,10 @@ type ServerMessage =
 export class OverlayBridgeService {
   private ws: WebSocket | null = null;
   private readonly messages$ = new Subject<ServerMessage>();
+  /** hello送信済み（＝要求を送ってよい状態）になるたびに発火する。初回接続だけで
+   *  なくサイドカー再起動後の自動再接続でも発火するため、購読側は
+   *  「(再)接続完了のたびにやり直す初期同期」をここに寄せられる。 */
+  private readonly connected$ = new Subject<void>();
   readonly connected = signal(false);
 
   /**
@@ -69,6 +73,7 @@ export class OverlayBridgeService {
         // hello はトークン認証を兼ねるため、Rust側は接続後最初のメッセージが
         // hello でないと即切断する。他の送信より必ず先に届く必要がある。
         ws.send(JSON.stringify({ type: 'sidecar.hello', pid: 0, token }));
+        this.connected$.next();
         if (!resolved) {
           resolved = true;
           resolve();
@@ -97,6 +102,15 @@ export class OverlayBridgeService {
       return;
     }
     this.ws.send(JSON.stringify(message));
+  }
+
+  /**
+   * 接続完了（hello送信済み）のたびに呼ばれる。サイドカーの一時的な再起動を
+   * またぐ自動再接続でも発火するため、接続直後の能動フェッチ（アバター一覧・
+   * 身長・上限設定など）はここに登録すれば再接続時も自動的にやり直される。
+   */
+  onConnected(handler: () => void): void {
+    this.connected$.subscribe(handler);
   }
 
   onAvatarChanged(handler: (avatarId: string) => void): void {

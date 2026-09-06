@@ -4,6 +4,7 @@ pub mod oscquery;
 use once_cell::sync::Lazy;
 use rosc::{encoder, OscMessage, OscPacket, OscType};
 use std::net::{IpAddr, SocketAddr, UdpSocket};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter};
 use tokio::net::UdpSocket as TokioUdpSocket;
@@ -13,8 +14,18 @@ const DEFAULT_OSC_HOST: &str = "127.0.0.1";
 /// アイハイトの許容範囲。呼び出し元(TSクライアント)側でも事前クランプしているが、
 /// IPC境界(Tauriコマンド・SteamVR WSブリッジ)のどちらから来た値でも VRChat へ
 /// 不正な範囲の値が渡らないよう、送信の最終防衛ラインとしてここでもクランプする。
-const EYE_HEIGHT_MIN: f32 = 0.2;
-const EYE_HEIGHT_MAX: f32 = 5.0;
+pub(crate) const EYE_HEIGHT_MIN: f32 = 0.2;
+pub(crate) const EYE_HEIGHT_MAX: f32 = 5.0;
+/// `eye-height.service.ts::EYE_HEIGHT_SAFE_MIN/MAX`と同じ、上限適用オフ時(#55)の
+/// 最小限のセーフガード。
+pub(crate) const EYE_HEIGHT_SAFE_MIN: f32 = 0.01;
+pub(crate) const EYE_HEIGHT_SAFE_MAX: f32 = 100.0;
+
+/// 身長変更の上限適用オン/オフ設定(#55)。`steamvr::init`で起動時にstorageの値へ
+/// 同期し、以降はデスクトップUIでの変更を`storage::commands::eye_height_settings_set`
+/// 経由でリアルタイムに反映する。VRChatへ実際に値を送るこの関数のクランプ範囲を
+/// 決める唯一の真実の源であり、`steamvr::bridge`の正規化もここを参照する。
+pub(crate) static EYE_HEIGHT_LIMIT_ENABLED: AtomicBool = AtomicBool::new(true);
 
 /// VRChat → 本アプリへの OSC で受け取る現在のアイハイト(m)。
 /// VRChat 公式の Built-in パラメータと Avatar Scaling 専用エンドポイントの両方を
@@ -98,7 +109,12 @@ pub fn send_avatar_eye_height(value: f32) -> anyhow::Result<()> {
     if !value.is_finite() {
         return Err(anyhow::anyhow!("値が不正です (NaN/Infinity)"));
     }
-    let clamped = value.clamp(EYE_HEIGHT_MIN, EYE_HEIGHT_MAX);
+    let (min, max) = if EYE_HEIGHT_LIMIT_ENABLED.load(Ordering::Relaxed) {
+        (EYE_HEIGHT_MIN, EYE_HEIGHT_MAX)
+    } else {
+        (EYE_HEIGHT_SAFE_MIN, EYE_HEIGHT_SAFE_MAX)
+    };
+    let clamped = value.clamp(min, max);
     send_float(OSC_ADDR_EYE_HEIGHT_DIRECT, clamped)
 }
 

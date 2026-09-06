@@ -339,8 +339,13 @@ export class HeightViewComponent implements OnInit {
       this.dialogError.set('身長は数値で入力してください');
       return;
     }
-    if (value < this.minValue() || value > this.maxValue()) {
-      this.dialogError.set(`身長は ${this.minValue()} 〜 ${this.maxValue()} m の範囲で指定してください`);
+    // プリセットはグローバルに保存されるため、現在のワールドの身長制限
+    // (minValue/maxValue) ではなくアプリの静的クランプ範囲で判定する
+    // （狭い制限のワールドに滞在中でも他ワールド向けのプリセットを保存できるように）。
+    const presetMin = this.eyeHeight.presetMinValue();
+    const presetMax = this.eyeHeight.presetMaxValue();
+    if (value < presetMin || value > presetMax) {
+      this.dialogError.set(`身長は ${presetMin} 〜 ${presetMax} m の範囲で指定してください`);
       return;
     }
     const editId = this.editingPresetId();

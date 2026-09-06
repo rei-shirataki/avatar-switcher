@@ -1,4 +1,5 @@
 use mdns_sd::{ServiceDaemon, ServiceEvent, ServiceInfo};
+use once_cell::sync::Lazy;
 use serde::Serialize;
 use serde_json::{json, Value};
 use std::net::{IpAddr, Ipv4Addr, UdpSocket};
@@ -15,6 +16,16 @@ const HTTP_QUERY_TIMEOUT: Duration = Duration::from_secs(3);
 const HTTP_BODY_LIMIT_BYTES: u64 = 64 * 1024;
 const HTTP_HANDLE_TIMEOUT: Duration = Duration::from_secs(5);
 const MDNS_RETRY_DELAY: Duration = Duration::from_secs(60);
+
+/// OSCQuery への HTTP 問い合わせ用クライアント。`query_avatar_scale_snapshot`は
+/// 3パラメータを`tokio::join!`で並行取得するため、都度生成するとリセット1回
+/// につきコネクションプールが3つ作られては破棄される。プロセス全体で使い回す。
+static HTTP_CLIENT: Lazy<reqwest::Client> = Lazy::new(|| {
+    reqwest::Client::builder()
+        .timeout(HTTP_QUERY_TIMEOUT)
+        .build()
+        .expect("reqwest::Client のビルドに失敗しました")
+});
 
 /// OSCQuery で発見した VRChat の OSC 受信ポート。
 /// デフォルト 9000。mDNS 探索成功時に動的更新される。
@@ -272,10 +283,7 @@ fn on_mdns_event(event: ServiceEvent) {
 
 async fn query_vrchat_osc_port(ip: &str, http_port: u16) -> anyhow::Result<u16> {
     let url = format!("http://{}:{}/?HOST_INFO", ip, http_port);
-    let client = reqwest::Client::builder()
-        .timeout(HTTP_QUERY_TIMEOUT)
-        .build()?;
-    let resp = client.get(&url).send().await?;
+    let resp = HTTP_CLIENT.get(&url).send().await?;
     if let Some(len) = resp.content_length() {
         if len > HTTP_BODY_LIMIT_BYTES {
             anyhow::bail!("HOST_INFO レスポンスが大きすぎます: {} bytes", len);
@@ -367,8 +375,7 @@ pub fn compute_prefab_height(snapshot: &AvatarScaleSnapshot) -> Option<f32> {
 /// として扱えばよく、個別のエラー種別は区別する価値がないため）。
 async fn query_param_value(http_port: u16, path: &str) -> Option<Value> {
     let url = format!("http://127.0.0.1:{}{}", http_port, path);
-    let client = reqwest::Client::builder().timeout(HTTP_QUERY_TIMEOUT).build().ok()?;
-    let resp = client.get(&url).send().await.ok()?;
+    let resp = HTTP_CLIENT.get(&url).send().await.ok()?;
     if !resp.status().is_success() {
         return None;
     }

@@ -89,11 +89,18 @@ export class OverlayEyeHeightService {
 
   constructor() {
     this.bridge.onEyeHeightUpdate((v) => {
+      // reset()の応答は必ず1回だけ届く明示的な結果であり、直前のcancelSmooth()が
+      // 更新した_smoothEndedAtにたまたま重なってECHO_SUPPRESS_MS抑止に飲まれると
+      // リセット後の値がVR内表示に反映されないまま固まってしまうため、
+      // 抑止判定より先に見ておく（詳細はreset()のコメント参照）。
+      const wasResetting = this._resetting();
       this._resetting.set(false);
-      // 補間の実行中・終了直後は自前の値を信頼し、遅れて届く中間値エコーで
-      // 巻き戻さない（詳細はECHO_SUPPRESS_MSのコメント参照）。
-      if (this._isSmoothing()) return;
-      if (performance.now() - this._smoothEndedAt < ECHO_SUPPRESS_MS) return;
+      if (!wasResetting) {
+        // 補間の実行中・終了直後は自前の値を信頼し、遅れて届く中間値エコーで
+        // 巻き戻さない（詳細はECHO_SUPPRESS_MSのコメント参照）。
+        if (this._isSmoothing()) return;
+        if (performance.now() - this._smoothEndedAt < ECHO_SUPPRESS_MS) return;
+      }
       this._value.set(v);
       this._target.set(v);
     });

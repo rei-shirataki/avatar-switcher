@@ -34,7 +34,7 @@ pub(crate) async fn init(app: &AppHandle) {
         .await
         .map(|s| s.limit_enabled)
         .unwrap_or(true);
-    bridge::EYE_HEIGHT_LIMIT_ENABLED.store(eye_height_limit_enabled, std::sync::atomic::Ordering::Relaxed);
+    crate::osc::EYE_HEIGHT_LIMIT_ENABLED.store(eye_height_limit_enabled, std::sync::atomic::Ordering::Relaxed);
     match bridge::start(app.clone(), std::sync::Arc::from(token.as_str())).await {
         Ok(port) => {
             log::info!("[steamvr] WSブリッジ起動 (port={})", port);

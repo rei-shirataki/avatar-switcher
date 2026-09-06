@@ -143,6 +143,12 @@ export class EyeHeightService {
   private readonly appMax = computed(() => (this._limitEnabled() ? EYE_HEIGHT_MAX : EYE_HEIGHT_SAFE_MAX));
   readonly worldMinHeight = computed(() => Math.max(this._worldMinHeight() ?? this.appMin(), this.appMin()));
   readonly worldMaxHeight = computed(() => Math.min(this._worldMaxHeight() ?? this.appMax(), this.appMax()));
+  /** プリセットはグローバルに保存されるため、たまたま滞在中のワールドの
+   *  身長制限（worldMinHeight/MaxHeight）ではなく、アプリの静的クランプ範囲
+   *  だけを基準に妥当性を判定する（他ワールド・他アバター向けの値を
+   *  現在のワールド制限で誤って弾かないため）。 */
+  readonly presetMinValue = this.appMin;
+  readonly presetMaxValue = this.appMax;
   /** null = 未受信（不明）。false のときだけ警告表示に使う。 */
   readonly scalingAllowed = this._scalingAllowed.asReadonly();
 

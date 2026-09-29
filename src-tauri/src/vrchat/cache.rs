@@ -61,17 +61,25 @@ fn load_from(name: &str) -> Vec<VRCAvatar> {
 /// 同じディレクトリの一時ファイルに書いてから rename することで、
 /// 書き込み途中のクラッシュでも本体ファイルが破損しない。
 /// `vrchat::auth` の Cookie 永続化からも共有して使う（`pub(crate)`）。
+///
+/// 既存ファイルを事前に削除しない: std::fs::rename は Windows でも
+/// MoveFileExW(REPLACE_EXISTING) で上書きでき、削除→rename の間でクラッシュすると
+/// 本体ファイルが失われるため。一時ファイル名は呼び出しごとに一意にし、
+/// 並行呼び出し同士で衝突しないようにする。
 pub(crate) fn atomic_write(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
+    static SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     let mut tmp = path.as_os_str().to_os_string();
-    tmp.push(".tmp");
+    tmp.push(format!(
+        ".{}.{}.tmp",
+        std::process::id(),
+        SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+    ));
     let tmp = PathBuf::from(tmp);
     std::fs::write(&tmp, bytes)?;
-    // Windows では rename だけでは上書きできない場合があるため、
-    // 本体が既存なら std::fs::rename の代わりに削除→rename とする。
-    if path.exists() {
-        let _ = std::fs::remove_file(path);
-    }
-    std::fs::rename(&tmp, path)
+    std::fs::rename(&tmp, path).map_err(|e| {
+        std::fs::remove_file(&tmp).ok();
+        e
+    })
 }
 
 fn save_to(name: &str, avatars: &[VRCAvatar]) {

@@ -118,7 +118,8 @@ where
 ///
 /// Priority:
 /// 1. OS keychain — primary, most secure.
-/// 2. `key.bin` file — fallback for environments without a keychain.
+/// 2. `key.bin` file — fallback for environments without a working keychain
+///    (removed once the key is verified readable from the keychain).
 ///
 /// Returns `None` only when all sources fail; cookies are then stored as
 /// plain JSON.
@@ -131,28 +132,36 @@ fn init_encryption_key() -> Option<[u8; 32]> {
     let key = try_keyring_key_load().or_else(|| try_file_key_load());
 
     if let Some(key) = key {
-        // Always persist to BOTH locations so that a future keyring failure
-        // does not invalidate cookies.enc.  If one location already has the
-        // correct value this is a cheap no-op.
-        let _ = try_keyring_save(&key);
-        let _ = save_key_to_file(&key);
+        persist_key(&key);
         return Some(key);
     }
 
-    // No persisted key found — generate a fresh one and save to both.
+    // No persisted key found — generate a fresh one and save it.
     let mut key = [0u8; 32];
     OsRng.fill_bytes(&mut key);
     log::info!("Generated new encryption key.");
 
-    let in_keyring = try_keyring_save(&key);
-    let in_file = save_key_to_file(&key);
-
-    if in_keyring || in_file {
+    if persist_key(&key) {
         Some(key)
     } else {
         log::warn!("Cannot persist encryption key. Cookies will be stored unencrypted.");
         None
     }
+}
+
+/// `key` を永続化する。キーチェーンへ保存して読み戻せた場合のみ `key.bin` を
+/// 削除する。`key.bin` は cookies.enc と同じディレクトリに平文で置かれるため、
+/// 残すと暗号化が無意味になる。一方でキーチェーンが保存に成功しても再起動後に
+/// 読めない環境があり得るので、読み戻し検証に通らない場合は `key.bin` を
+/// フォールバックとして残す（鍵を失うとログインセッションも失うため）。
+fn persist_key(key: &[u8; 32]) -> bool {
+    if try_keyring_save(key) && try_keyring_key_load().as_ref() == Some(key) {
+        if let Some(key_path) = KEY_FILE_PATH.get() {
+            std::fs::remove_file(key_path).ok();
+        }
+        return true;
+    }
+    save_key_to_file(key)
 }
 
 /// Load an existing key from `key.bin`. Returns `None` if the file is absent
@@ -405,6 +414,15 @@ pub async fn login(username: &str, password: &str) -> Result<LoginResult> {
         });
     }
 
+    if !status.is_success() {
+        let text = resp.text().await.unwrap_or_default();
+        return Err(anyhow!(
+            "ログインに失敗しました: {} - {}",
+            status,
+            truncate_for_log(&text, 500)
+        ));
+    }
+
     let body: AuthUserResponse = resp.json().await?;
     persist_cookies();
 
@@ -513,6 +531,10 @@ pub async fn get_current_user() -> Result<Option<VRCUser>> {
 
     if resp.status() == 401 {
         return Ok(None);
+    }
+    if !resp.status().is_success() {
+        // 一時的な 5xx 等を「未ログイン」と誤認させないよう Err で返す。
+        return Err(anyhow!("ユーザー情報の取得に失敗しました: {}", resp.status()));
     }
 
     let body: AuthUserResponse = resp.json().await?;

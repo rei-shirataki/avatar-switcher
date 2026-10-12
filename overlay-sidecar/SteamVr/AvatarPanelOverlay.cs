@@ -89,8 +89,10 @@ internal sealed class AvatarPanelOverlay : IDisposable
         var err = OvrUtils.GetOrCreateOverlay(OverlayKey, OverlayName, ref _overlayHandle);
         if (err != EVROverlayError.None)
         {
-            Console.Error.WriteLine($"[steamvr] オーバーレイの作成に失敗しました: {err}");
-            return;
+            // 黙って return すると TryActivate が成功扱いになり、Rust 側へ running=true を
+            // 通知したままパネルが SteamVR 再起動まで使えなくなる。例外にして
+            // TryActivate の後始末・再試行に乗せる。
+            throw new InvalidOperationException($"オーバーレイの作成に失敗しました: {err}");
         }
 
         OpenVR.Overlay.SetOverlayWidthInMeters(_overlayHandle, _placementMode == PlacementMode.Hand ? HandWidthMeters : WidthMeters);

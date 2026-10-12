@@ -28,6 +28,13 @@ internal sealed class OverlayManager
     private readonly CancellationToken _shutdownToken;
 
     private volatile bool _active;
+    /// <summary>
+    /// RenderLoop の1ティック分の処理と <see cref="Deactivate"/> の資源解放を直列化する。
+    /// これが無いと、ティック実行中に MainLoop がテクスチャ・D3Dデバイス・ブラウザを破棄し
+    /// OpenVR.Shutdown まで進めてしまい、解放済みのネイティブ資源に触れてプロセスごと
+    /// 落ちる（AccessViolation は .NET では catch できない）。
+    /// </summary>
+    private readonly object _frameLock = new();
     private D3D11Context? _d3D;
     private AvatarPanelOverlay? _panel;
     private OverlayPointer? _pointer;
@@ -396,10 +403,10 @@ internal sealed class OverlayManager
                 timer.TickStart();
                 try
                 {
-                    // MainLoop 側の Deactivate()（OpenVR.Shutdown 呼び出し）と競合し、
-                    // このスレッドが解放済みの OpenVR インターフェースに触れる可能性が
-                    // ある（参照実装 OyasumiVR も同じ構造で同じレースを許容している）。
-                    // クラッシュさせず次ティックへ回復させるだけの安全網。
+                    // MainLoop 側の Deactivate() とは _frameLock で直列化している。
+                    // ロック内で _active を見直すことで、Deactivate が _active=false にした後の
+                    // ティックは資源に触れず、実行中のティックは解放前に必ず終わる。
+                    // catch は OpenVR 呼び出し等のマネージド例外で次ティックへ回復させるための安全網。
                     //
                     // レイキャスト/ポインタ座標の更新(UpdateRaycast)もここに置く。
                     // 以前はMainLoop側の32ms固定ティックでDetectOverlayInteract()の
@@ -410,8 +417,14 @@ internal sealed class OverlayManager
                     // 原因だったと判明（参照実装OyasumiVRはOverlayPointer.Startを
                     // HMDリフレッシュレートの専用スレッドで回し、座標を常に新鮮に
                     // 保っている。同じ構成に合わせた）。
-                    _pointer?.UpdateRaycast();
-                    _panel?.UpdateFrame();
+                    lock (_frameLock)
+                    {
+                        if (_active)
+                        {
+                            _pointer?.UpdateRaycast();
+                            _panel?.UpdateFrame();
+                        }
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -431,7 +444,11 @@ internal sealed class OverlayManager
     {
         if (!_active) return;
         _active = false;
-        ReleaseResources();
+        // 実行中のレンダーティックが終わるのを待ってから解放する（_frameLock 参照）。
+        lock (_frameLock)
+        {
+            ReleaseResources();
+        }
         Console.WriteLine("[steamvr] OverlayManager を停止しました");
     }
 

@@ -35,8 +35,17 @@ const KEYRING_ACCOUNT: &str = "cookie-encryption-key";
 /// ChaCha20-Poly1305 nonce length (96 bits).
 const NONCE_LEN: usize = 12;
 
-pub fn get_client() -> &'static Client {
-    HTTP_CLIENT.get().expect("HTTP client not initialized")
+/// `init()` はバックグラウンドで走り、Credential Manager（ブロッキング）に触れてから
+/// HTTP_CLIENT を設定する。起動直後にフロントが IPC を呼んでも panic しないよう、
+/// 初期化完了を最大 5 秒待つ。
+pub async fn get_client() -> Result<&'static Client> {
+    for _ in 0..100 {
+        if let Some(c) = HTTP_CLIENT.get() {
+            return Ok(c);
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+    Err(anyhow!("HTTP クライアントの初期化がタイムアウトしました"))
 }
 
 // ── ユーティリティ ────────────────────────────────────────────────────────────
@@ -387,7 +396,7 @@ pub async fn login(username: &str, password: &str) -> Result<LoginResult> {
     );
     let b64 = base64::engine::general_purpose::STANDARD.encode(encoded.as_bytes());
 
-    let client = get_client();
+    let client = get_client().await?;
     let auth_header = format!("Basic {}", b64);
     let resp = send_with_retry(
         || {
@@ -481,7 +490,7 @@ pub async fn verify_2fa(code: &str, method: &str) -> Result<bool> {
         _ => format!("{}/auth/twofactorauth/totp/verify", VRCHAT_API),
     };
 
-    let client = get_client();
+    let client = get_client().await?;
     let body_json = serde_json::json!({ "code": code });
     let resp = send_with_retry(
         || {
@@ -510,19 +519,7 @@ pub async fn verify_2fa(code: &str, method: &str) -> Result<bool> {
 }
 
 pub async fn get_current_user() -> Result<Option<VRCUser>> {
-    // init() runs as a background task and touches Windows Credential Manager
-    // (blocking) before HTTP_CLIENT is set.  Poll until it is ready so that a
-    // fast frontend call during startup never hits the get_client() panic.
-    for _ in 0..100 {
-        if HTTP_CLIENT.get().is_some() {
-            break;
-        }
-        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-    }
-
-    let client = HTTP_CLIENT
-        .get()
-        .ok_or_else(|| anyhow!("HTTP client initialization timed out"))?;
+    let client = get_client().await?;
     let resp = send_with_retry(
         || client.get(format!("{}/auth/user", VRCHAT_API)).send(),
         "GET /auth/user (current)",
@@ -555,7 +552,7 @@ pub async fn get_current_user() -> Result<Option<VRCUser>> {
 }
 
 pub async fn logout() -> Result<()> {
-    let client = get_client();
+    let client = get_client().await?;
     // Best-effort: invalidate session server-side. Ignore errors so that a network
     // failure cannot prevent local cookie cleanup.
     let _ = client

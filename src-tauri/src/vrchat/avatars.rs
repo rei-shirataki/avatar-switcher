@@ -43,7 +43,7 @@ async fn ensure_success(
 }
 
 async fn fetch_my_avatars_page(offset: u32) -> Result<Vec<VRCAvatar>> {
-    let client = get_client();
+    let client = get_client().await?;
     let n_str = PAGE_SIZE.to_string();
     let offset_str = offset.to_string();
     let resp = send_with_retry(
@@ -148,7 +148,7 @@ fn merge_group_results(results: Vec<Result<Vec<VRCAvatar>>>) -> Result<Vec<VRCAv
 }
 
 async fn fetch_favorite_group(group: &'static str) -> Result<Vec<VRCAvatar>> {
-    let client = get_client();
+    let client = get_client().await?;
     let mut acc: Vec<VRCAvatar> = Vec::new();
     let mut offset: u32 = 0;
     let n_str = PAGE_SIZE.to_string();
@@ -252,7 +252,7 @@ pub async fn get_favorite_avatars() -> Result<Vec<VRCAvatar>> {
 /// 成否のみ返す。
 pub async fn select_avatar(avatar_id: &str) -> Result<()> {
     crate::vrchat::ids::validate_avatar_id(avatar_id)?;
-    let client = get_client();
+    let client = get_client().await?;
     let resp = send_with_retry(
         || {
             client
@@ -272,7 +272,7 @@ pub async fn select_avatar(avatar_id: &str) -> Result<()> {
 /// `files::upload_image` で取得した VRChat API プロキシ URL を imageUrl に指定する。
 pub async fn update_avatar_image(avatar_id: &str, image_url: &str) -> Result<VRCAvatar> {
     crate::vrchat::ids::validate_avatar_id(avatar_id)?;
-    let client = get_client();
+    let client = get_client().await?;
     let body = serde_json::json!({ "imageUrl": image_url });
     let resp = send_with_retry(
         || {
@@ -297,7 +297,7 @@ pub async fn update_avatar_image(avatar_id: &str, image_url: &str) -> Result<VRC
 /// 自分が作成したアバターのみ更新可能。
 pub async fn update_avatar(avatar_id: &str, name: &str) -> Result<VRCAvatar> {
     crate::vrchat::ids::validate_avatar_id(avatar_id)?;
-    let client = get_client();
+    let client = get_client().await?;
     let body = serde_json::json!({ "name": name });
     let resp = send_with_retry(
         || {

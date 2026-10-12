@@ -71,7 +71,10 @@ async fn s3_put(
 /// upload 失敗が 429 連鎖中に起きた場合、cleanup も同様に 429 を返しやすいので
 /// `send_with_retry` 経由で再試行を試みる。
 async fn cleanup_file(file_id: &str) {
-    let client = get_client();
+    let Ok(client) = get_client().await else {
+        log::warn!("file {} の cleanup をスキップ: HTTP クライアント未初期化", file_id);
+        return;
+    };
     let url = format!("{}/file/{}", VRCHAT_API, file_id);
     match send_with_retry(|| client.delete(&url).send(), "DELETE /file/{id} (cleanup)").await {
         Ok(r) if r.status().is_success() => {
@@ -112,7 +115,7 @@ pub async fn upload_image(data_url: &str) -> Result<String> {
     let sig_md5_b64  = B64.encode(sig_digest.0);       // base64(MD5(MD5(file)))
     let file_size    = raw_bytes.len() as u64;
 
-    let client = get_client();
+    let client = get_client().await?;
 
     // ── 1. ファイルエンティティ作成 ──────────────────────────
     let create_body = serde_json::json!({
@@ -173,7 +176,7 @@ async fn upload_after_create(
     raw_bytes: Vec<u8>,
     file_digest: [u8; 16],
 ) -> Result<u32> {
-    let client = get_client();
+    let client = get_client().await?;
 
     // ── 2. バージョン作成 ────────────────────────────────────
     let version_body = serde_json::json!({
@@ -357,7 +360,7 @@ fn parse_data_url(data_url: &str) -> Result<(&'static str, Vec<u8>)> {
 /// 401/403/404 を受け取った場合（Cookie 失効・権限喪失・file 削除）は再試行せず
 /// 即座に Err を返し、ユーザーをタイムアウトの 60 秒待ちから救う。
 async fn poll_until_complete(file_id: &str, version_id: u32) -> Result<()> {
-    let client = get_client();
+    let client = get_client().await?;
     let mut delay_ms: u64 = 1000;
     let mut elapsed_ms: u64 = 0;
     const TIMEOUT_MS: u64 = 60_000;

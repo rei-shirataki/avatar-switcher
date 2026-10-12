@@ -16,14 +16,15 @@ pub fn run() {
     logging::init();
 
     tauri::Builder::default()
-        .plugin(tauri_plugin_opener::init())
-        .plugin(tauri_plugin_store::Builder::new().build())
+        // single-instance は最初に登録する。後ろにあると、2つ目の起動が終了する前に
+        // 先に登録したプラグイン（設定ストアのファイル読み込み等）が初期化されてしまう。
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             if let Some(w) = app.get_webview_window("main") {
                 let _ = w.show();
                 let _ = w.set_focus();
             }
         }))
+        .plugin(tauri_plugin_store::Builder::new().build())
         .setup(|app| {
             // --- System tray ---
             let show_item = MenuItem::with_id(app, "show", "AvatarSwitcher を表示", true, None::<&str>)?;

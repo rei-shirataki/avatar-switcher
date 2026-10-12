@@ -115,7 +115,8 @@ export class AvatarService {
     const found = this.allAvatars().find(a => a.id === avatarId);
     if (!found) return;
     const override = this._overrides()[avatarId];
-    const imageUrl = override?.customThumbnail ?? found.thumbnailImageUrl ?? found.imageUrl;
+    // Rust 側は欠けた URL を null ではなく空文字列で返すため、?? ではなく || で次へ回す。
+    const imageUrl = override?.customThumbnail || found.thumbnailImageUrl || found.imageUrl;
     if (imageUrl) {
       this.auth.updateCurrentAvatarImage(imageUrl);
     }
@@ -396,7 +397,7 @@ export class AvatarService {
       // オーバーライドがあればそちらを優先（VRChat に未反映のカスタムサムネ）。
       const override = this._overrides()[avatarId];
       const found = this.allAvatars().find(a => a.id === avatarId);
-      const imageUrl = override?.customThumbnail ?? found?.thumbnailImageUrl ?? found?.imageUrl;
+      const imageUrl = override?.customThumbnail || found?.thumbnailImageUrl || found?.imageUrl;
       if (imageUrl) {
         this.auth.updateCurrentAvatarImage(imageUrl);
       }

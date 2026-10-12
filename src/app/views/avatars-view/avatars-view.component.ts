@@ -486,11 +486,12 @@ export class AvatarsViewComponent implements OnInit {
   get editPreviewThumb(): string {
     const av = this.detailAvatar()!;
     const newThumb = this.detailEditThumbnail();
-    if (newThumb === 'reset') return av.imageUrl ?? av.thumbnailImageUrl;
+    // Rust 側は欠けた URL を空文字列で返すため、?? ではなく || で次へ回す。
+    if (newThumb === 'reset') return av.imageUrl || av.thumbnailImageUrl;
     if (newThumb) return newThumb;
     // null = 変更なし → 既存オーバーライドまたは VRChat 高解像度 URL
     const ov = this.avatarService.overrides()[av.id];
-    return ov?.customThumbnail ?? av.imageUrl ?? av.thumbnailImageUrl;
+    return ov?.customThumbnail || av.imageUrl || av.thumbnailImageUrl;
   }
 
   /** 現在カスタムサムネイルが設定されているか（リセット前提の表示に使用） */

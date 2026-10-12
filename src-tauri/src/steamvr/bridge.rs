@@ -130,12 +130,25 @@ async fn handle_connection(stream: TcpStream, peer: SocketAddr, app: AppHandle, 
     log::info!("[steamvr] WSクライアント接続確立: {} (pid={})", peer, pid);
 
     let mut push_rx = PUSH_TX.subscribe();
+    // 低速リクエスト(ネットワーク待ち)の応答を書き込み側へ戻すチャンネル。
+    let (reply_tx, mut reply_rx) = tokio::sync::mpsc::unbounded_channel::<ServerMessage>();
     loop {
         tokio::select! {
             incoming = read.next() => {
                 match incoming {
                     Some(Ok(Message::Text(text))) => {
-                        if let Some(reply) = handle_message(&app, &text).await {
+                        if is_slow_request(&text) {
+                            // 再試行込みで十数秒かかり得るため、読み取り・push を止めないよう
+                            // 別タスクで処理する。順序依存のある軽量リクエストは下の経路で
+                            // 従来どおり逐次処理し、並べ替えが起きないようにする。
+                            let app = app.clone();
+                            let reply_tx = reply_tx.clone();
+                            tokio::spawn(async move {
+                                if let Some(reply) = handle_message(&app, &text).await {
+                                    let _ = reply_tx.send(reply);
+                                }
+                            });
+                        } else if let Some(reply) = handle_message(&app, &text).await {
                             if send(&mut write, &reply).await.is_err() {
                                 break;
                             }
@@ -143,6 +156,11 @@ async fn handle_connection(stream: TcpStream, peer: SocketAddr, app: AppHandle, 
                     }
                     Some(Ok(_)) => {}
                     _ => break,
+                }
+            }
+            Some(reply) = reply_rx.recv() => {
+                if send(&mut write, &reply).await.is_err() {
+                    break;
                 }
             }
             pushed = push_rx.recv() => {
@@ -175,6 +193,16 @@ async fn send(
         }
     };
     write.send(Message::Text(payload)).await.map_err(|_| ())
+}
+
+/// ネットワーク(VRChat REST / OSCQuery)待ちが発生し得るリクエストか。
+fn is_slow_request(text: &str) -> bool {
+    matches!(
+        serde_json::from_str::<ClientMessage>(text),
+        Ok(ClientMessage::AvatarsSelect { .. })
+            | Ok(ClientMessage::EyeHeightQuery)
+            | Ok(ClientMessage::EyeHeightReset)
+    )
 }
 
 async fn handle_message(app: &AppHandle, text: &str) -> Option<ServerMessage> {
@@ -265,7 +293,8 @@ async fn handle_message(app: &AppHandle, text: &str) -> Option<ServerMessage> {
             None
         }
         Err(e) => {
-            log::warn!("[steamvr] 不正なメッセージを受信: {} ({})", e, text);
+            // 本文は出さない（将来メッセージに秘匿値が載っても残さないため長さのみ）。
+            log::warn!("[steamvr] 不正なメッセージを受信: {} (len={})", e, text.len());
             Some(ServerMessage::Error {
                 message: format!("invalid message: {e}"),
             })

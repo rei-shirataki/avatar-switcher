@@ -14,9 +14,10 @@ const DEFAULT_OSC_HOST: &str = "127.0.0.1";
 /// アイハイトの許容範囲。呼び出し元(TSクライアント)側でも事前クランプしているが、
 /// IPC境界(Tauriコマンド・SteamVR WSブリッジ)のどちらから来た値でも VRChat へ
 /// 不正な範囲の値が渡らないよう、送信の最終防衛ラインとしてここでもクランプする。
+/// 値は`shared/eye-height.constants.ts`の同名定数と同期すること。
 pub(crate) const EYE_HEIGHT_MIN: f32 = 0.2;
 pub(crate) const EYE_HEIGHT_MAX: f32 = 5.0;
-/// `eye-height.service.ts::EYE_HEIGHT_SAFE_MIN/MAX`と同じ、上限適用オフ時(#55)の
+/// `shared/eye-height.constants.ts::EYE_HEIGHT_SAFE_MIN/MAX`と同じ、上限適用オフ時(#55)の
 /// 最小限のセーフガード。
 pub(crate) const EYE_HEIGHT_SAFE_MIN: f32 = 0.01;
 pub(crate) const EYE_HEIGHT_SAFE_MAX: f32 = 100.0;

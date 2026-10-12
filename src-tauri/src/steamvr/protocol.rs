@@ -140,6 +140,32 @@ pub enum ServerMessage {
     Error { message: String },
 }
 
+/// 要求への応答。要求に `requestId` が付いていれば同じ値を付けて返し、
+/// クライアントが応答と要求を対応づけられるようにする。並行する要求の応答
+/// （特に `error`）を type だけで待つと、別の要求の失敗で無関係な待機が
+/// reject されたり、別の `avatars.select` の結果を取り違えたりするため。
+/// push（broadcast）には付かない。
+#[derive(Debug, Clone, Serialize)]
+pub struct Reply {
+    #[serde(flatten)]
+    pub message: ServerMessage,
+    #[serde(rename = "requestId", skip_serializing_if = "Option::is_none")]
+    pub request_id: Option<u64>,
+}
+
+/// 要求 JSON から `requestId` だけを取り出す。`ClientMessage` 側はこのフィールドを
+/// 知らずに無視するため、各バリアントに持たせずに済む。不正な JSON なら `None`。
+pub fn request_id_of(text: &str) -> Option<u64> {
+    #[derive(Deserialize)]
+    struct Envelope {
+        #[serde(rename = "requestId")]
+        request_id: Option<u64>,
+    }
+    serde_json::from_str::<Envelope>(text)
+        .ok()
+        .and_then(|e| e.request_id)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -228,6 +254,41 @@ mod tests {
         let json = serde_json::to_string(&server_msg).unwrap();
         assert!(json.contains("\"avatarIds\""), "avatarIdsがcamelCaseでない: {json}");
         assert!(json.contains("\"folders.list-result\""), "typeタグが不正: {json}");
+    }
+
+    #[test]
+    fn request_id_is_ignored_by_client_message_and_echoed_in_reply() {
+        // 単位バリアント・構造体バリアントのどちらも requestId 付きで受け付ける。
+        let list_json = r#"{"type":"avatars.list","requestId":7}"#;
+        assert!(matches!(
+            serde_json::from_str::<ClientMessage>(list_json),
+            Ok(ClientMessage::AvatarsList)
+        ));
+        assert_eq!(request_id_of(list_json), Some(7));
+
+        let select_json = r#"{"type":"avatars.select","avatarId":"avtr_x","requestId":8}"#;
+        assert!(matches!(
+            serde_json::from_str::<ClientMessage>(select_json),
+            Ok(ClientMessage::AvatarsSelect { .. })
+        ));
+        assert_eq!(request_id_of(select_json), Some(8));
+        assert_eq!(request_id_of(r#"{"type":"eyeheight.set","value":1.5}"#), None);
+        assert_eq!(request_id_of("not json"), None);
+
+        let json = serde_json::to_string(&Reply {
+            message: ServerMessage::Error { message: "x".into() },
+            request_id: Some(8),
+        })
+        .unwrap();
+        assert!(json.contains("\"type\":\"error\""), "typeタグが不正: {json}");
+        assert!(json.contains("\"requestId\":8"), "requestIdが無い: {json}");
+
+        let json = serde_json::to_string(&Reply {
+            message: ServerMessage::Error { message: "x".into() },
+            request_id: None,
+        })
+        .unwrap();
+        assert!(!json.contains("requestId"), "requestId無しの要求に付いている: {json}");
     }
 
     #[test]

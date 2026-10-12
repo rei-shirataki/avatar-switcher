@@ -6,7 +6,7 @@
 //! トークン認証を行う（トークンはサイドカー起動時の CLI 引数、および
 //! overlay-ui へは URL クエリ経由でのみ渡される）。
 
-use crate::steamvr::protocol::{ClientMessage, ServerMessage};
+use crate::steamvr::protocol::{request_id_of, ClientMessage, Reply, ServerMessage};
 use crate::vrchat::models::VRCAvatar;
 use crate::{storage, vrchat};
 use futures_util::{SinkExt, StreamExt};
@@ -171,7 +171,7 @@ async fn handle_connection(stream: TcpStream, peer: SocketAddr, app: AppHandle, 
 
     let mut push_rx = PUSH_TX.subscribe();
     // 低速リクエスト(ネットワーク待ち)の応答を書き込み側へ戻すチャンネル。
-    let (reply_tx, mut reply_rx) = tokio::sync::mpsc::unbounded_channel::<ServerMessage>();
+    let (reply_tx, mut reply_rx) = tokio::sync::mpsc::unbounded_channel::<Reply>();
     loop {
         tokio::select! {
             incoming = read.next() => {
@@ -184,11 +184,11 @@ async fn handle_connection(stream: TcpStream, peer: SocketAddr, app: AppHandle, 
                             let app = app.clone();
                             let reply_tx = reply_tx.clone();
                             tokio::spawn(async move {
-                                if let Some(reply) = handle_message(&app, &text).await {
+                                if let Some(reply) = handle_request(&app, &text).await {
                                     let _ = reply_tx.send(reply);
                                 }
                             });
-                        } else if let Some(reply) = handle_message(&app, &text).await {
+                        } else if let Some(reply) = handle_request(&app, &text).await {
                             if send(&mut write, &reply).await.is_err() {
                                 break;
                             }
@@ -223,7 +223,7 @@ async fn handle_connection(stream: TcpStream, peer: SocketAddr, app: AppHandle, 
 
 async fn send(
     write: &mut (impl futures_util::Sink<Message, Error = tokio_tungstenite::tungstenite::Error> + Unpin),
-    msg: &ServerMessage,
+    msg: &impl serde::Serialize,
 ) -> Result<(), ()> {
     let payload = match serde_json::to_string(msg) {
         Ok(p) => p,
@@ -243,6 +243,15 @@ fn is_slow_request(text: &str) -> bool {
             | Ok(ClientMessage::EyeHeightQuery)
             | Ok(ClientMessage::EyeHeightReset)
     )
+}
+
+/// 要求を処理し、応答があれば要求の `requestId` を付けて返す（`Reply` 参照）。
+async fn handle_request(app: &AppHandle, text: &str) -> Option<Reply> {
+    let message = handle_message(app, text).await?;
+    Some(Reply {
+        message,
+        request_id: request_id_of(text),
+    })
 }
 
 async fn handle_message(app: &AppHandle, text: &str) -> Option<ServerMessage> {

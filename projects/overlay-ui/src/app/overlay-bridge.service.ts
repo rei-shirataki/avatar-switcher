@@ -18,7 +18,9 @@ export interface UiState {
   selectedFolderId: string | null;
 }
 
-type ServerMessage =
+/** 要求に付けた `requestId` は、その要求への応答にだけ同じ値で付いて返る
+ *  （protocol.rs::Reply）。push（avatar-changed 等）には付かない。 */
+type ServerMessage = { requestId?: number } & (
   | ({ type: 'avatars.list-result' } & AvatarsListResult)
   | { type: 'avatars.select-result'; avatarId: string }
   | { type: 'avatar-changed'; avatarId: string }
@@ -26,7 +28,8 @@ type ServerMessage =
   | { type: 'eyeheight-update'; value: number; isReset: boolean }
   | { type: 'eyeheight-settings.update'; limitEnabled: boolean }
   | ({ type: 'ui-state.get-result' } & UiState)
-  | { type: 'error'; message: string };
+  | { type: 'error'; message: string }
+);
 
 /**
  * Rust core (src-tauri/src/steamvr/bridge.rs) への WebSocket クライアント。
@@ -43,6 +46,19 @@ export class OverlayBridgeService {
    *  「(再)接続完了のたびにやり直す初期同期」をここに寄せられる。 */
   private readonly connected$ = new Subject<void>();
   readonly connected = signal(false);
+  private nextRequestId = 0;
+
+  constructor() {
+    // fire-and-forget 要求（eyeheight.set 等）の失敗は requestId を持たず、どの待機にも
+    // 対応しない。黙って捨てると原因が追えないためログにだけ残す。
+    this.messages$
+      .pipe(
+        filter(
+          (m): m is Extract<ServerMessage, { type: 'error' }> => m.type === 'error' && m.requestId === undefined,
+        ),
+      )
+      .subscribe((m) => console.warn('[overlay-bridge] 要求の失敗:', m.message));
+  }
 
   /**
    * WebSocket接続 + hello送信が完了するまで待つ。呼び出し側 (app.ts) は
@@ -120,10 +136,7 @@ export class OverlayBridgeService {
   }
 
   async listAvatars(): Promise<AvatarsListResult> {
-    this.send({ type: 'avatars.list' });
-    const reply = await this.waitForOneOf(['avatars.list-result', 'error']);
-    if (reply.type === 'error') throw new Error(reply.message);
-    return reply;
+    return this.request({ type: 'avatars.list' }, 'avatars.list-result');
   }
 
   /** `isReset`は`eyeheight.reset`自身の応答である場合のみtrue（詳細はServerMessage参照）。 */
@@ -179,10 +192,7 @@ export class OverlayBridgeService {
    * 再起動をまたいで永続化できない。Rust側に保存された値を取得する。
    */
   async getUiState(): Promise<UiState> {
-    this.send({ type: 'ui-state.get' });
-    const reply = await this.waitForOneOf(['ui-state.get-result', 'error']);
-    if (reply.type === 'error') throw new Error(reply.message);
-    return reply;
+    return this.request({ type: 'ui-state.get' }, 'ui-state.get-result');
   }
 
   /** ソート/タブ切り替えのたびに送る。fire-and-forgetのため応答を待たない（setEyeHeightと同じ方針）。 */
@@ -191,28 +201,37 @@ export class OverlayBridgeService {
   }
 
   async listFolders(): Promise<AvatarFolder[]> {
-    this.send({ type: 'folders.list' });
-    const reply = await this.waitForOneOf(['folders.list-result', 'error']);
-    if (reply.type === 'error') throw new Error(reply.message);
+    const reply = await this.request({ type: 'folders.list' }, 'folders.list-result');
     return reply.folders;
   }
 
   async selectAvatar(avatarId: string): Promise<void> {
-    this.send({ type: 'avatars.select', avatarId });
-    const reply = await this.waitForOneOf(['avatars.select-result', 'error']);
-    if (reply.type === 'error') throw new Error(reply.message);
+    await this.request({ type: 'avatars.select', avatarId }, 'avatars.select-result');
   }
 
-  private waitForOneOf<T extends ServerMessage['type']>(
-    types: T[],
+  /**
+   * `requestId` を付けて送り、同じ `requestId` の応答だけを待つ。type だけで待つと、
+   * 並行する別の要求（接続直後の list/folders/ui-state の同時取得、低速な
+   * avatars.select と身長操作など）の `error` や結果を取り違える。
+   */
+  private async request<T extends ServerMessage['type']>(
+    message: Record<string, unknown>,
+    resultType: T,
   ): Promise<Extract<ServerMessage, { type: T }>> {
-    return firstValueFrom(
+    const requestId = ++this.nextRequestId;
+    // 応答を取りこぼさないよう、送信より先に購読を始める。
+    const reply = firstValueFrom(
       this.messages$.pipe(
-        filter((m): m is Extract<ServerMessage, { type: T }> => (types as string[]).includes(m.type)),
+        filter((m) => m.requestId === requestId),
         // 送信がドロップされた等で応答が永遠に来ない異常系を、無限に読み込み中
         // のまま固まる代わりにエラーとして表面化させる。
         timeout(REQUEST_TIMEOUT_MS),
       ),
     );
+    this.send({ ...message, requestId });
+    const m = await reply;
+    if (m.type === 'error') throw new Error(m.message);
+    if (m.type !== resultType) throw new Error(`unexpected reply: ${m.type}`);
+    return m as Extract<ServerMessage, { type: T }>;
   }
 }

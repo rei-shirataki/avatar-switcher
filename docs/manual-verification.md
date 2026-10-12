@@ -245,6 +245,16 @@ Rust 側ログは起動したコンソールに出力される（`RUST_LOG=info`
 
 結果: ______
 
+### S-10 WS の応答を要求ごとに対応づける（レビュー Critical 5）
+1. パネルを開いた直後（接続直後の一覧・フォルダ・UI状態の同時取得）に、アバター一覧・
+   フォルダタブ・前回のソート/タブが揃って表示されること。sidecar を何度か再起動しても同様。
+2. VRChat の OSC を無効にした状態でアバターを選択し、その切り替え完了前に身長ボタンを押す。
+   身長側の失敗（`[overlay-ui console]` に `[overlay-bridge] 要求の失敗:`）によって
+   アバター切り替えが失敗扱いにならないこと。
+3. 2 つのアバターを素早く続けて選択し、最後に選んだアバターが装着されること。
+
+結果: ______
+
 ---
 
 ## 4. OSC / OSCQuery
@@ -286,6 +296,7 @@ Rust 側ログは起動したコンソールに出力される（`RUST_LOG=info`
 | S-7 | | | |
 | S-8 | | | |
 | S-9 | | | |
+| S-10 | | | |
 | O-1 | | | |
 
 NG があれば、症状・再現手順・該当ログを添えて Issue にする（対応 PR は上記表の PR 番号を参照）。
@@ -296,6 +307,7 @@ NG があれば、症状・再現手順・該当ログを添えて Issue にす�
 - リトライ方針・`Retry-After` の解釈（`vrchat::auth::retry_tests`）
 - 暗号鍵の取得方針（キーチェーン障害時に鍵を生成・上書きしない）（`vrchat::auth::key_plan_tests`）
 - WS の Origin 判定・定数時間比較（`steamvr::bridge::tests`）
+- WS 応答への `requestId` の付与（`steamvr::protocol::tests`）
 - mDNS 発見元判定・`OSC_PORT` 検証（`osc::oscquery::trust_tests`）
 - ログローテーション（`steamvr::sidecar::tests`）
 - オーバーライドの置換・クリア（`storage::commands::tests`）

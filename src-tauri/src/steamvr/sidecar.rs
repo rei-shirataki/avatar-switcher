@@ -19,6 +19,9 @@ static SIDECAR_PID: AtomicU32 = AtomicU32::new(0);
 static SHUTTING_DOWN: AtomicBool = AtomicBool::new(false);
 
 const RESTART_BACKOFF_SECS: [u64; 4] = [1, 3, 10, 30];
+/// この時間以上動き続けたら正常に起動できたとみなし、バックオフを最初に戻す。
+/// 起動直後に落ちるたびに戻していると、クラッシュループが1秒間隔で続いてしまう。
+const HEALTHY_RUN: Duration = Duration::from_secs(60);
 
 /// サイドカー実行ファイルのパスを解決する。
 /// 1. 環境変数 `AVATAR_SWITCHER_OVERLAY_SIDECAR_PATH`（開発用オーバーライド）
@@ -91,13 +94,16 @@ pub(crate) async fn spawn(
 
             match launch(&path, ws_port, ui_port, &token, placement_mode, log_path.as_deref()).await {
                 Ok(mut child) => {
-                    attempt = 0;
+                    let started = std::time::Instant::now();
                     SIDECAR_PID.store(child.id().unwrap_or(0), Ordering::SeqCst);
                     // tokio の Child::wait() は待機前に stdin を閉じるため、先に取り出して
                     // サイドカーの生存中は開いたままにする（launch() のコメント参照）。
                     let _stdin = child.stdin.take();
                     let status = child.wait().await;
                     SIDECAR_PID.store(0, Ordering::SeqCst);
+                    if started.elapsed() >= HEALTHY_RUN {
+                        attempt = 0;
+                    }
                     match status {
                         Ok(s) => log::warn!("[steamvr] overlay-sidecar が終了しました: {:?}", s),
                         Err(e) => log::warn!("[steamvr] overlay-sidecar の監視に失敗: {}", e),

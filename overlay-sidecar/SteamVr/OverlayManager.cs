@@ -35,6 +35,8 @@ internal sealed class OverlayManager
     /// 落ちる（AccessViolation は .NET では catch できない）。
     /// </summary>
     private readonly object _frameLock = new();
+    /// <summary>RenderLoop が D3D デバイスの喪失を検知したら立てる。MainLoop が資源を作り直す。</summary>
+    private volatile bool _deviceLost;
     private D3D11Context? _d3D;
     private AvatarPanelOverlay? _panel;
     private OverlayPointer? _pointer;
@@ -100,6 +102,17 @@ internal sealed class OverlayManager
 
                 _active = true;
                 _ = _bridge.SendSteamVrStatusAsync(true, _shutdownToken);
+            }
+
+            if (_deviceLost)
+            {
+                // 失われた D3D デバイスは復帰しないため、いったん停止して次のティックで
+                // TryActivate からデバイス・テクスチャ・ブラウザを作り直す。
+                Console.Error.WriteLine("[steamvr] D3Dデバイスが失われたため、オーバーレイを作り直します");
+                Deactivate();
+                // Deactivate は実行中のレンダーティックの終了を待つので、その後で戻す。
+                _deviceLost = false;
+                continue;
             }
 
             // バックグラウンドスレッドの未処理例外は .NET ではプロセスを終了させるため、
@@ -471,6 +484,7 @@ internal sealed class OverlayManager
                 {
                     // 毎ティック（最大 144 回/秒）同じ例外が出続けることがあるため間引く。
                     _renderErrorLog.Log($"[steamvr] フレーム更新中に例外: {ex.Message}");
+                    if (D3D11Context.IsDeviceLost(ex)) _deviceLost = true;
                 }
 
                 timer.SleepUntilNextTick();

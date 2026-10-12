@@ -216,6 +216,64 @@ pub async fn avatar_overrides_delete(app: AppHandle, avatar_id: String) -> Resul
     Ok(())
 }
 
+/// 指定値でそのまま置換する。`avatar_overrides_set` は `None` を「変更なし」と解釈する
+/// ため片方だけを消せず、delete→set の非アトミックな再保存が必要だった。ここでは
+/// `None` を「クリア」と解釈し、両方 `None` ならエントリごと削除して `None` を返す。
+#[tauri::command]
+pub async fn avatar_overrides_replace(
+    app: AppHandle,
+    avatar_id: String,
+    custom_name: Option<String>,
+    custom_thumbnail: Option<String>,
+) -> Result<Option<AvatarOverride>, String> {
+    let _guard = OVERRIDES_LOCK.lock().await;
+    let mut map = load_overrides(&app)?;
+    let result = replace_override(&mut map, avatar_id, custom_name, custom_thumbnail);
+    save_overrides(&app, &map)?;
+    Ok(result)
+}
+
+fn replace_override(
+    map: &mut HashMap<String, AvatarOverride>,
+    avatar_id: String,
+    custom_name: Option<String>,
+    custom_thumbnail: Option<String>,
+) -> Option<AvatarOverride> {
+    if custom_name.is_none() && custom_thumbnail.is_none() {
+        map.remove(&avatar_id);
+        return None;
+    }
+    let value = AvatarOverride {
+        avatar_id: avatar_id.clone(),
+        custom_name,
+        custom_thumbnail,
+    };
+    map.insert(avatar_id, value.clone());
+    Some(value)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn replace_clears_only_the_field_passed_as_none() {
+        let mut map = HashMap::new();
+        replace_override(&mut map, "a".into(), Some("n".into()), Some("t".into()));
+        let r = replace_override(&mut map, "a".into(), Some("n".into()), None).unwrap();
+        assert_eq!(r.custom_name.as_deref(), Some("n"));
+        assert!(r.custom_thumbnail.is_none());
+    }
+
+    #[test]
+    fn replace_with_both_none_removes_entry() {
+        let mut map = HashMap::new();
+        replace_override(&mut map, "a".into(), Some("n".into()), None);
+        assert!(replace_override(&mut map, "a".into(), None, None).is_none());
+        assert!(map.is_empty());
+    }
+}
+
 // ── Overlay settings (#28) ────────────────────────────────────────────────────
 
 fn load_overlay_settings(app: &AppHandle) -> Result<OverlaySettings, String> {

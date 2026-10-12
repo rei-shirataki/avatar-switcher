@@ -286,33 +286,37 @@ export class AvatarService {
     return updated;
   }
 
+  /**
+   * オーバーライドを指定値で置換する。null は「そのフィールドをクリア」で、両方 null なら
+   * エントリごと削除される。バックエンドで 1 回の原子的な更新になるため、delete→set の
+   * 途中失敗で残すべき値まで失われることがない。
+   */
+  private async _replaceOverride(
+    avatarId: string,
+    customName: string | null,
+    customThumbnail: string | null,
+  ): Promise<void> {
+    const saved = await this.tauri.invoke<AvatarOverride | null>('avatar_overrides_replace', {
+      avatarId, customName, customThumbnail,
+    });
+    this._overrides.update(o => {
+      const next = { ...o };
+      if (saved) next[avatarId] = saved;
+      else delete next[avatarId];
+      return next;
+    });
+  }
+
   private async _clearThumbnailOverride(avatarId: string): Promise<void> {
     const ov = this._overrides()[avatarId];
     if (!ov?.customThumbnail) return;
-    await this.tauri.invoke('avatar_overrides_delete', { avatarId });
-    this._overrides.update(o => { const next = { ...o }; delete next[avatarId]; return next; });
-    // 名前オーバーライドが残る場合は再保存
-    if (ov.customName) {
-      const saved = await this.tauri.invoke<AvatarOverride>('avatar_overrides_set', {
-        avatarId, customName: ov.customName, customThumbnail: null,
-      });
-      this._overrides.update(o => ({ ...o, [avatarId]: saved }));
-    }
+    await this._replaceOverride(avatarId, ov.customName ?? null, null);
   }
 
   private async _clearNameOverride(avatarId: string): Promise<void> {
     const ov = this._overrides()[avatarId];
     if (!ov?.customName) return; // 名前オーバーライドなし
-    // 既存オーバーライドを削除
-    await this.tauri.invoke('avatar_overrides_delete', { avatarId });
-    this._overrides.update(o => { const next = { ...o }; delete next[avatarId]; return next; });
-    // サムネイルオーバーライドがあれば名前なしで再保存
-    if (ov.customThumbnail) {
-      const saved = await this.tauri.invoke<AvatarOverride>('avatar_overrides_set', {
-        avatarId, customName: null, customThumbnail: ov.customThumbnail,
-      });
-      this._overrides.update(o => ({ ...o, [avatarId]: saved }));
-    }
+    await this._replaceOverride(avatarId, null, ov.customThumbnail ?? null);
   }
 
   /**
@@ -324,47 +328,12 @@ export class AvatarService {
     customName: string | undefined,
     customThumbnail: string | undefined | 'reset',
   ): Promise<void> {
-    const isThumbnailReset = customThumbnail === 'reset';
     const existing = this._overrides()[avatarId];
-
-    if (isThumbnailReset) {
-      // カスタムサムネイルを削除。名前オーバーライドが残る場合は再セット。
-      await this.tauri.invoke('avatar_overrides_delete', { avatarId });
-      this._overrides.update(ov => {
-        const next = { ...ov };
-        delete next[avatarId];
-        return next;
-      });
-      const nameToKeep = customName !== undefined ? (customName || null) : (existing?.customName ?? null);
-      if (nameToKeep) {
-        const updated = await this.tauri.invoke<AvatarOverride>('avatar_overrides_set', {
-          avatarId,
-          customName: nameToKeep,
-          customThumbnail: null,
-        });
-        this._overrides.update(ov => ({ ...ov, [avatarId]: updated }));
-      }
-    } else {
-      const thumbnailArg = customThumbnail ?? existing?.customThumbnail ?? null;
-      const nameArg = customName !== undefined ? (customName || null) : (existing?.customName ?? null);
-
-      if (!nameArg && !thumbnailArg) {
-        // 両方 null → オーバーライド不要なので削除
-        await this.tauri.invoke('avatar_overrides_delete', { avatarId });
-        this._overrides.update(ov => {
-          const next = { ...ov };
-          delete next[avatarId];
-          return next;
-        });
-      } else {
-        const updated = await this.tauri.invoke<AvatarOverride>('avatar_overrides_set', {
-          avatarId,
-          customName: nameArg,
-          customThumbnail: thumbnailArg,
-        });
-        this._overrides.update(ov => ({ ...ov, [avatarId]: updated }));
-      }
-    }
+    const nameArg = customName !== undefined ? (customName || null) : (existing?.customName ?? null);
+    const thumbnailArg = customThumbnail === 'reset'
+      ? null
+      : (customThumbnail ?? existing?.customThumbnail ?? null);
+    await this._replaceOverride(avatarId, nameArg, thumbnailArg);
   }
 
   async switchAvatar(avatarId: string): Promise<void> {

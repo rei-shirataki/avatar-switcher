@@ -143,6 +143,7 @@ pub fn run() {
             storage::commands::avatar_overrides_get_all,
             storage::commands::avatar_overrides_set,
             storage::commands::avatar_overrides_delete,
+            storage::commands::avatar_overrides_replace,
             // Storage (overlay settings, #28)
             storage::commands::overlay_settings_get,
             storage::commands::overlay_settings_set,

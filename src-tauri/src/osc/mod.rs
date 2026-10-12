@@ -181,15 +181,13 @@ async fn receive_loop(socket: TokioUdpSocket, app: AppHandle) {
 }
 
 /// 受信ソースが同一マシン由来か判定する。loopback または自マシンの LAN IPv4 のみ通す。
-/// 自マシンの LAN IP は起動時に 1 回だけ取得してキャッシュする。
+/// 自マシンの LAN IP は TTL 付きでキャッシュする（DHCP 更新・VPN 切替に追随するため）。
 fn is_trusted_src(src: &SocketAddr) -> bool {
     if src.ip().is_loopback() {
         return true;
     }
-    static LOCAL_LAN_IP: Lazy<Option<IpAddr>> =
-        Lazy::new(|| oscquery::detect_local_ipv4().map(IpAddr::V4));
-    match *LOCAL_LAN_IP {
-        Some(ip) => src.ip() == ip,
+    match oscquery::cached_local_ipv4() {
+        Some(ip) => src.ip() == IpAddr::V4(ip),
         None => false,
     }
 }

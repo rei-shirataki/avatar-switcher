@@ -5,7 +5,7 @@ use serde_json::{json, Value};
 use std::net::{IpAddr, Ipv4Addr, UdpSocket};
 use std::sync::atomic::{AtomicU16, Ordering};
 use std::sync::Mutex;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 const SERVICE_TYPE: &str = "_oscjson._tcp.local.";
@@ -170,6 +170,35 @@ pub fn detect_local_ipv4() -> Option<Ipv4Addr> {
     }
 }
 
+/// `detect_local_ipv4` の結果を TTL 付きでキャッシュして返す。
+/// 受信パケットごとに呼ばれ得るため、UDP ソケット生成を毎回走らせない。
+pub fn cached_local_ipv4() -> Option<Ipv4Addr> {
+    const TTL: Duration = Duration::from_secs(30);
+    static CACHE: Mutex<Option<(Instant, Option<Ipv4Addr>)>> = Mutex::new(None);
+    let mut guard = CACHE.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some((at, ip)) = *guard {
+        if at.elapsed() < TTL {
+            return ip;
+        }
+    }
+    let ip = detect_local_ipv4();
+    *guard = Some((Instant::now(), ip));
+    ip
+}
+
+/// 発見したサービスが自マシン上のものか。アドレスに loopback か自機の LAN IP が
+/// 含まれない場合は、LAN 上の他ホストが名前だけ似せた広告とみなして無視する。
+fn is_local_service(addrs: &[IpAddr], local_lan: Option<Ipv4Addr>) -> bool {
+    addrs.iter().any(|a| match a {
+        IpAddr::V4(v4) => v4.is_loopback() || Some(*v4) == local_lan,
+        IpAddr::V6(v6) => v6.is_loopback(),
+    })
+}
+
+fn parse_osc_port(raw: u64) -> anyhow::Result<u16> {
+    u16::try_from(raw).map_err(|_| anyhow::anyhow!("OSC_PORT が範囲外です: {}", raw))
+}
+
 fn browse_for_vrchat(mdns: ServiceDaemon) {
     tokio::spawn(async move {
         loop {
@@ -206,6 +235,14 @@ fn on_mdns_event(event: ServiceEvent) {
         ServiceEvent::ServiceResolved(info) => {
             let name = info.get_fullname().to_string();
             if !name.to_lowercase().contains("vrchat") {
+                return;
+            }
+            let addrs: Vec<IpAddr> = info.get_addresses().iter().copied().collect();
+            if !is_local_service(&addrs, cached_local_ipv4()) {
+                log::warn!(
+                    "[OSCQuery] 自マシン以外のアドレスの VRChat 広告を無視: {} {:?}",
+                    name, addrs
+                );
                 return;
             }
 
@@ -303,10 +340,10 @@ async fn query_vrchat_osc_port(ip: &str, http_port: u16) -> anyhow::Result<u16> 
         anyhow::bail!("HOST_INFO レスポンスが大きすぎます: {} bytes", bytes.len());
     }
     let v: Value = serde_json::from_slice(&bytes)?;
-    let port = v["OSC_PORT"]
+    let raw = v["OSC_PORT"]
         .as_u64()
-        .ok_or_else(|| anyhow::anyhow!("HOST_INFO に OSC_PORT が存在しません"))? as u16;
-    Ok(port)
+        .ok_or_else(|| anyhow::anyhow!("HOST_INFO に OSC_PORT が存在しません"))?;
+    parse_osc_port(raw)
 }
 
 // ── アバター身長スナップショットの能動取得 ──────────────────────────────────
@@ -557,4 +594,30 @@ fn build_root_node() -> Value {
             }
         }
     })
+}
+
+#[cfg(test)]
+mod trust_tests {
+    use super::*;
+
+    #[test]
+    fn service_with_loopback_or_own_lan_ip_is_local() {
+        let lan = Ipv4Addr::new(192, 168, 1, 10);
+        assert!(is_local_service(&[IpAddr::V4(Ipv4Addr::LOCALHOST)], None));
+        assert!(is_local_service(&[IpAddr::V4(lan)], Some(lan)));
+    }
+
+    #[test]
+    fn service_of_other_host_is_not_local() {
+        let lan = Ipv4Addr::new(192, 168, 1, 10);
+        let other = IpAddr::V4(Ipv4Addr::new(192, 168, 1, 99));
+        assert!(!is_local_service(&[other], Some(lan)));
+        assert!(!is_local_service(&[], Some(lan)));
+    }
+
+    #[test]
+    fn osc_port_out_of_range_is_rejected() {
+        assert_eq!(parse_osc_port(9000).unwrap(), 9000);
+        assert!(parse_osc_port(65536).is_err());
+    }
 }

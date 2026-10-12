@@ -504,7 +504,14 @@ pub async fn init(app_data_dir: PathBuf) {
     let _ = COOKIES_PATH.set(enc_path.clone());
     let _ = KEY_FILE_PATH.set(key_path);
 
-    let (store, enc_unreadable) = load_cookie_store(&enc_path, &legacy_path);
+    // 復号でキーチェーン（Credential Manager、ブロッキング）とファイルに触れるため、
+    // async ワーカーを塞がないよう blocking スレッドで行う。
+    let (store, enc_unreadable) = {
+        let (enc_path, legacy_path) = (enc_path.clone(), legacy_path.clone());
+        tokio::task::spawn_blocking(move || load_cookie_store(&enc_path, &legacy_path))
+            .await
+            .unwrap_or_else(|_| (CookieStore::new(None), false))
+    };
     let store = Arc::new(CookieStoreMutex::new(store));
     let _ = COOKIE_STORE.set(store.clone());
 
@@ -532,6 +539,12 @@ pub async fn init(app_data_dir: PathBuf) {
         log::warn!("cookies.enc を復号できなかったため、起動時の保存をスキップします。");
         return;
     }
+    persist_cookies_blocking().await;
+}
+
+/// `persist_cookies` はファイル書き込みとキーチェーンアクセスを伴うため、
+/// async の文脈からは blocking スレッドで実行する。
+async fn persist_cookies_blocking() {
     tokio::task::spawn_blocking(persist_cookies).await.ok();
 }
 
@@ -582,7 +595,7 @@ pub async fn login(username: &str, password: &str) -> Result<LoginResult> {
     }
 
     let body: AuthUserResponse = resp.json().await?;
-    persist_cookies();
+    persist_cookies_blocking().await;
 
     if let Some(methods) = body.requires_two_factor_auth {
         // VRChat は通常 `["totp"]` か `["emailOtp"]` を返す。emailOtp が
@@ -663,7 +676,7 @@ pub async fn verify_2fa(code: &str, method: &str) -> Result<bool> {
     }
 
     let body: TwoFactorVerifyResponse = resp.json().await?;
-    persist_cookies();
+    persist_cookies_blocking().await;
     Ok(body.verified)
 }
 

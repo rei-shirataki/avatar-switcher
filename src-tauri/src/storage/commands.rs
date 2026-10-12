@@ -34,7 +34,9 @@ fn save_value<T: Serialize + ?Sized>(app: &AppHandle, key: &str, value: &T) -> R
         .map_err(|e| format!("設定ストアを開けませんでした: {e}"))?;
     let json = serde_json::to_value(value).map_err(|e| e.to_string())?;
     store.set(key, json);
-    store.save().map_err(|e| format!("設定の保存に失敗しました: {e}"))
+    // ファイルへの同期書き込み。カスタムサムネイル（data URL）を含むと大きくなるため、
+    // async ワーカーを塞がないよう block_in_place で実行する（ランタイム外では素通し）。
+    tokio::task::block_in_place(|| store.save()).map_err(|e| format!("設定の保存に失敗しました: {e}"))
 }
 
 /// 参照系コマンド用。読み込み失敗は既定値で返しログに残す（書き込みはしないので安全）。

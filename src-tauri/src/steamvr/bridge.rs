@@ -357,8 +357,9 @@ async fn handle_message(app: &AppHandle, text: &str) -> Option<ServerMessage> {
 /// 即座に返せるキャッシュ済みデータのみを使う（本体側の fresh フェッチが
 /// 完了していればそちらが自動的に反映される）。
 async fn handle_avatars_list(app: &AppHandle) -> ServerMessage {
-    let uploaded = vrchat::cache::load_avatars();
-    let favorites = vrchat::cache::load_favorites();
+    let (uploaded, favorites) = tokio::task::block_in_place(|| {
+        (vrchat::cache::load_avatars(), vrchat::cache::load_favorites())
+    });
     // avatars.service.ts::allAvatars と同じマージ規則（自前優先、重複除去）を適用する前に、
     // お気に入り/アップロード済みタブフィルタ用の所属元idセットを保持しておく。
     let uploaded_ids: Vec<String> = uploaded.iter().map(|a| a.id.clone()).collect();

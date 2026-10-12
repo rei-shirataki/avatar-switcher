@@ -130,7 +130,7 @@ pub async fn get_my_avatars_all() -> Result<Vec<VRCAvatar>> {
         start_page += batch_size;
     }
 
-    cache::save_avatars(epoch, &all);
+    tokio::task::block_in_place(|| cache::save_avatars(epoch, &all));
     Ok(all)
 }
 
@@ -242,7 +242,7 @@ pub async fn get_favorite_avatars() -> Result<Vec<VRCAvatar>> {
     // 1 グループでも一過性の失敗があれば Err（欠損したリストをキャッシュ・UI へ流さない）。
     let all_avatars = merge_group_results(results)?;
 
-    cache::save_favorites(epoch, &all_avatars);
+    tokio::task::block_in_place(|| cache::save_favorites(epoch, &all_avatars));
     Ok(all_avatars)
 }
 

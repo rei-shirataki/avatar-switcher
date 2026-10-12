@@ -221,6 +221,7 @@ pub async fn get_favorite_avatars() -> Result<Vec<VRCAvatar>> {
 /// avatar_idを装着させたか知っているので、レスポンス本文の内容は使わず
 /// 成否のみ返す。
 pub async fn select_avatar(avatar_id: &str) -> Result<()> {
+    crate::vrchat::ids::validate_avatar_id(avatar_id)?;
     let client = get_client();
     let resp = send_with_retry(
         || {
@@ -240,6 +241,7 @@ pub async fn select_avatar(avatar_id: &str) -> Result<()> {
 /// VRChat API でアバターの画像を更新する。
 /// `files::upload_image` で取得した VRChat API プロキシ URL を imageUrl に指定する。
 pub async fn update_avatar_image(avatar_id: &str, image_url: &str) -> Result<VRCAvatar> {
+    crate::vrchat::ids::validate_avatar_id(avatar_id)?;
     let client = get_client();
     let body = serde_json::json!({ "imageUrl": image_url });
     let resp = send_with_retry(
@@ -264,6 +266,7 @@ pub async fn update_avatar_image(avatar_id: &str, image_url: &str) -> Result<VRC
 /// VRChat API でアバターのメタデータ（名前など）を更新する。
 /// 自分が作成したアバターのみ更新可能。
 pub async fn update_avatar(avatar_id: &str, name: &str) -> Result<VRCAvatar> {
+    crate::vrchat::ids::validate_avatar_id(avatar_id)?;
     let client = get_client();
     let body = serde_json::json!({ "name": name });
     let resp = send_with_retry(

@@ -66,6 +66,8 @@ pub async fn vrchat_update_avatar_image(
     avatar_id: String,
     data_url: String,
 ) -> Result<VRCAvatar, String> {
+    // 画像アップロード（VRChat 側にファイルが作られる）より前に弾く。
+    crate::vrchat::ids::validate_avatar_id(&avatar_id).map_err(|e| e.to_string())?;
     let image_url = files::upload_image(&data_url)
         .await
         .map_err(|e| e.to_string())?;

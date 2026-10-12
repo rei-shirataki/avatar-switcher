@@ -98,16 +98,22 @@ pub async fn folders_create(app: AppHandle, name: String) -> Result<AvatarFolder
     Ok(folder)
 }
 
+/// フォルダ名だけを変更する。以前はフォルダ全体（avatarIds を含む）をフロントの
+/// スナップショットで置き換えていたため、追加の完了前に名前を変えると、
+/// 追加したアバターがフォルダから消えていた。
 #[tauri::command]
-pub async fn folders_update(app: AppHandle, folder: AvatarFolder) -> Result<(), String> {
-    validate_folder_name(&folder.name)?;
+pub async fn folders_rename(app: AppHandle, folder_id: String, name: String) -> Result<AvatarFolder, String> {
+    validate_folder_name(&name)?;
     let _guard = FOLDERS_LOCK.lock().await;
     let mut folders = load_folders(&app)?;
-    if let Some(f) = folders.iter_mut().find(|f| f.id == folder.id) {
-        *f = folder;
-    }
+    let folder = folders
+        .iter_mut()
+        .find(|f| f.id == folder_id)
+        .ok_or_else(|| "フォルダが見つかりません".to_string())?;
+    folder.name = name;
+    let renamed = folder.clone();
     save_folders(&app, &folders)?;
-    Ok(())
+    Ok(renamed)
 }
 
 #[tauri::command]

@@ -412,11 +412,9 @@ export class AvatarService {
   }
 
   async renameFolder(folderId: string, name: string): Promise<void> {
-    const folder = this._folders().find(f => f.id === folderId);
-    if (!folder) return;
-    const updated = { ...folder, name };
-    await this.tauri.invoke('folders_update', { folder: updated });
-    this._folders.update(fs => fs.map(f => f.id === folderId ? updated : f));
+    const renamed = await this.tauri.invoke<AvatarFolder>('folders_rename', { folderId, name });
+    // 名前だけを反映する。avatarIds まで置き換えると、並行して完了した追加・削除を巻き戻す。
+    this._folders.update(fs => fs.map(f => (f.id === folderId ? { ...f, name: renamed.name } : f)));
   }
 
   async deleteFolder(folderId: string): Promise<void> {

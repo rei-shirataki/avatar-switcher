@@ -137,7 +137,7 @@ pub fn run() {
             // Storage (folders)
             storage::commands::folders_get_all,
             storage::commands::folders_create,
-            storage::commands::folders_update,
+            storage::commands::folders_rename,
             storage::commands::folders_delete,
             storage::commands::folders_add_avatar,
             storage::commands::folders_add_avatars,

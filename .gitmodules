@@ -1,0 +1,3 @@
+[submodule ".claude/skills/vrchat-knowledge"]
+	path = .claude/skills/vrchat-knowledge
+	url = https://github.com/rei-shirataki/VRChat-agent-skills.git

@@ -131,6 +131,12 @@ internal static class Program
             "com.rei-shirataki.avatar-switcher", "overlay-cef-cache");
         CleanupStaleCaches(cacheRoot);
         settings.RootCachePath = Path.Combine(cacheRoot, Environment.ProcessId.ToString());
+        // 既定では exe と同じディレクトリに INFO レベルの debug.log がローテーション無しで
+        // 書かれ、JS のコンソール出力もページ URL 付きで残る。エラーのみにし、
+        // 終了済みPIDのディレクトリごと掃除されるキャッシュ配下へ書く。
+        Directory.CreateDirectory(settings.RootCachePath);
+        settings.LogFile = Path.Combine(settings.RootCachePath, "cef.log");
+        settings.LogSeverity = LogSeverity.Error;
         settings.CachePath = "";
         settings.PersistSessionCookies = false;
         settings.CefCommandLineArgs.Add("disable-features", "MetricsService,PersistentHistograms");

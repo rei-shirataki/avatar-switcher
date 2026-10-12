@@ -1,0 +1,236 @@
+# 実機確認手順（コードレビュー修正分）
+
+2026-10 のリポジトリ全体レビューで入れた修正のうち、自動テスト（`cargo test --lib`）や
+`dotnet build` では担保できない挙動をまとめて確認するための手順書。
+各項目の「結果」欄は確認時に記入する（OK / NG / 未確認と日付、NG は症状を併記）。
+
+## 0. 共通の準備
+
+### 必要なもの
+- Windows 11、VRChat、SteamVR、HMD（VR 内の確認項目で必要）
+- VRChat アカウント（アバターを複数持つこと。お気に入りがあると望ましい）
+- 可能なら VRC+ **未加入**のアカウントも（お気に入りグループ 2〜6 が 4xx になる経路の確認用）
+
+### ビルドと起動
+```powershell
+# 依存の用意（初回のみ）
+npm ci
+
+# 開発起動（Rust ログをコンソールに出す）
+$env:RUST_LOG = "info"
+npm run tauri dev
+```
+
+開発起動で SteamVR オーバーレイも確認する場合は、sidecar と overlay-ui を事前にビルドして環境変数で指す。
+
+```powershell
+dotnet publish overlay-sidecar -c Release -o overlay-sidecar/publish
+npx ng build overlay-ui
+$env:AVATAR_SWITCHER_OVERLAY_SIDECAR_PATH = "$PWD\overlay-sidecar\publish\overlay-sidecar.exe"
+$env:AVATAR_SWITCHER_OVERLAY_UI_DIST_PATH = "$PWD\dist\overlay-ui\browser"
+npm run tauri dev
+```
+
+インストーラー版の確認（項目 S-1）は `npm run tauri build`（sidecar の publish を含む）。
+
+### ファイルの場所
+| 対象 | 場所 |
+|---|---|
+| アプリデータ（設定・キャッシュ・sidecar ログ） | `%APPDATA%\com.rei-shirataki.avatar-switcher\` |
+| 設定ストア | 上記 `app-settings.json` |
+| アバターキャッシュ | 上記 `avatars_cache.json` / `favorites_cache.json` |
+| sidecar ログ | 上記 `overlay-sidecar.log` |
+| CEF キャッシュ | `%LOCALAPPDATA%\com.rei-shirataki.avatar-switcher\overlay-cef-cache\<PID>\` |
+
+Rust 側ログは起動したコンソールに出力される（`RUST_LOG=info`）。ログ文字列は下記の
+「期待ログ」を grep する。
+
+---
+
+## 1. データ保護（デスクトップ UI のみで確認可能）
+
+### D-1 取得失敗時にアバター/お気に入りのキャッシュを上書きしない（#64 / PR #65）
+1. ログインし、アバター一覧とお気に入りが表示されるのを確認する。
+2. `avatars_cache.json` / `favorites_cache.json` の更新日時とサイズを控える。
+3. 通信を遮断する（Windows ファイアウォールで `api.vrchat.cloud` への送信をブロック、または Wi-Fi を切る）。
+4. アプリの更新ボタンを押す。
+
+期待結果:
+- 一覧は**消えない**（空にならない）。エラー表示が出る。
+- 手順 2 のファイルの更新日時・サイズが**変わらない**。
+- 通信を戻して更新すると正常に再取得される。
+
+追加確認（VRC+ 未加入アカウントがある場合）: お気に入りグループ 2〜6 が使えないが、
+エラーにならず取得できること（ログに `は利用できません` の警告のみ）。
+
+結果: ______
+
+### D-2 設定ストア破損時に保存済みデータを上書きしない（#66 / PR #67）
+**必ず `app-settings.json` をバックアップしてから行う。**
+1. アプリを終了し、`app-settings.json` を別名でコピーする。
+2. `avatar_folders` の値を壊す（例: 配列 `[...]` を文字列 `"broken"` に書き換える）。
+3. アプリを起動し、フォルダの作成/名前変更を試す。
+4. アプリを終了し、`app-settings.json` を開く。
+
+期待結果:
+- フォルダ操作がエラー表示で失敗する（メッセージに「データを保護するため更新を中止します」）。
+- `app-settings.json` の `avatar_folders` が手順 2 の壊れた値のまま（空配列で上書きされていない）。
+- バックアップを戻せば通常動作に戻る。
+
+正常系の回帰: フォルダの作成・名前変更・アバター追加・削除が再起動後も保持される。
+
+結果: ______
+
+### D-3 アバターID検証（#68 / PR #69）
+1. 通常操作: アバターの装着、名前変更、サムネイル変更が従来どおり成功する。
+2. 異常系（開発起動の DevTools コンソールで）:
+   ```js
+   await window.__TAURI_INTERNALS__.invoke('vrchat_select_avatar', { avatarId: '../auth/user' })
+   ```
+
+期待結果: 「アバターIDの形式が不正です」で拒否される（VRChat への通信が発生しない）。
+
+結果: ______
+
+---
+
+## 2. 起動・通信まわり
+
+### N-1 起動直後の IPC で panic しない（#72 / PR #73）
+1. 起動直後（ウィンドウが出た瞬間）にログイン操作・一覧取得を行う。
+2. ウィンドウの ×（トレイへ格納）を数回繰り返し、トレイから再表示する。
+
+期待結果: ログに `panicked` が出ない。初期化待ちの間は少し待たされるが正常に完了する。
+
+結果: ______
+
+### N-2 リトライの Retry-After と非冪等 POST（#81 / PR #92）
+通常操作の回帰確認が中心（レート制限は意図的に再現しづらい）。
+1. サムネイル画像のアップロードを 1 回行い、成功すること。
+2. 任意: レート制限に当たる状況（連打で一覧更新を繰り返す等）で、ログの
+   `HTTP 429 (試行 n/5), <待機> ms` の待機時間が `Retry-After` に従うこと。
+
+期待結果: アップロードが成功し、VRChat 側に重複した画像ファイルが増えない。
+
+結果: ______
+
+---
+
+## 3. SteamVR オーバーレイ
+
+前提: 開発起動の環境変数（0 章）または インストーラー版で、SteamVR が起動できること。
+
+### S-1 インストーラー版に sidecar が同梱される（#78 / PR #79）
+1. `npm run tauri build` を実行し、生成されたインストーラーのサイズを控える（sidecar 同梱で大きく増える想定。約 470MB 級の publish が入る）。
+2. インストールし、インストール先の `overlay-sidecar\overlay-sidecar.exe` が存在することを確認する。
+3. SteamVR を起動した状態でアプリを起動する。
+
+期待結果:
+- ログに `overlay-sidecar 実行ファイルが見つかりません` が**出ない**。
+- `OverlayManager を起動しました` が出て、VR 内でダブルプレスにより操作パネルが開く。
+- インストーラーサイズが許容範囲か判断する（許容できない場合はフレームワーク依存 publish 等を検討）。
+
+結果: ______
+
+### S-2 TryActivate 失敗時のリソース解放（#70 / PR #71）
+意図的な失敗の再現は難しいため、アクティベーションの繰り返しでリークがないことを確認する。
+1. SteamVR 起動 → `OverlayManager を起動しました` を確認。
+2. SteamVR を終了 → `OverlayManager を停止しました` を確認。
+3. 手順 1〜2 を 3 回繰り返す。タスクマネージャーで `overlay-sidecar.exe` と CEF 子プロセスの
+   数・メモリが回を重ねても増え続けないこと。
+
+期待結果: ログに `初期化に失敗しました` が連続して出ない。メモリが単調増加しない。
+
+結果: ______
+
+### S-3 低速リクエストで push が止まらない（#76 / PR #77）
+1. VR 内オーバーレイを開く。
+2. 通信を遅くする（`api.vrchat.cloud` を一時ブロックして `avatars.select` を失敗/再試行させる）。
+3. その間に VR 内の身長スライダーを操作する。
+
+期待結果: アバター切替の応答待ち中でも、身長の更新が止まらずに反映される。
+
+結果: ______
+
+### S-4 WS の Origin 検証（#93 / PR #94）
+1. VR 内オーバーレイが従来どおり接続・操作できること（Origin は `http://127.0.0.1:<ui-port>`）。
+2. 外部 Origin の拒否: 任意の https サイトを開いた状態でブラウザの DevTools コンソールから
+   ```js
+   new WebSocket('ws://127.0.0.1:<WSブリッジのport>')
+   ```
+   （ポートは起動ログの `WSブリッジ起動 (port=...)`）。
+
+期待結果: 接続が拒否され、Rust ログに `許可されない Origin からの接続を拒否` が出る。
+
+結果: ______
+
+### S-5 WsBridgeClient の再接続（#99 / PR #100）
+1. SteamVR 起動中の状態にする（ログ `SteamVR 稼働状態: true`）。
+2. Sysinternals TCPView で `overlay-sidecar.exe` ↔ `avatar-switcher.exe`（127.0.0.1）の
+   接続を「Close Connection」で切断する。
+3. しばらく待つ。
+4. SteamVR を終了/再起動する。
+
+期待結果:
+- sidecar ログに `切断されました。再接続します` → `再接続しました`。
+- 再接続後、Rust ログに `SteamVR 稼働状態` が再度記録され、手順 4 の変化も反映される。
+
+結果: ______
+
+### S-6 sidecar のキャッシュ/ログ管理とトークン（#101 / PR #102）
+1. アプリを 3 回以上起動・終了し、`overlay-cef-cache` の `<PID>` ディレクトリが
+   終了済みのものについて削除され、溜まり続けないこと（稼働中のものだけ残る）。
+2. `overlay-sidecar.log` に 5MB 超のダミーデータを追記して再起動 →
+   `overlay-sidecar.log.1` が作られ、`overlay-sidecar.log` が小さくなっていること。
+3. `overlay-sidecar.log` を `token=` で検索し、ヒットしないこと
+   （overlay-ui のロードエラー時の URL ログにもクエリが残らない）。
+
+結果: ______
+
+---
+
+## 4. OSC / OSCQuery
+
+### O-1 VRChat の発見と受信元判定（#95 / PR #97）— 最重要
+1. VRChat を起動 → アプリを起動、の順で行う。ログに `VRChat 発見: ... OSC ポート` が出ること。
+2. アプリを起動 → VRChat を起動、の順でも同様に出ること。
+3. 身長変更・リセット（OSCQuery 経由）が機能し、VRChat 側のアバター切替がアプリ UI に反映されること。
+4. VPN（または複数 NIC）を有効にした状態で 1〜3 を再度確認する。
+5. ネットワークを切替（Wi-Fi ↔ 有線、DHCP 更新）後も、1 分ほど待って OSC の受信が継続すること。
+
+期待結果:
+- `自マシン以外のアドレスの VRChat 広告を無視` の警告が**出ない**。
+  出る場合は VRChat の広告アドレスに自機アドレスが含まれていない環境であり、
+  `src-tauri/src/osc/oscquery.rs` の `is_local_service` 判定の見直しが必要（報告すること）。
+- 身長リセットが 1.6m 固定にならず、アバター本来の身長に戻る。
+
+結果: ______
+
+---
+
+## 5. 確認結果の取りまとめ
+
+| 項目 | 結果 | 日付 | メモ |
+|---|---|---|---|
+| D-1 | | | |
+| D-2 | | | |
+| D-3 | | | |
+| N-1 | | | |
+| N-2 | | | |
+| S-1 | | | |
+| S-2 | | | |
+| S-3 | | | |
+| S-4 | | | |
+| S-5 | | | |
+| S-6 | | | |
+| O-1 | | | |
+
+NG があれば、症状・再現手順・該当ログを添えて Issue にする（対応 PR は上記表の PR 番号を参照）。
+
+## 付録: 自動テストで担保済みの範囲（実機確認は不要）
+- お気に入り/アバター取得結果の統合判定、一過性ステータス判定（`vrchat::avatars::tests`）
+- avatar_id の形式検証（`vrchat::ids::tests`）
+- リトライ方針・`Retry-After` の解釈（`vrchat::auth::retry_tests`）
+- WS の Origin 判定・定数時間比較（`steamvr::bridge::tests`）
+- mDNS 発見元判定・`OSC_PORT` 検証（`osc::oscquery::trust_tests`）
+- ログローテーション（`steamvr::sidecar::tests`）

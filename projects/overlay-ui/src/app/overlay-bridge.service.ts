@@ -33,8 +33,8 @@ type ServerMessage = { requestId?: number } & (
 
 /**
  * Rust core (src-tauri/src/steamvr/bridge.rs) への WebSocket クライアント。
- * tauri.service.ts の代替。overlay-sidecar が CEF に読み込ませる際、URL クエリ
- * `?port=<port>&token=<token>` で接続先を渡す（サイドカー起動時に Rust から
+ * tauri.service.ts の代替。overlay-sidecar が CEF に読み込ませる際、URL フラグメント
+ * `#port=<port>&token=<token>` で接続先を渡す（サイドカー起動時に Rust から
  * 動的に決まるポート番号・トークンを埋め込む必要があるため）。
  */
 @Injectable({ providedIn: 'root' })
@@ -68,11 +68,12 @@ export class OverlayBridgeService {
    * 応答を待つPromiseが解決しないまま止まってしまう。
    */
   connect(): Promise<void> {
-    const params = new URLSearchParams(window.location.search);
+    // トークンはクエリではなくフラグメントで渡される（AvatarPanelOverlay.ResolveOverlayUiUrl 参照）。
+    const params = new URLSearchParams(window.location.hash.slice(1));
     const port = params.get('port');
     const token = params.get('token');
     if (!port || !token) {
-      console.error('[overlay-bridge] URLクエリに port/token がありません');
+      console.error('[overlay-bridge] URLフラグメントに port/token がありません');
       return Promise.reject(new Error('port/token missing'));
     }
     return this.openSocket(port, token);

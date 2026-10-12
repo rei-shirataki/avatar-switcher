@@ -9,6 +9,7 @@ use std::process::Stdio;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::time::Duration;
 use tauri::{AppHandle, Manager};
+use tokio::io::AsyncWriteExt;
 use tokio::process::Command;
 
 /// 現在起動中の overlay-sidecar の OS プロセスID。0 なら未起動。
@@ -92,6 +93,9 @@ pub(crate) async fn spawn(
                 Ok(mut child) => {
                     attempt = 0;
                     SIDECAR_PID.store(child.id().unwrap_or(0), Ordering::SeqCst);
+                    // tokio の Child::wait() は待機前に stdin を閉じるため、先に取り出して
+                    // サイドカーの生存中は開いたままにする（launch() のコメント参照）。
+                    let _stdin = child.stdin.take();
                     let status = child.wait().await;
                     SIDECAR_PID.store(0, Ordering::SeqCst);
                     match status {
@@ -124,10 +128,9 @@ async fn launch(
     let mut cmd = Command::new(path);
     cmd.arg("--ws-port")
         .arg(ws_port.to_string())
-        .arg("--token")
-        .arg(token)
         .arg("--placement-mode")
         .arg(placement_mode.as_cli_arg())
+        .stdin(Stdio::piped())
         .kill_on_drop(true);
     if let Some(ui_port) = ui_port {
         cmd.arg("--ui-port").arg(ui_port.to_string());
@@ -148,7 +151,14 @@ async fn launch(
         }
     }
 
-    cmd.spawn()
+    let mut child = cmd.spawn()?;
+    // トークンはコマンドラインに載せると同一ユーザーの他プロセスからプロセス一覧
+    // （WMI 等）で読めるため、標準入力の1行目で渡す。
+    if let Some(stdin) = child.stdin.as_mut() {
+        stdin.write_all(format!("{token}\n").as_bytes()).await?;
+        stdin.flush().await?;
+    }
+    Ok(child)
 }
 
 /// ログがこのサイズを超えていたら起動時に退避する。

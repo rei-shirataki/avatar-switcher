@@ -3,8 +3,8 @@
 //!
 //! `osc::is_trusted_src` と同じ「信頼境界を明示チェックする」流儀を踏襲する:
 //! loopback 以外からの接続は即座に拒否し、さらに接続直後の最初のメッセージで
-//! トークン認証を行う（トークンはサイドカー起動時の CLI 引数、および
-//! overlay-ui へは URL クエリ経由でのみ渡される）。
+//! トークン認証を行う（トークンはサイドカーへは起動時の標準入力、
+//! overlay-ui へは URL フラグメント経由でのみ渡される）。
 
 use crate::steamvr::protocol::{request_id_of, ClientMessage, Reply, ServerMessage};
 use crate::vrchat::models::VRCAvatar;
@@ -73,7 +73,7 @@ const HELLO_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// WS サーバーを 127.0.0.1 の空きポートに bind し、受け入れループを spawn する。
 /// 戻り値は bind したポート番号（サイドカー起動時の引数、overlay-ui への
-/// URL クエリに渡す）。
+/// URL フラグメントに渡す）。
 pub(crate) async fn start(app: AppHandle, token: Arc<str>) -> anyhow::Result<u16> {
     let listener = TcpListener::bind("127.0.0.1:0").await?;
     let port = listener.local_addr()?.port();

@@ -8,14 +8,17 @@ namespace AvatarSwitcher.OverlaySidecar;
 internal sealed class CliOptions
 {
     public int WsPort { get; }
-    public string Token { get; }
+    /// <summary>WS ブリッジの認証トークン。通常は Rust コアが標準入力の1行目で渡す
+    /// （コマンドラインはプロセス一覧から読めるため）。手動起動の検証用に
+    /// `--token` も受け付ける。</summary>
+    public string? Token { get; }
     /// <summary>overlay-ui静的ファイルサーバーのポート。Rust側が起動できなかった
     /// 場合（overlay-ui未ビルド等）は渡されない。</summary>
     public int? UiPort { get; }
     /// <summary>パネル配置方式（#28）。未指定・不正値はHandにフォールバックする。</summary>
     public PlacementMode PlacementMode { get; }
 
-    private CliOptions(int wsPort, string token, int? uiPort, PlacementMode placementMode)
+    private CliOptions(int wsPort, string? token, int? uiPort, PlacementMode placementMode)
     {
         WsPort = wsPort;
         Token = token;
@@ -57,7 +60,7 @@ internal sealed class CliOptions
             }
         }
 
-        if (wsPort == null || string.IsNullOrEmpty(token))
+        if (wsPort == null)
         {
             return null;
         }

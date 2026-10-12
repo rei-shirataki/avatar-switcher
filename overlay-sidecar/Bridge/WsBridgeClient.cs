@@ -37,7 +37,7 @@ internal sealed class WsBridgeClient : IAsyncDisposable
     private bool? _lastSteamVrRunning;
 
     /// <summary>overlay-ui (CefSharp内のAngular) が自分でRust coreのWSサーバーへ
-    /// 接続する際に必要。URLクエリ (?port=..&amp;token=..) として渡す。</summary>
+    /// 接続する際に必要。URLフラグメント (#port=..&amp;token=..) として渡す。</summary>
     public int WsPort => _wsPort;
     public string Token => _token;
 

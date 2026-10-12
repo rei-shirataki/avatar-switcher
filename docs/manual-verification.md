@@ -255,6 +255,17 @@ Rust 側ログは起動したコンソールに出力される（`RUST_LOG=info`
 
 結果: ______
 
+### S-11 トークンをコマンドライン・URL クエリに載せない（レビュー Medium 4）
+1. サイドカー起動中に PowerShell で
+   `Get-CimInstance Win32_Process -Filter "Name='overlay-sidecar.exe'" | Select CommandLine` を実行し、
+   コマンドラインに `--token` が含まれないこと。
+2. パネルが表示され、アバター一覧の取得・切り替えが動くこと（トークンが標準入力と URL フラグメントで渡っている）。
+3. `overlay-sidecar.log` と CEF ログ（`overlay-cef-cache\<PID>\cef.log`）を `token=` で検索し、ヒットしないこと。
+4. 任意: `AVATAR_SWITCHER_OVERLAY_UI_DEV_URL=https://example.com` を設定して起動すると
+   `AVATAR_SWITCHER_OVERLAY_UI_DEV_URL は http://127.0.0.1 ...` の警告が出て無視されること。
+
+結果: ______
+
 ---
 
 ## 4. OSC / OSCQuery
@@ -300,6 +311,7 @@ Rust 側ログは起動したコンソールに出力される（`RUST_LOG=info`
 | S-8 | | | |
 | S-9 | | | |
 | S-10 | | | |
+| S-11 | | | |
 | O-1 | | | |
 
 NG があれば、症状・再現手順・該当ログを添えて Issue にする（対応 PR は上記表の PR 番号を参照）。

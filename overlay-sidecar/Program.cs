@@ -7,7 +7,7 @@ namespace AvatarSwitcher.OverlaySidecar;
 
 /// <summary>
 /// SteamVR オーバーレイサイドカーのエントリポイント。
-/// Rust コア (avatar-switcher 本体) から --ws-port / --token を渡されて起動する。
+/// Rust コア (avatar-switcher 本体) から --ws-port を、標準入力でトークンを渡されて起動する。
 ///
 /// M1: CEFのオフスクリーン描画 → D3D11テクスチャ → SteamVRオーバーレイの
 /// パイプラインと、コントローラーのトリガークリックの疎通を実装。
@@ -24,7 +24,16 @@ internal static class Program
         var options = CliOptions.Parse(args);
         if (options == null)
         {
-            Console.Error.WriteLine("usage: overlay-sidecar --ws-port <port> --token <token>");
+            Console.Error.WriteLine(
+                "usage: overlay-sidecar --ws-port <port> [--ui-port <port>] [--placement-mode hand|space] [--token <token>]\n" +
+                "  --token を省略した場合は標準入力の1行目をトークンとして読む");
+            return 1;
+        }
+
+        var token = options.Token ?? Console.In.ReadLine()?.Trim();
+        if (string.IsNullOrEmpty(token))
+        {
+            Console.Error.WriteLine("[steamvr] WSブリッジのトークンが渡されていません");
             return 1;
         }
 
@@ -38,7 +47,7 @@ internal static class Program
             cts.Cancel();
         };
 
-        await using var bridge = new WsBridgeClient(options.WsPort, options.Token);
+        await using var bridge = new WsBridgeClient(options.WsPort, token);
         try
         {
             await bridge.ConnectAsync(cts.Token);

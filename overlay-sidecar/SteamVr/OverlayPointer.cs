@@ -184,8 +184,16 @@ internal sealed class OverlayPointer : IDisposable
         lock (pointer)
         {
             // 交点を失った瞬間のCEF側マウス状態をクリアする(離脱通知)。
+            // 押下中に外れた場合は先に mouse-up を送る。送らずに Pressed だけ戻すと、
+            // 実際にトリガーを離したときには「既に離している」扱いで何も送られず、
+            // CEF 側はボタンが押されたまま（:active・ドラッグ状態が残る）になる。
             if (pointer.LastUv.HasValue)
             {
+                if (pointer.Pressed)
+                {
+                    SendMouseClick(pointer.LastUv.Value, pressed: false);
+                    pointer.Pressed = false;
+                }
                 SendMouseMove(pointer, mouseLeave: true);
             }
 
@@ -242,25 +250,36 @@ internal sealed class OverlayPointer : IDisposable
         };
         if (pointer == null) return;
 
-        Vector2? uv;
         lock (pointer)
         {
             if (pointer.Pressed == pressed) return;
-            pointer.Pressed = pressed;
-            uv = pointer.LastUv;
-        }
+            var uv = pointer.LastUv;
+            if (pressed && (_target?.Browser == null || uv == null || _target?.IsShown != true))
+            {
+                // パネル外で押した場合はボタン押下として扱わない。Pressed を立てると、
+                // そのままパネルに入ったときにボタン押下付きの移動（ドラッグ）になり、
+                // 離したときに mouse-down 無しの mouse-up が届く。
+                // #37フォローアップ: LastUvはRenderLoopスレッドが次ティックでクリアするまで
+                // 残るため、Dashboardが開いた直後の数msはIsShownを見ないと隠れたパネルへ
+                // クリックが漏れる（UpdateForController側のIsShownチェックだけでは防げない）。
+                Console.WriteLine($"[steamvr] クリックを無視: browser={(_target?.Browser == null ? "null" : "ok")} LastUv={(uv == null ? "null(パネルに当たっていない)" : "ok")} IsShown={_target?.IsShown}");
+                return;
+            }
 
-        var browser = _target?.Browser;
-        if (browser == null || uv == null || _target?.IsShown != true)
-        {
-            // #37フォローアップ: LastUvはRenderLoopスレッドが次ティックでクリアするまで
-            // 残るため、Dashboardが開いた直後の数msはIsShownを見ないと隠れたパネルへ
-            // クリックが漏れる（UpdateForController側のIsShownチェックだけでは防げない）。
-            Console.WriteLine($"[steamvr] クリックを無視: browser={(browser == null ? "null" : "ok")} LastUv={(uv == null ? "null(パネルに当たっていない)" : "ok")} IsShown={_target?.IsShown}");
-            return;
+            pointer.Pressed = pressed;
+            // 離したときにパネル外なら、Hide() が外れた時点で mouse-up を送り済み。
+            if (uv == null) return;
+            Console.WriteLine($"[steamvr] クリック送信: role={role} pressed={pressed}");
+            SendMouseClick(uv.Value, pressed);
         }
-        var (x, y) = ToBrowserPixels(uv.Value, browser);
-        Console.WriteLine($"[steamvr] クリック送信: role={role} pressed={pressed} x={x} y={y}");
+    }
+
+    /// <summary>呼び出し元が pointer を lock している前提。</summary>
+    private void SendMouseClick(Vector2 uv, bool pressed)
+    {
+        var browser = _target?.Browser;
+        if (browser == null) return;
+        var (x, y) = ToBrowserPixels(uv, browser);
         TryGetHost(browser)?.SendMouseClickEvent(x, y, MouseButtonType.Left, mouseUp: !pressed, clickCount: 1, CefEventFlags.None);
     }
 

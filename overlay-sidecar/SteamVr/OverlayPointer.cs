@@ -137,6 +137,10 @@ internal sealed class OverlayPointer : IDisposable
         // コントローラー実機の持ち方とレイの狙う先にずれがあるため一定角度だけ傾ける。
         // この角度はOyasumiVRのポインタ実装からそのまま踏襲した値で、変更すると
         // 狙点がずれるため調整しない。
+        // 注意: CreateRotationX の引数はラジアン。345 は「345°」ではなく 345rad で、
+        // 2π の剰余で約 5.708rad ≒ 327°（＝約 -33°）の傾きになる。実機で合わせ込まれた
+        // 実際の挙動はこの -33° なので、度数のつもりで MathF.PI / 180 を掛けて
+        // 「直す」と狙点が変わる。変える場合は実機で狙点を確認すること。
         var controllerTransform = Matrix4x4.CreateRotationX(345f) *
                                    controllerPose.mDeviceToAbsoluteTracking.ToMatrix4X4();
 

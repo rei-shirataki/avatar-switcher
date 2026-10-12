@@ -58,7 +58,34 @@ internal sealed class WsBridgeClient : IAsyncDisposable
     private async Task OpenAsync(CancellationToken ct)
     {
         var socket = new ClientWebSocket();
-        await socket.ConnectAsync(new Uri($"ws://127.0.0.1:{_wsPort}/"), ct);
+        bool? sentStatus;
+        try
+        {
+            await socket.ConnectAsync(new Uri($"ws://127.0.0.1:{_wsPort}/"), ct);
+
+            // hello は他の送信から見える _socket に差し替える前に、新しいソケットへ直接送る。
+            // 差し替え後だと、並行する SendSteamVrStatusAsync が hello より先に届き、
+            // Rust 側が「最初のメッセージが hello でない」として認証失敗で切断する。
+            await SendOnAsync(socket, JsonSerializer.Serialize(new
+            {
+                type = "sidecar.hello",
+                pid = Environment.ProcessId,
+                token = _token,
+            }), ct);
+
+            // 再接続時は Rust 側の状態が失われているため、最後の状態を再送する。
+            sentStatus = _lastSteamVrRunning;
+            if (sentStatus is { } running)
+            {
+                await SendOnAsync(socket, SteamVrStatusJson(running), ct);
+            }
+        }
+        catch
+        {
+            // 接続に失敗したソケットを捨てずにおくと、再接続の試行ごとにリークする。
+            socket.Dispose();
+            throw;
+        }
 
         await _sendLock.WaitAsync(ct);
         try
@@ -72,17 +99,10 @@ internal sealed class WsBridgeClient : IAsyncDisposable
             _sendLock.Release();
         }
 
-        await SendAsync(JsonSerializer.Serialize(new
+        // 差し替えまでの間に古いソケットへ送られて失敗した状態変化があれば送り直す。
+        if (_lastSteamVrRunning is { } latest && latest != sentStatus)
         {
-            type = "sidecar.hello",
-            pid = Environment.ProcessId,
-            token = _token,
-        }), ct);
-
-        // 再接続時は Rust 側の状態が失われているため、最後の状態を再送する。
-        if (_lastSteamVrRunning is { } running)
-        {
-            await SendAsync(SteamVrStatusJson(running), ct);
+            await SendAsync(SteamVrStatusJson(latest), ct);
         }
     }
 
@@ -161,12 +181,11 @@ internal sealed class WsBridgeClient : IAsyncDisposable
 
     private async Task SendAsync(string json, CancellationToken ct)
     {
-        var bytes = Encoding.UTF8.GetBytes(json);
         // ClientWebSocket.SendAsync は同時に複数呼ぶと例外になるため直列化する。
         await _sendLock.WaitAsync(ct);
         try
         {
-            await _socket.SendAsync(bytes, WebSocketMessageType.Text, endOfMessage: true, ct);
+            await SendOnAsync(_socket, json, ct);
         }
         finally
         {
@@ -174,19 +193,32 @@ internal sealed class WsBridgeClient : IAsyncDisposable
         }
     }
 
+    private static Task SendOnAsync(ClientWebSocket socket, string json, CancellationToken ct) =>
+        socket.SendAsync(Encoding.UTF8.GetBytes(json), WebSocketMessageType.Text, endOfMessage: true, ct);
+
     public async ValueTask DisposeAsync()
     {
         _lifetime.Cancel();
 
-        if (_socket.State == WebSocketState.Open)
+        // 送信中の SendAsync と CloseAsync が同時に走ると例外になるため、送信と同じロックを取る。
+        // 終了処理が止まらないよう、ロック待ちと切断はそれぞれ短い時間で諦める。
+        if (await _sendLock.WaitAsync(TimeSpan.FromSeconds(2)))
         {
             try
             {
-                await _socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "shutdown", CancellationToken.None);
+                if (_socket.State == WebSocketState.Open)
+                {
+                    using var closeTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+                    await _socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "shutdown", closeTimeout.Token);
+                }
             }
             catch
             {
                 // ベストエフォート。プロセス終了時の切断失敗は無視する。
+            }
+            finally
+            {
+                _sendLock.Release();
             }
         }
 

@@ -6,7 +6,7 @@
   "build": {
     "beforeDevCommand": "npm run start",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "npm run build && npx ng build overlay-ui",
+    "beforeBuildCommand": "npm run build && npx ng build overlay-ui && dotnet publish overlay-sidecar -c Release -o overlay-sidecar/publish",
     "frontendDist": "../dist/avatar-switcher/browser"
   },
   "app": {
@@ -41,7 +41,8 @@
       "icons/icon.ico"
     ],
     "resources": {
-      "../dist/overlay-ui/browser": "overlay-ui"
+      "../dist/overlay-ui/browser": "overlay-ui",
+      "../overlay-sidecar/publish": "overlay-sidecar"
     },
     "windows": {
       "nsis": {

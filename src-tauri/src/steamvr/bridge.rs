@@ -28,7 +28,8 @@ pub(crate) static STEAMVR_RUNNING: AtomicBool = AtomicBool::new(false);
 
 /// `avatar-changed` 等、Rust側から能動的に全WSクライアントへ push するための
 /// チャンネル。各接続がこれを subscribe し、自分の書き込み側へ転送する。
-static PUSH_TX: Lazy<broadcast::Sender<ServerMessage>> = Lazy::new(|| broadcast::channel(16).0);
+/// 身長の OSC エコーは短時間に連続して届くため、少し余裕を持たせる。
+static PUSH_TX: Lazy<broadcast::Sender<ServerMessage>> = Lazy::new(|| broadcast::channel(64).0);
 
 /// `osc/mod.rs` の `/avatar/change` 受信ハンドラから呼ばれる。
 /// 購読者がいない（overlay-ui未接続）場合の送信失敗は無視してよい。
@@ -227,8 +228,17 @@ async fn handle_connection(stream: TcpStream, peer: SocketAddr, app: AppHandle, 
                         }
                     }
                     // 受信が追いつかず古いイベントが破棄された場合はスキップして継続する
-                    // （avatar-changed は最新状態だけ分かれば十分なため取りこぼしを許容）。
-                    Err(broadcast::error::RecvError::Lagged(_)) => continue,
+                    // （avatar-changed・身長は最新状態だけ分かれば十分なため取りこぼしを許容）。
+                    // ただし設定変更の通知は一度きりで再送されないため、取りこぼした可能性が
+                    // あるときは現在の設定を送り直す（overlay-ui のクランプ範囲がずれないように）。
+                    Err(broadcast::error::RecvError::Lagged(_)) => {
+                        let settings = ServerMessage::EyeHeightSettingsUpdate {
+                            limit_enabled: crate::osc::EYE_HEIGHT_LIMIT_ENABLED.load(Ordering::Relaxed),
+                        };
+                        if send(&mut write, &settings).await.is_err() {
+                            break;
+                        }
+                    }
                     Err(broadcast::error::RecvError::Closed) => break,
                 }
             }

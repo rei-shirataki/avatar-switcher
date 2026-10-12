@@ -219,6 +219,9 @@ internal sealed class OverlayManager
         catch (Exception ex)
         {
             Console.Error.WriteLine($"[steamvr] 初期化に失敗しました: {ex.Message}");
+            // 生成済みの D3D/ポインタ/CEFブラウザと OpenVR.Init を残したまま
+            // 3 秒間隔で再試行されると、リトライのたびにリークと二重 Init が積み上がる。
+            ReleaseResources();
             return false;
         }
     }
@@ -428,13 +431,35 @@ internal sealed class OverlayManager
     {
         if (!_active) return;
         _active = false;
-        _pointer?.Dispose();
-        _pointer = null;
-        _panel?.Dispose();
-        _panel = null;
-        _d3D?.Dispose();
-        _d3D = null;
-        OpenVR.Shutdown();
+        ReleaseResources();
         Console.WriteLine("[steamvr] OverlayManager を停止しました");
+    }
+
+    /// <summary>
+    /// 生成済みの資源と OpenVR の初期化を解放する。<see cref="_active"/> に依存しないため、
+    /// 起動途中で失敗した <see cref="TryActivate"/> の後始末にも使える。
+    /// 各解放は独立に例外を握り潰し、後続の解放（特に OpenVR.Shutdown）を必ず実行する。
+    /// </summary>
+    private void ReleaseResources()
+    {
+        TryRelease(() => _pointer?.Dispose());
+        _pointer = null;
+        TryRelease(() => _panel?.Dispose());
+        _panel = null;
+        TryRelease(() => _d3D?.Dispose());
+        _d3D = null;
+        TryRelease(OpenVR.Shutdown);
+    }
+
+    private static void TryRelease(Action release)
+    {
+        try
+        {
+            release();
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[steamvr] 資源の解放中に例外: {ex.Message}");
+        }
     }
 }

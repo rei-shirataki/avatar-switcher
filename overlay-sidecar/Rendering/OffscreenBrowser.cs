@@ -45,6 +45,10 @@ internal sealed class OffscreenBrowser : ChromiumWebBrowser, IRenderHandler
             DefaultEncoding = "UTF-8",
         };
 
+        // ブラウザ生成前に設定しないと最初のナビゲーションに間に合わない。
+        RequestHandler = new NavigationGuard(address);
+        LifeSpanHandler = new NoPopupLifeSpanHandler();
+
         CreateBrowser(windowInfo, browserSettings);
 
         Size = new System.Drawing.Size((int)width, (int)height);

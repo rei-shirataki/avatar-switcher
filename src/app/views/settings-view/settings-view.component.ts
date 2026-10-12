@@ -6,6 +6,7 @@ import { TauriService } from '../../core/services/tauri.service';
 import { EyeHeightService, EYE_HEIGHT_MIN, EYE_HEIGHT_MAX } from '../../core/services/eye-height.service';
 import { Router } from '@angular/router';
 import { VRCUser } from '../../core/models/auth.model';
+import { errorMessage } from '../../core/utils/error.util';
 
 interface OscStatus {
   port: number;
@@ -343,7 +344,13 @@ export class SettingsViewComponent implements OnInit {
   }
 
   async logout(): Promise<void> {
-    await this.auth.logout();
+    try {
+      await this.auth.logout();
+    } catch (e: unknown) {
+      console.error(e);
+      window.alert(`ログアウトに失敗しました: ${errorMessage(e, '不明なエラー')}`);
+      return;
+    }
     this.router.navigate(['/login']);
   }
 }

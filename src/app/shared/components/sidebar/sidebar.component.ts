@@ -4,6 +4,7 @@ import { RouterLink, RouterLinkActive } from '@angular/router';
 import { VRChatAuthService } from '../../../core/services/vrchat-auth.service';
 import { Router } from '@angular/router';
 import { IconComponent } from '../icon/icon.component';
+import { errorMessage } from '../../../core/utils/error.util';
 
 interface NavItem {
   route: string;
@@ -71,7 +72,13 @@ export class SidebarComponent {
   constructor(public auth: VRChatAuthService, private router: Router) {}
 
   async logout() {
-    await this.auth.logout();
+    try {
+      await this.auth.logout();
+    } catch (e: unknown) {
+      console.error(e);
+      window.alert(`ログアウトに失敗しました: ${errorMessage(e, '不明なエラー')}`);
+      return;
+    }
     this.router.navigate(['/login']);
   }
 }

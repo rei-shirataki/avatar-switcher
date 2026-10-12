@@ -6,6 +6,7 @@ import { VRChatAuthService } from '../../core/services/vrchat-auth.service';
 import { AvatarCardComponent, CardContextMenuEvent } from '../../shared/components/avatar-card/avatar-card.component';
 import { IconComponent } from '../../shared/components/icon/icon.component';
 import { VRCAvatar, AvatarFolder } from '../../core/models/avatar.model';
+import { errorMessage } from '../../core/utils/error.util';
 
 type DropdownName = 'sort' | 'bulk';
 type ToastKind = 'success' | 'error';
@@ -143,37 +144,69 @@ export class AvatarsViewComponent implements OnInit {
   ) {}
 
   async ngOnInit() {
-    await this.avatarService.ensureLoaded();
+    await this.runWithErrorToast(() => this.avatarService.ensureLoaded(), 'アバター一覧の取得に失敗しました');
+  }
+
+  async onRefresh() {
+    await this.runWithErrorToast(() => this.avatarService.refresh(), 'アバター一覧の更新に失敗しました');
   }
 
   async onSwitch(avatarId: string) {
-    try {
-      await this.avatarService.switchAvatar(avatarId);
-      this.showToast('アバターを切り替えました');
-    } catch (e: unknown) {
-      console.error(e);
-    }
+    const ok = await this.runWithErrorToast(
+      () => this.avatarService.switchAvatar(avatarId),
+      'アバターの切り替えに失敗しました',
+    );
+    if (ok) this.showToast('アバターを切り替えました');
   }
 
   async createFolder() {
     if (!this.newFolderName.trim()) return;
-    await this.avatarService.createFolder(this.newFolderName.trim());
+    const ok = await this.runWithErrorToast(
+      () => this.avatarService.createFolder(this.newFolderName.trim()),
+      'フォルダの作成に失敗しました',
+    );
+    if (!ok) return;
     this.newFolderName = '';
     this.showNewFolderInput.set(false);
   }
 
   async onAddToFolder(avatarId: string, folderId: string) {
-    await this.avatarService.addAvatarToFolder(folderId, avatarId);
+    await this.runWithErrorToast(
+      () => this.avatarService.addAvatarToFolder(folderId, avatarId),
+      'フォルダへの追加に失敗しました',
+    );
   }
 
   async onRemoveFromFolder(avatarId: string, folderId: string) {
-    await this.avatarService.removeAvatarFromFolder(folderId, avatarId);
+    await this.runWithErrorToast(
+      () => this.avatarService.removeAvatarFromFolder(folderId, avatarId),
+      'フォルダからの削除に失敗しました',
+    );
   }
 
   async deleteFolder(folder: AvatarFolder) {
-    await this.avatarService.deleteFolder(folder.id);
-    if (this.selectedFolderId() === folder.id) {
+    const ok = await this.runWithErrorToast(
+      () => this.avatarService.deleteFolder(folder.id),
+      'フォルダの削除に失敗しました',
+    );
+    if (ok && this.selectedFolderId() === folder.id) {
       this.selectedFolderId.set(null);
+    }
+  }
+
+  /**
+   * 失敗時にバックエンドのメッセージ付きでトーストを出す。成功したら true。
+   * テンプレートのイベントから呼ばれる async 処理の失敗を unhandled rejection にせず、
+   * ユーザーに見える形で知らせるため。
+   */
+  private async runWithErrorToast(action: () => Promise<unknown>, label: string): Promise<boolean> {
+    try {
+      await action();
+      return true;
+    } catch (e: unknown) {
+      console.error(e);
+      this.showToast(`${label}: ${errorMessage(e, '不明なエラー')}`, 'error');
+      return false;
     }
   }
 
@@ -206,9 +239,9 @@ export class AvatarsViewComponent implements OnInit {
     const folder = this.avatarService.folders().find(f => f.id === folderId);
     if (!folder) return;
     if (folder.avatarIds.includes(avatar.id)) {
-      await this.avatarService.removeAvatarFromFolder(folderId, avatar.id);
+      await this.onRemoveFromFolder(avatar.id, folderId);
     } else {
-      await this.avatarService.addAvatarToFolder(folderId, avatar.id);
+      await this.onAddToFolder(avatar.id, folderId);
     }
     this.cardMenuAvatar.set(null);
   }
@@ -242,8 +275,11 @@ export class AvatarsViewComponent implements OnInit {
   async confirmRenameFolder() {
     const id = this.renamingFolderId();
     if (!id || !this.renamingFolderName.trim()) return;
-    await this.avatarService.renameFolder(id, this.renamingFolderName.trim());
-    this.renamingFolderId.set(null);
+    const ok = await this.runWithErrorToast(
+      () => this.avatarService.renameFolder(id, this.renamingFolderName.trim()),
+      'フォルダ名の変更に失敗しました',
+    );
+    if (ok) this.renamingFolderId.set(null);
   }
 
   cancelRenameFolder() {
@@ -501,8 +537,7 @@ export class AvatarsViewComponent implements OnInit {
       this.detailEditThumbnail.set(null);
       this.showToast('変更を保存しました');
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e);
-      this.detailEditError.set(msg || '保存に失敗しました');
+      this.detailEditError.set(errorMessage(e, '保存に失敗しました'));
     } finally {
       this.detailEditSaving.set(false);
     }

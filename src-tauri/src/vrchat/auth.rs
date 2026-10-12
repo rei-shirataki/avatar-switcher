@@ -460,8 +460,11 @@ fn persist_cookies() {
         //
         // `iter_any()` returns all cookies including session (non-persistent) ones.
         // We serialize them manually as a JSON array of {n, v} objects.
+        // `iter_any()` には期限切れのものも含まれる。属性（期限）は保存しないため、
+        // ここで除かないと次回起動時に期限の無い Cookie として復活してしまう。
         let cookies: Vec<serde_json::Value> = store
             .iter_any()
+            .filter(|c| !c.is_expired())
             .map(|c| serde_json::json!({"n": c.name(), "v": c.value()}))
             .collect();
         serde_json::to_writer(&mut buf, &cookies).ok();

@@ -20,7 +20,7 @@ use serde::{Deserialize, Serialize};
 /// **注意**: `rename_all` を enum 直下（`#[serde(tag = "type", rename_all = ...)]`）
 /// に置いても効かない。内部タグ付きenumではフィールド名の大文字小文字変換は
 /// 各バリアント個別の属性としてしか効かない（serdeの実際の挙動、一度
-/// enumレベルで試して直らずハマった。examples/serde_probe.rs で単体検証して確定）。
+/// enumレベルで試して直らずハマった。本ファイル末尾の tests の roundtrip で検証している）。
 #[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "type")]
 pub enum ClientMessage {

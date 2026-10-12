@@ -25,7 +25,7 @@ VRChat のアバター切り替え・身長（Eye Height）調整をひとつの
 | フロントエンド | Angular 20 (standalone components, signals) |
 | デスクトップシェル | Tauri 2 (Rust) |
 | VRChat 連携 | VRChat REST API（ログイン・アバター取得）／ OSC（アバター切り替え・Eye Height 送信） |
-| ローカル永続化 | `@tauri-apps/plugin-store`（フォルダ・オーバーライド・設定）／ アプリデータディレクトリ上の JSON ファイル（アバター一覧のディスクキャッシュ） |
+| ローカル永続化 | `tauri-plugin-store`（Rust 側。フォルダ・オーバーライド・設定）／ アプリデータディレクトリ上の JSON ファイル（アバター一覧のディスクキャッシュ） |
 
 ## セットアップ
 

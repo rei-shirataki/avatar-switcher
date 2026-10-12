@@ -137,6 +137,10 @@ internal sealed class OverlayPointer : IDisposable
         // コントローラー実機の持ち方とレイの狙う先にずれがあるため一定角度だけ傾ける。
         // この角度はOyasumiVRのポインタ実装からそのまま踏襲した値で、変更すると
         // 狙点がずれるため調整しない。
+        // 注意: CreateRotationX の引数はラジアン。345 は「345°」ではなく 345rad で、
+        // 2π の剰余で約 5.708rad ≒ 327°（＝約 -33°）の傾きになる。実機で合わせ込まれた
+        // 実際の挙動はこの -33° なので、度数のつもりで MathF.PI / 180 を掛けて
+        // 「直す」と狙点が変わる。変える場合は実機で狙点を確認すること。
         var controllerTransform = Matrix4x4.CreateRotationX(345f) *
                                    controllerPose.mDeviceToAbsoluteTracking.ToMatrix4X4();
 
@@ -184,8 +188,16 @@ internal sealed class OverlayPointer : IDisposable
         lock (pointer)
         {
             // 交点を失った瞬間のCEF側マウス状態をクリアする(離脱通知)。
+            // 押下中に外れた場合は先に mouse-up を送る。送らずに Pressed だけ戻すと、
+            // 実際にトリガーを離したときには「既に離している」扱いで何も送られず、
+            // CEF 側はボタンが押されたまま（:active・ドラッグ状態が残る）になる。
             if (pointer.LastUv.HasValue)
             {
+                if (pointer.Pressed)
+                {
+                    SendMouseClick(pointer.LastUv.Value, pressed: false);
+                    pointer.Pressed = false;
+                }
                 SendMouseMove(pointer, mouseLeave: true);
             }
 
@@ -200,8 +212,19 @@ internal sealed class OverlayPointer : IDisposable
         var browser = _target?.Browser;
         if (browser == null || pointer.LastUv == null) return;
         var (x, y) = ToBrowserPixels(pointer.LastUv.Value, browser);
-        browser.GetBrowser().GetHost().SendMouseMoveEvent(x, y, mouseLeave,
+        TryGetHost(browser)?.SendMouseMoveEvent(x, y, mouseLeave,
             pointer.Pressed ? CefEventFlags.LeftMouseButton : CefEventFlags.None);
+    }
+
+    /// <summary>
+    /// CEFブラウザの生成完了前・破棄後は GetBrowser() が使えない（null または例外）ため、
+    /// 入力を送れる状態のときだけホストを返す。SteamVR/sidecar 起動直後にトリガーを
+    /// 引くとこの状態でクリックが届き、MainLoop スレッドの未処理例外でプロセスが落ちていた。
+    /// </summary>
+    private static IBrowserHost? TryGetHost(OffscreenBrowser browser)
+    {
+        if (browser.IsDisposed || !browser.IsBrowserInitialized) return null;
+        return browser.GetBrowser()?.GetHost();
     }
 
     /// <summary>UV原点(左下)とCEFのピクセル原点(左上)でY軸が逆になるため反転する。</summary>
@@ -231,26 +254,41 @@ internal sealed class OverlayPointer : IDisposable
         };
         if (pointer == null) return;
 
-        Vector2? uv;
         lock (pointer)
         {
             if (pointer.Pressed == pressed) return;
-            pointer.Pressed = pressed;
-            uv = pointer.LastUv;
-        }
+            var uv = pointer.LastUv;
+            if (pressed && (_target?.Browser == null || uv == null || _target?.IsShown != true))
+            {
+                // パネル外で押した場合はボタン押下として扱わない。Pressed を立てると、
+                // そのままパネルに入ったときにボタン押下付きの移動（ドラッグ）になり、
+                // 離したときに mouse-down 無しの mouse-up が届く。
+                // #37フォローアップ: LastUvはRenderLoopスレッドが次ティックでクリアするまで
+                // 残るため、Dashboardが開いた直後の数msはIsShownを見ないと隠れたパネルへ
+                // クリックが漏れる（UpdateForController側のIsShownチェックだけでは防げない）。
+                // パネルを狙っていないトリガーは VRChat の通常操作なのでログを出さない。
+                if (uv != null && _target?.IsShown == true)
+                {
+                    Console.WriteLine("[steamvr] クリックを無視: ブラウザ未生成");
+                }
+                return;
+            }
 
-        var browser = _target?.Browser;
-        if (browser == null || uv == null || _target?.IsShown != true)
-        {
-            // #37フォローアップ: LastUvはRenderLoopスレッドが次ティックでクリアするまで
-            // 残るため、Dashboardが開いた直後の数msはIsShownを見ないと隠れたパネルへ
-            // クリックが漏れる（UpdateForController側のIsShownチェックだけでは防げない）。
-            Console.WriteLine($"[steamvr] クリックを無視: browser={(browser == null ? "null" : "ok")} LastUv={(uv == null ? "null(パネルに当たっていない)" : "ok")} IsShown={_target?.IsShown}");
-            return;
+            pointer.Pressed = pressed;
+            // 離したときにパネル外なら、Hide() が外れた時点で mouse-up を送り済み。
+            if (uv == null) return;
+            Console.WriteLine($"[steamvr] クリック送信: role={role} pressed={pressed}");
+            SendMouseClick(uv.Value, pressed);
         }
-        var (x, y) = ToBrowserPixels(uv.Value, browser);
-        Console.WriteLine($"[steamvr] クリック送信: role={role} pressed={pressed} x={x} y={y}");
-        browser.GetBrowser().GetHost().SendMouseClickEvent(x, y, MouseButtonType.Left, mouseUp: !pressed, clickCount: 1, CefEventFlags.None);
+    }
+
+    /// <summary>呼び出し元が pointer を lock している前提。</summary>
+    private void SendMouseClick(Vector2 uv, bool pressed)
+    {
+        var browser = _target?.Browser;
+        if (browser == null) return;
+        var (x, y) = ToBrowserPixels(uv, browser);
+        TryGetHost(browser)?.SendMouseClickEvent(x, y, MouseButtonType.Left, mouseUp: !pressed, clickCount: 1, CefEventFlags.None);
     }
 
     /// <summary>
@@ -286,7 +324,7 @@ internal sealed class OverlayPointer : IDisposable
 
         var (x, y) = ToBrowserPixels(uv.Value, browser);
         var wheelDeltaY = (int)(deltaY * ScrollPixelsPerUnit);
-        browser.GetBrowser().GetHost().SendMouseWheelEvent(x, y, 0, wheelDeltaY, CefEventFlags.None);
+        TryGetHost(browser)?.SendMouseWheelEvent(x, y, 0, wheelDeltaY, CefEventFlags.None);
     }
 
     public void Dispose()

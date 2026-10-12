@@ -6,6 +6,7 @@ import { VRChatAuthService } from '../../core/services/vrchat-auth.service';
 import { AvatarCardComponent, CardContextMenuEvent } from '../../shared/components/avatar-card/avatar-card.component';
 import { IconComponent } from '../../shared/components/icon/icon.component';
 import { VRCAvatar, AvatarFolder } from '../../core/models/avatar.model';
+import { errorMessage } from '../../core/utils/error.util';
 
 type DropdownName = 'sort' | 'bulk';
 type ToastKind = 'success' | 'error';
@@ -143,37 +144,69 @@ export class AvatarsViewComponent implements OnInit {
   ) {}
 
   async ngOnInit() {
-    await this.avatarService.ensureLoaded();
+    await this.runWithErrorToast(() => this.avatarService.ensureLoaded(), 'アバター一覧の取得に失敗しました');
+  }
+
+  async onRefresh() {
+    await this.runWithErrorToast(() => this.avatarService.refresh(), 'アバター一覧の更新に失敗しました');
   }
 
   async onSwitch(avatarId: string) {
-    try {
-      await this.avatarService.switchAvatar(avatarId);
-      this.showToast('アバターを切り替えました');
-    } catch (e: unknown) {
-      console.error(e);
-    }
+    const ok = await this.runWithErrorToast(
+      () => this.avatarService.switchAvatar(avatarId),
+      'アバターの切り替えに失敗しました',
+    );
+    if (ok) this.showToast('アバターを切り替えました');
   }
 
   async createFolder() {
     if (!this.newFolderName.trim()) return;
-    await this.avatarService.createFolder(this.newFolderName.trim());
+    const ok = await this.runWithErrorToast(
+      () => this.avatarService.createFolder(this.newFolderName.trim()),
+      'フォルダの作成に失敗しました',
+    );
+    if (!ok) return;
     this.newFolderName = '';
     this.showNewFolderInput.set(false);
   }
 
   async onAddToFolder(avatarId: string, folderId: string) {
-    await this.avatarService.addAvatarToFolder(folderId, avatarId);
+    await this.runWithErrorToast(
+      () => this.avatarService.addAvatarToFolder(folderId, avatarId),
+      'フォルダへの追加に失敗しました',
+    );
   }
 
   async onRemoveFromFolder(avatarId: string, folderId: string) {
-    await this.avatarService.removeAvatarFromFolder(folderId, avatarId);
+    await this.runWithErrorToast(
+      () => this.avatarService.removeAvatarFromFolder(folderId, avatarId),
+      'フォルダからの削除に失敗しました',
+    );
   }
 
   async deleteFolder(folder: AvatarFolder) {
-    await this.avatarService.deleteFolder(folder.id);
-    if (this.selectedFolderId() === folder.id) {
+    const ok = await this.runWithErrorToast(
+      () => this.avatarService.deleteFolder(folder.id),
+      'フォルダの削除に失敗しました',
+    );
+    if (ok && this.selectedFolderId() === folder.id) {
       this.selectedFolderId.set(null);
+    }
+  }
+
+  /**
+   * 失敗時にバックエンドのメッセージ付きでトーストを出す。成功したら true。
+   * テンプレートのイベントから呼ばれる async 処理の失敗を unhandled rejection にせず、
+   * ユーザーに見える形で知らせるため。
+   */
+  private async runWithErrorToast(action: () => Promise<unknown>, label: string): Promise<boolean> {
+    try {
+      await action();
+      return true;
+    } catch (e: unknown) {
+      console.error(e);
+      this.showToast(`${label}: ${errorMessage(e, '不明なエラー')}`, 'error');
+      return false;
     }
   }
 
@@ -206,9 +239,9 @@ export class AvatarsViewComponent implements OnInit {
     const folder = this.avatarService.folders().find(f => f.id === folderId);
     if (!folder) return;
     if (folder.avatarIds.includes(avatar.id)) {
-      await this.avatarService.removeAvatarFromFolder(folderId, avatar.id);
+      await this.onRemoveFromFolder(avatar.id, folderId);
     } else {
-      await this.avatarService.addAvatarToFolder(folderId, avatar.id);
+      await this.onAddToFolder(avatar.id, folderId);
     }
     this.cardMenuAvatar.set(null);
   }
@@ -242,8 +275,11 @@ export class AvatarsViewComponent implements OnInit {
   async confirmRenameFolder() {
     const id = this.renamingFolderId();
     if (!id || !this.renamingFolderName.trim()) return;
-    await this.avatarService.renameFolder(id, this.renamingFolderName.trim());
-    this.renamingFolderId.set(null);
+    const ok = await this.runWithErrorToast(
+      () => this.avatarService.renameFolder(id, this.renamingFolderName.trim()),
+      'フォルダ名の変更に失敗しました',
+    );
+    if (ok) this.renamingFolderId.set(null);
   }
 
   cancelRenameFolder() {
@@ -310,10 +346,22 @@ export class AvatarsViewComponent implements OnInit {
   private showToast(msg: string, kind: ToastKind = 'success') {
     this.toastKind.set(kind);
     this.successMessage.set(msg);
-    setTimeout(() => this.successMessage.set(null), 2500);
+    // 前のトーストのタイマーが残っていると、新しいトーストを早く消してしまう。
+    if (this.toastTimer !== null) clearTimeout(this.toastTimer);
+    this.toastTimer = setTimeout(() => {
+      this.successMessage.set(null);
+      this.toastTimer = null;
+    }, 2500);
   }
 
+  /** 編集セッションの通し番号。パネルの開閉・編集の開始/取消で進める。
+   *  画像の読み込み・加工は非同期なので、完了時に番号が変わっていれば結果を捨て、
+   *  別のアバターの編集に画像が紛れ込まないようにする。 */
+  private editSession = 0;
+  private toastTimer: ReturnType<typeof setTimeout> | null = null;
+
   openDetailPanel(avatar: VRCAvatar) {
+    this.editSession++;
     this._detailAvatarId.set(avatar.id);
     this.detailHighResLoaded.set(false);
     this.detailEditMode.set(false);
@@ -321,6 +369,7 @@ export class AvatarsViewComponent implements OnInit {
   }
 
   closeDetailPanel() {
+    this.editSession++;
     this._detailAvatarId.set(null);
     this.detailEditMode.set(false);
     this.detailEditThumbnail.set(null);
@@ -356,12 +405,14 @@ export class AvatarsViewComponent implements OnInit {
       this.avatarService.avatars().find(a => a.id === av.id) ??
       this.avatarService.favorites().find(a => a.id === av.id);
     this.detailEditName = originalAvatar?.name ?? av.name;
+    this.editSession++;
     this.detailEditThumbnail.set(null);
     this.detailEditError.set(null);
     this.detailEditMode.set(true);
   }
 
   cancelEdit() {
+    this.editSession++;
     this.detailEditMode.set(false);
     this.detailEditThumbnail.set(null);
     this.detailEditError.set(null);
@@ -371,14 +422,16 @@ export class AvatarsViewComponent implements OnInit {
     const input = event.target as HTMLInputElement;
     const file = input.files?.[0];
     if (!file) return;
+    const session = this.editSession;
     const reader = new FileReader();
     reader.onload = async () => {
       try {
         const processed = await this.processAvatarImage(reader.result as string);
+        if (session !== this.editSession) return;
         this.detailEditThumbnail.set(processed);
       } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : String(e);
-        this.detailEditError.set(msg);
+        if (session !== this.editSession) return;
+        this.detailEditError.set(errorMessage(e, '画像の読み込みに失敗しました'));
       }
     };
     reader.readAsDataURL(file);
@@ -450,11 +503,12 @@ export class AvatarsViewComponent implements OnInit {
   get editPreviewThumb(): string {
     const av = this.detailAvatar()!;
     const newThumb = this.detailEditThumbnail();
-    if (newThumb === 'reset') return av.imageUrl ?? av.thumbnailImageUrl;
+    // Rust 側は欠けた URL を空文字列で返すため、?? ではなく || で次へ回す。
+    if (newThumb === 'reset') return av.imageUrl || av.thumbnailImageUrl;
     if (newThumb) return newThumb;
     // null = 変更なし → 既存オーバーライドまたは VRChat 高解像度 URL
     const ov = this.avatarService.overrides()[av.id];
-    return ov?.customThumbnail ?? av.imageUrl ?? av.thumbnailImageUrl;
+    return ov?.customThumbnail || av.imageUrl || av.thumbnailImageUrl;
   }
 
   /** 現在カスタムサムネイルが設定されているか（リセット前提の表示に使用） */
@@ -497,12 +551,12 @@ export class AvatarsViewComponent implements OnInit {
         }
       }
 
+      this.editSession++;
       this.detailEditMode.set(false);
       this.detailEditThumbnail.set(null);
       this.showToast('変更を保存しました');
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e);
-      this.detailEditError.set(msg || '保存に失敗しました');
+      this.detailEditError.set(errorMessage(e, '保存に失敗しました'));
     } finally {
       this.detailEditSaving.set(false);
     }

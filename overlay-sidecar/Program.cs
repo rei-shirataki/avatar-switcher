@@ -7,7 +7,7 @@ namespace AvatarSwitcher.OverlaySidecar;
 
 /// <summary>
 /// SteamVR オーバーレイサイドカーのエントリポイント。
-/// Rust コア (avatar-switcher 本体) から --ws-port / --token を渡されて起動する。
+/// Rust コア (avatar-switcher 本体) から --ws-port を、標準入力でトークンを渡されて起動する。
 ///
 /// M1: CEFのオフスクリーン描画 → D3D11テクスチャ → SteamVRオーバーレイの
 /// パイプラインと、コントローラーのトリガークリックの疎通を実装。
@@ -15,7 +15,11 @@ namespace AvatarSwitcher.OverlaySidecar;
 /// </summary>
 internal static class Program
 {
-    private static async Task<int> Main(string[] args)
+    /// <summary>
+    /// Cef.Initialize と Cef.Shutdown は同じスレッドで呼ぶ必要があるため、Main は同期で書き、
+    /// メインスレッド上で両方を呼ぶ（async Main だと await の前後でスレッドが変わり得る）。
+    /// </summary>
+    private static int Main(string[] args)
     {
         // 標準出力はRust側でファイルへリダイレクトされる。既定の出力エンコーディングは
         // コンソール未接続時にOSごとのコードページに揺れ、ログの日本語が文字化けするため固定する。
@@ -24,7 +28,17 @@ internal static class Program
         var options = CliOptions.Parse(args);
         if (options == null)
         {
-            Console.Error.WriteLine("usage: overlay-sidecar --ws-port <port> --token <token>");
+            Console.Error.WriteLine(
+                "usage: overlay-sidecar --ws-port <port> [--ui-port <port>] [--placement-mode hand|space] [--token <token>]\n" +
+                "  --token を省略した場合は標準入力の1行目をトークンとして読む");
+            return 1;
+        }
+
+        var tokenFromStdin = options.Token == null;
+        var token = options.Token ?? Console.In.ReadLine()?.Trim();
+        if (string.IsNullOrEmpty(token))
+        {
+            Console.Error.WriteLine("[steamvr] WSブリッジのトークンが渡されていません");
             return 1;
         }
 
@@ -37,40 +51,79 @@ internal static class Program
             e.Cancel = true;
             cts.Cancel();
         };
+        if (tokenFromStdin)
+        {
+            WatchParentViaStdin(cts);
+        }
 
-        await using var bridge = new WsBridgeClient(options.WsPort, options.Token);
+        var bridge = new WsBridgeClient(options.WsPort, token);
         try
         {
-            await bridge.ConnectAsync(cts.Token);
-        }
-        catch (Exception e)
-        {
-            // Rust コア側の監視ループ (steamvr::sidecar::spawn) がバックオフ付きで
-            // 再起動するため、ここでは接続失敗時に非0で終了するだけでよい。
-            Console.Error.WriteLine($"[steamvr] WSブリッジへの接続に失敗しました: {e.Message}");
-            return 1;
-        }
+            try
+            {
+                bridge.ConnectAsync(cts.Token).GetAwaiter().GetResult();
+            }
+            catch (OperationCanceledException) when (cts.IsCancellationRequested)
+            {
+                return 0;
+            }
+            catch (Exception e)
+            {
+                // Rust コア側の監視ループ (steamvr::sidecar::spawn) がバックオフ付きで
+                // 再起動するため、ここでは接続失敗時に非0で終了するだけでよい。
+                Console.Error.WriteLine($"[steamvr] WSブリッジへの接続に失敗しました: {e.Message}");
+                return 1;
+            }
 
-        if (!InitCef())
-        {
-            return 1;
-        }
+            if (!InitCef())
+            {
+                return 1;
+            }
 
-        try
-        {
-            new OverlayManager(bridge, options.UiPort, options.PlacementMode, cts.Token).Run();
-            await Task.Delay(Timeout.Infinite, cts.Token);
-        }
-        catch (OperationCanceledException)
-        {
-            // Ctrl+C 等による正常終了。
+            var manager = new OverlayManager(bridge, options.UiPort, options.PlacementMode, cts.Token);
+            manager.Run();
+            cts.Token.WaitHandle.WaitOne();
+
+            // MainLoop が最後の Deactivate（オーバーレイ・ブラウザの破棄）を終えてから CEF を止める。
+            if (!manager.WaitForExit(TimeSpan.FromSeconds(5)))
+            {
+                Console.Error.WriteLine("[steamvr] OverlayManager の停止待ちがタイムアウトしました");
+            }
+            Cef.Shutdown();
+            Console.WriteLine("[steamvr] 正常に終了しました");
+            return 0;
         }
         finally
         {
-            Cef.Shutdown();
+            bridge.DisposeAsync().AsTask().GetAwaiter().GetResult();
         }
+    }
 
-        return 0;
+    /// <summary>
+    /// Rust コアはサイドカーの生存中ずっと標準入力を開いたままにし、終了させたいとき
+    /// （アプリ終了時）に閉じる。アプリがクラッシュ・強制終了した場合も OS がパイプを
+    /// 閉じるので、EOF を検知したら正常終了する（検知しないと WS の再接続を永久に
+    /// 続ける孤児プロセスになり、次に起動したサイドカーとオーバーレイを取り合う）。
+    /// </summary>
+    private static void WatchParentViaStdin(CancellationTokenSource cts)
+    {
+        new Thread(() =>
+        {
+            try
+            {
+                while (Console.In.Read() != -1)
+                {
+                }
+            }
+            catch (Exception e)
+            {
+                Console.Error.WriteLine($"[steamvr] 標準入力の監視に失敗: {e.Message}");
+            }
+
+            Console.WriteLine("[steamvr] 親プロセスとの標準入力が閉じたため終了します");
+            cts.Cancel();
+        })
+        { IsBackground = true, Name = "stdin-watch" }.Start();
     }
 
     /// <summary>
@@ -122,6 +175,12 @@ internal static class Program
             "com.rei-shirataki.avatar-switcher", "overlay-cef-cache");
         CleanupStaleCaches(cacheRoot);
         settings.RootCachePath = Path.Combine(cacheRoot, Environment.ProcessId.ToString());
+        // 既定では exe と同じディレクトリに INFO レベルの debug.log がローテーション無しで
+        // 書かれ、JS のコンソール出力もページ URL 付きで残る。エラーのみにし、
+        // 終了済みPIDのディレクトリごと掃除されるキャッシュ配下へ書く。
+        Directory.CreateDirectory(settings.RootCachePath);
+        settings.LogFile = Path.Combine(settings.RootCachePath, "cef.log");
+        settings.LogSeverity = LogSeverity.Error;
         settings.CachePath = "";
         settings.PersistSessionCookies = false;
         settings.CefCommandLineArgs.Add("disable-features", "MetricsService,PersistentHistograms");

@@ -6,6 +6,7 @@ import { TauriService } from '../../core/services/tauri.service';
 import { EyeHeightService, EYE_HEIGHT_MIN, EYE_HEIGHT_MAX } from '../../core/services/eye-height.service';
 import { Router } from '@angular/router';
 import { VRCUser } from '../../core/models/auth.model';
+import { errorMessage } from '../../core/utils/error.util';
 
 interface OscStatus {
   port: number;
@@ -264,6 +265,7 @@ export class SettingsViewComponent implements OnInit {
   readonly heightLimitMax = EYE_HEIGHT_MAX;
 
   private pollHandle: ReturnType<typeof setInterval> | null = null;
+  private destroyed = false;
 
   constructor(
     public auth: VRChatAuthService,
@@ -273,6 +275,7 @@ export class SettingsViewComponent implements OnInit {
   ) {
     // 設定画面破棄時にポーリングを止める。
     inject(DestroyRef).onDestroy(() => {
+      this.destroyed = true;
       if (this.pollHandle !== null) {
         clearInterval(this.pollHandle);
         this.pollHandle = null;
@@ -293,6 +296,10 @@ export class SettingsViewComponent implements OnInit {
     if (overlaySettings) {
       this.placementMode.set(overlaySettings.placementMode);
     }
+
+    // 上の await 中に画面を離れていたら onDestroy は既に済んでいるので、
+    // ここで interval を張ると誰にも止められず画面を開くたびに積み上がる。
+    if (this.destroyed) return;
 
     // VRChat の後起動を検知するため、設定画面表示中だけ短い間隔で polling する。
     this.pollHandle = setInterval(async () => {
@@ -343,7 +350,13 @@ export class SettingsViewComponent implements OnInit {
   }
 
   async logout(): Promise<void> {
-    await this.auth.logout();
+    try {
+      await this.auth.logout();
+    } catch (e: unknown) {
+      console.error(e);
+      window.alert(`ログアウトに失敗しました: ${errorMessage(e, '不明なエラー')}`);
+      return;
+    }
     this.router.navigate(['/login']);
   }
 }

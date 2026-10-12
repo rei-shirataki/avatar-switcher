@@ -116,6 +116,12 @@ fn content_type_for(path: &Path) -> &'static str {
     }
 }
 
+/// `connect-src` は WS ブリッジ（127.0.0.1 の動的ポート）のみ。画像は VRChat の
+/// CDN（https）とローカルオーバーライドの data: URL を表示するため許可する。
+const OVERLAY_CSP: &str = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; \
+     img-src 'self' https: data: blob:; font-src 'self' data:; connect-src ws://127.0.0.1:*; \
+     base-uri 'self'; form-action 'none'; frame-ancestors 'none'";
+
 async fn write_response(
     stream: &mut tokio::net::TcpStream,
     status: u16,
@@ -128,8 +134,12 @@ async fn write_response(
         404 => "Not Found",
         _ => "Error",
     };
+    // overlay-ui は WS トークンを扱うページなので、本体ウィンドウ（tauri.conf.json の csp）
+    // と同等の CSP を付け、外部スクリプトの読み込みや外部への送信を防ぐ。
     let header = format!(
-        "HTTP/1.1 {status} {status_text}\r\nContent-Type: {content_type}\r\nContent-Length: {len}\r\nConnection: close\r\n\r\n",
+        "HTTP/1.1 {status} {status_text}\r\nContent-Type: {content_type}\r\nContent-Length: {len}\r\n\
+         Content-Security-Policy: {OVERLAY_CSP}\r\nX-Content-Type-Options: nosniff\r\n\
+         Referrer-Policy: no-referrer\r\nConnection: close\r\n\r\n",
         status = status,
         status_text = status_text,
         content_type = content_type,

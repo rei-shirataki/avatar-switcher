@@ -50,7 +50,7 @@
       (click)="toggleSelectionMode()"
       title="複数選択"
     ><pixiv-icon name="16/Check"></pixiv-icon></button>
-    <button class="w-[34px] h-[34px] bg-container-secondary border border-transparent rounded-ch-m text-text-secondary text-base cursor-pointer flex items-center justify-center transition-colors duration-150 hover:bg-container-tertiary" (click)="avatarService.refresh()" title="再読み込み"><pixiv-icon name="24/Reload" fixed-size="16" style="--charcoal-icon-size: 16px"></pixiv-icon></button>
+    <button class="w-[34px] h-[34px] bg-container-secondary border border-transparent rounded-ch-m text-text-secondary text-base cursor-pointer flex items-center justify-center transition-colors duration-150 hover:bg-container-tertiary" (click)="onRefresh()" title="再読み込み"><pixiv-icon name="24/Reload" fixed-size="16" style="--charcoal-icon-size: 16px"></pixiv-icon></button>
   </div>
 
   <!-- Bulk action bar -->

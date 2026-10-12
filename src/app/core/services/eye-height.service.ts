@@ -196,6 +196,8 @@ export class EyeHeightService {
   private _prefabHeight: number | null = null;
   /** 直近の /avatar/change 受信時刻。AVATAR_SETTLE_MS の起点。 */
   private _lastAvatarChangeAt = Number.NEGATIVE_INFINITY;
+  /** アバター切替のたびに増える世代。非同期の問い合わせ結果が切替前のものか判定する。 */
+  private _avatarGeneration = 0;
 
   constructor(private tauri: TauriService) {
     // limitEnabled の真の情報源はRust storage（SteamVRオーバーレイとWSブリッジ経由で
@@ -254,6 +256,8 @@ export class EyeHeightService {
       if (v !== null && !this.isAvatarSettling()) this._worldMaxHeight.set(v);
     }));
     this.registerListener(listen<boolean>('osc:eye-height-scaling-allowed', e => {
+      // 他のペイロードと同じく型を確認してから使う。
+      if (typeof e.payload !== 'boolean') return;
       if (!this.isAvatarSettling()) this._scalingAllowed.set(e.payload);
     }));
 
@@ -412,12 +416,19 @@ export class EyeHeightService {
   /** 増減ボタン用：起点は補間中の中間値ではなく _target（直近の目標値）。
    *  これでスムーズモードで連打しても期待通りの累計分だけ動く。 */
   async adjust(delta: number): Promise<void> {
-    await this.setValue(this._target() + delta);
+    const current = this._target();
+    const next = this.normalize(current + delta);
+    // VRChat 側で範囲外（ワールドが許可する 5m 超など）に設定されている場合、
+    // クランプの結果がボタンの向きと逆に動く（+0.01 で 8m → 5m）ことがあるので送らない。
+    if ((delta > 0 && next < current) || (delta < 0 && next > current)) return;
+    await this.setValue(next);
   }
 
   /** VRChat から受け取った値を再送なしで反映する。
    *  生の float（例: 1.6000001）が来るので、ボタン操作と同じ 0.01 桁に
-   *  正規化して格納し、表示と次回 adjust() の起点が常にクリーンに保たれるようにする。
+   *  丸めて格納し、表示と次回 adjust() の起点が常にクリーンに保たれるようにする。
+   *  アプリの範囲ではクランプしない。ワールドが 5m 超を許可している場合などに
+   *  実際と違う値を表示・保存し、次の操作でその値へ縮めてしまうため。
    *  スムージング進行中、および直近の自前送信から ECHO_SUPPRESS_MS 以内のエコーは
    *  「自分が投げた値が戻ってきただけ」とみなして無視する。スムーズ終端直後の
    *  遅延エコーで _target が中間値に巻き戻る race を防ぐ。 */
@@ -426,7 +437,7 @@ export class EyeHeightService {
     if (v === null) return;
     if (this._isSmoothing()) return;
     if (performance.now() - this._lastSelfSendAt < ECHO_SUPPRESS_MS) return;
-    const normalized = this.normalize(v);
+    const normalized = Math.round(v * 100) / 100;
     // ここまで来た時点で自前送信の影響はないが、アバター切替直後の残響だけは
     // 別途除外してプレハブ身長の計算入力に採用する。
     if (this.isSteadyState()) {
@@ -462,6 +473,7 @@ export class EyeHeightService {
   }
 
   private onAvatarChange(): void {
+    this._avatarGeneration++;
     this._scaleFactor = null;
     this._scaleModified = null;
     this._lastEcho = null;
@@ -535,9 +547,14 @@ export class EyeHeightService {
   async getAvatarDefault(): Promise<number> {
     if (this._prefabHeight != null) return this._prefabHeight;
     this._fetchingDefault.set(true);
+    const generation = this._avatarGeneration;
     try {
       const snapshot = await this.tauri.invoke<AvatarScaleSnapshot>('osc_query_avatar_scale_snapshot');
       const computed = this.computePrefabFromSnapshot(snapshot);
+      // 問い合わせ中にアバターが変わっていたら、前のアバターの値は使わずに問い合わせ直す
+      // （onAvatarChange で消したキャッシュを古い値で埋め戻すと、以降のリセットが
+      // 前のアバターの身長になる）。
+      if (generation !== this._avatarGeneration) return await this.getAvatarDefault();
       if (computed != null) {
         this._prefabHeight = computed;
         return computed;

@@ -34,7 +34,9 @@ fn save_value<T: Serialize + ?Sized>(app: &AppHandle, key: &str, value: &T) -> R
         .map_err(|e| format!("設定ストアを開けませんでした: {e}"))?;
     let json = serde_json::to_value(value).map_err(|e| e.to_string())?;
     store.set(key, json);
-    store.save().map_err(|e| format!("設定の保存に失敗しました: {e}"))
+    // ファイルへの同期書き込み。カスタムサムネイル（data URL）を含むと大きくなるため、
+    // async ワーカーを塞がないよう block_in_place で実行する（ランタイム外では素通し）。
+    tokio::task::block_in_place(|| store.save()).map_err(|e| format!("設定の保存に失敗しました: {e}"))
 }
 
 /// 参照系コマンド用。読み込み失敗は既定値で返しログに残す（書き込みはしないので安全）。
@@ -96,16 +98,22 @@ pub async fn folders_create(app: AppHandle, name: String) -> Result<AvatarFolder
     Ok(folder)
 }
 
+/// フォルダ名だけを変更する。以前はフォルダ全体（avatarIds を含む）をフロントの
+/// スナップショットで置き換えていたため、追加の完了前に名前を変えると、
+/// 追加したアバターがフォルダから消えていた。
 #[tauri::command]
-pub async fn folders_update(app: AppHandle, folder: AvatarFolder) -> Result<(), String> {
-    validate_folder_name(&folder.name)?;
+pub async fn folders_rename(app: AppHandle, folder_id: String, name: String) -> Result<AvatarFolder, String> {
+    validate_folder_name(&name)?;
     let _guard = FOLDERS_LOCK.lock().await;
     let mut folders = load_folders(&app)?;
-    if let Some(f) = folders.iter_mut().find(|f| f.id == folder.id) {
-        *f = folder;
-    }
+    let folder = folders
+        .iter_mut()
+        .find(|f| f.id == folder_id)
+        .ok_or_else(|| "フォルダが見つかりません".to_string())?;
+    folder.name = name;
+    let renamed = folder.clone();
     save_folders(&app, &folders)?;
-    Ok(())
+    Ok(renamed)
 }
 
 #[tauri::command]

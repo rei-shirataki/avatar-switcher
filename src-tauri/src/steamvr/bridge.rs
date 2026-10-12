@@ -3,10 +3,10 @@
 //!
 //! `osc::is_trusted_src` と同じ「信頼境界を明示チェックする」流儀を踏襲する:
 //! loopback 以外からの接続は即座に拒否し、さらに接続直後の最初のメッセージで
-//! トークン認証を行う（トークンはサイドカー起動時の CLI 引数、および
-//! overlay-ui へは URL クエリ経由でのみ渡される）。
+//! トークン認証を行う（トークンはサイドカーへは起動時の標準入力、
+//! overlay-ui へは URL フラグメント経由でのみ渡される）。
 
-use crate::steamvr::protocol::{ClientMessage, ServerMessage};
+use crate::steamvr::protocol::{request_id_of, ClientMessage, Reply, ServerMessage};
 use crate::vrchat::models::VRCAvatar;
 use crate::{storage, vrchat};
 use futures_util::{SinkExt, StreamExt};
@@ -19,6 +19,7 @@ use std::time::Duration;
 use tauri::AppHandle;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::broadcast;
+use tokio_tungstenite::tungstenite::protocol::WebSocketConfig;
 use tokio_tungstenite::tungstenite::Message;
 
 /// SteamVR の稼働状態。overlay-sidecar からの `sidecar.steamvr-status` で更新される。
@@ -27,7 +28,8 @@ pub(crate) static STEAMVR_RUNNING: AtomicBool = AtomicBool::new(false);
 
 /// `avatar-changed` 等、Rust側から能動的に全WSクライアントへ push するための
 /// チャンネル。各接続がこれを subscribe し、自分の書き込み側へ転送する。
-static PUSH_TX: Lazy<broadcast::Sender<ServerMessage>> = Lazy::new(|| broadcast::channel(16).0);
+/// 身長の OSC エコーは短時間に連続して届くため、少し余裕を持たせる。
+static PUSH_TX: Lazy<broadcast::Sender<ServerMessage>> = Lazy::new(|| broadcast::channel(64).0);
 
 /// `osc/mod.rs` の `/avatar/change` 受信ハンドラから呼ばれる。
 /// 購読者がいない（overlay-ui未接続）場合の送信失敗は無視してよい。
@@ -71,9 +73,22 @@ pub(crate) fn broadcast_eye_height_settings(limit_enabled: bool) {
 /// hello メッセージの受信を待つ最大時間。これを過ぎたら未認証とみなし切断する。
 const HELLO_TIMEOUT: Duration = Duration::from_secs(5);
 
+/// クライアントから受け取るメッセージ・フレームの上限。クライアントが送るのは
+/// hello やアバターID程度の小さな JSON だけなので、既定（64MiB）では大きすぎる。
+/// 認証前の接続からも巨大なメッセージでメモリを消費させられないようにする。
+const MAX_INCOMING_MESSAGE_BYTES: usize = 64 * 1024;
+
+fn ws_config() -> WebSocketConfig {
+    WebSocketConfig {
+        max_message_size: Some(MAX_INCOMING_MESSAGE_BYTES),
+        max_frame_size: Some(MAX_INCOMING_MESSAGE_BYTES),
+        ..Default::default()
+    }
+}
+
 /// WS サーバーを 127.0.0.1 の空きポートに bind し、受け入れループを spawn する。
 /// 戻り値は bind したポート番号（サイドカー起動時の引数、overlay-ui への
-/// URL クエリに渡す）。
+/// URL フラグメントに渡す）。
 pub(crate) async fn start(app: AppHandle, token: Arc<str>) -> anyhow::Result<u16> {
     let listener = TcpListener::bind("127.0.0.1:0").await?;
     let port = listener.local_addr()?.port();
@@ -144,7 +159,9 @@ fn constant_time_eq(a: &str, b: &str) -> bool {
 }
 
 async fn handle_connection(stream: TcpStream, peer: SocketAddr, app: AppHandle, token: Arc<str>) {
-    let ws_stream = match tokio_tungstenite::accept_hdr_async(stream, check_origin).await {
+    let accepted =
+        tokio_tungstenite::accept_hdr_async_with_config(stream, check_origin, Some(ws_config())).await;
+    let ws_stream = match accepted {
         Ok(s) => s,
         Err(e) => {
             log::warn!("[steamvr] WSハンドシェイク失敗 ({}): {}", peer, e);
@@ -171,7 +188,7 @@ async fn handle_connection(stream: TcpStream, peer: SocketAddr, app: AppHandle, 
 
     let mut push_rx = PUSH_TX.subscribe();
     // 低速リクエスト(ネットワーク待ち)の応答を書き込み側へ戻すチャンネル。
-    let (reply_tx, mut reply_rx) = tokio::sync::mpsc::unbounded_channel::<ServerMessage>();
+    let (reply_tx, mut reply_rx) = tokio::sync::mpsc::unbounded_channel::<Reply>();
     loop {
         tokio::select! {
             incoming = read.next() => {
@@ -184,11 +201,11 @@ async fn handle_connection(stream: TcpStream, peer: SocketAddr, app: AppHandle, 
                             let app = app.clone();
                             let reply_tx = reply_tx.clone();
                             tokio::spawn(async move {
-                                if let Some(reply) = handle_message(&app, &text).await {
+                                if let Some(reply) = handle_request(&app, &text).await {
                                     let _ = reply_tx.send(reply);
                                 }
                             });
-                        } else if let Some(reply) = handle_message(&app, &text).await {
+                        } else if let Some(reply) = handle_request(&app, &text).await {
                             if send(&mut write, &reply).await.is_err() {
                                 break;
                             }
@@ -211,8 +228,17 @@ async fn handle_connection(stream: TcpStream, peer: SocketAddr, app: AppHandle, 
                         }
                     }
                     // 受信が追いつかず古いイベントが破棄された場合はスキップして継続する
-                    // （avatar-changed は最新状態だけ分かれば十分なため取りこぼしを許容）。
-                    Err(broadcast::error::RecvError::Lagged(_)) => continue,
+                    // （avatar-changed・身長は最新状態だけ分かれば十分なため取りこぼしを許容）。
+                    // ただし設定変更の通知は一度きりで再送されないため、取りこぼした可能性が
+                    // あるときは現在の設定を送り直す（overlay-ui のクランプ範囲がずれないように）。
+                    Err(broadcast::error::RecvError::Lagged(_)) => {
+                        let settings = ServerMessage::EyeHeightSettingsUpdate {
+                            limit_enabled: crate::osc::EYE_HEIGHT_LIMIT_ENABLED.load(Ordering::Relaxed),
+                        };
+                        if send(&mut write, &settings).await.is_err() {
+                            break;
+                        }
+                    }
                     Err(broadcast::error::RecvError::Closed) => break,
                 }
             }
@@ -223,7 +249,7 @@ async fn handle_connection(stream: TcpStream, peer: SocketAddr, app: AppHandle, 
 
 async fn send(
     write: &mut (impl futures_util::Sink<Message, Error = tokio_tungstenite::tungstenite::Error> + Unpin),
-    msg: &ServerMessage,
+    msg: &impl serde::Serialize,
 ) -> Result<(), ()> {
     let payload = match serde_json::to_string(msg) {
         Ok(p) => p,
@@ -243,6 +269,15 @@ fn is_slow_request(text: &str) -> bool {
             | Ok(ClientMessage::EyeHeightQuery)
             | Ok(ClientMessage::EyeHeightReset)
     )
+}
+
+/// 要求を処理し、応答があれば要求の `requestId` を付けて返す（`Reply` 参照）。
+async fn handle_request(app: &AppHandle, text: &str) -> Option<Reply> {
+    let message = handle_message(app, text).await?;
+    Some(Reply {
+        message,
+        request_id: request_id_of(text),
+    })
 }
 
 async fn handle_message(app: &AppHandle, text: &str) -> Option<ServerMessage> {
@@ -348,8 +383,9 @@ async fn handle_message(app: &AppHandle, text: &str) -> Option<ServerMessage> {
 /// 即座に返せるキャッシュ済みデータのみを使う（本体側の fresh フェッチが
 /// 完了していればそちらが自動的に反映される）。
 async fn handle_avatars_list(app: &AppHandle) -> ServerMessage {
-    let uploaded = vrchat::cache::load_avatars();
-    let favorites = vrchat::cache::load_favorites();
+    let (uploaded, favorites) = tokio::task::block_in_place(|| {
+        (vrchat::cache::load_avatars(), vrchat::cache::load_favorites())
+    });
     // avatars.service.ts::allAvatars と同じマージ規則（自前優先、重複除去）を適用する前に、
     // お気に入り/アップロード済みタブフィルタ用の所属元idセットを保持しておく。
     let uploaded_ids: Vec<String> = uploaded.iter().map(|a| a.id.clone()).collect();

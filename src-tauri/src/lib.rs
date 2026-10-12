@@ -1,3 +1,4 @@
+mod logging;
 mod vrchat;
 mod osc;
 mod storage;
@@ -11,18 +12,19 @@ use tauri::{
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    // OSC/OSCQuery の再接続調査用。RUST_LOG 未設定時は info レベルで出す。
-    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
+    // OSC/OSCQuery の再接続調査用。リリースビルドでも残るよう setup でファイル出力を足す。
+    logging::init();
 
     tauri::Builder::default()
-        .plugin(tauri_plugin_opener::init())
-        .plugin(tauri_plugin_store::Builder::new().build())
+        // single-instance は最初に登録する。後ろにあると、2つ目の起動が終了する前に
+        // 先に登録したプラグイン（設定ストアのファイル読み込み等）が初期化されてしまう。
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             if let Some(w) = app.get_webview_window("main") {
                 let _ = w.show();
                 let _ = w.set_focus();
             }
         }))
+        .plugin(tauri_plugin_store::Builder::new().build())
         .setup(|app| {
             // --- System tray ---
             let show_item = MenuItem::with_id(app, "show", "AvatarSwitcher を表示", true, None::<&str>)?;
@@ -73,6 +75,7 @@ pub fn run() {
                 .app_data_dir()
                 .unwrap_or_else(|_| std::path::PathBuf::from("."));
             std::fs::create_dir_all(&app_data_dir).ok();
+            logging::attach_file(&app_data_dir);
             vrchat::cache::init(app_data_dir);
 
             let app_handle = app.handle().clone();
@@ -134,7 +137,7 @@ pub fn run() {
             // Storage (folders)
             storage::commands::folders_get_all,
             storage::commands::folders_create,
-            storage::commands::folders_update,
+            storage::commands::folders_rename,
             storage::commands::folders_delete,
             storage::commands::folders_add_avatar,
             storage::commands::folders_add_avatars,

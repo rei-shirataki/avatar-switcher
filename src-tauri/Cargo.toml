@@ -17,7 +17,6 @@ tauri-build = { version = "2", features = [] }
 tauri = { version = "2", features = ["tray-icon"] }
 tauri-plugin-store = "2"
 tauri-plugin-single-instance = "2"
-tauri-plugin-opener = "2"
 
 # --- Async ---
 tokio = { version = "1", features = ["full"] }
@@ -49,7 +48,9 @@ uuid = { version = "1", features = ["v4"] }
 md5 = "0.7"
 
 # --- Security ---
-keyring = "3"
+# keyring v3 は feature を指定しないとメモリ上のモックストアになり、鍵が永続化されない。
+# Linux の linux-native (keyutils) は再起動で消えるため有効にせず、key.bin フォールバックに任せる。
+keyring = { version = "3", features = ["windows-native", "apple-native"] }
 chacha20poly1305 = "0.10"
 rand = "0.8"
 

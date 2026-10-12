@@ -26,8 +26,21 @@ internal sealed class D3D11Context : IDisposable
         if (adapterIndex < 0) adapterIndex = 0;
 
         using var factory = new Factory1();
-        Device = new Device(factory.GetAdapter(adapterIndex), DeviceCreationFlags.BgraSupport);
+        // Device は自分でアダプタを参照するので、取得した COM 参照はここで解放する
+        // （解放しないとアクティブ化のたびに1つずつリークする）。
+        using var adapter = factory.GetAdapter(adapterIndex);
+        Device = new Device(adapter, DeviceCreationFlags.BgraSupport);
     }
+
+    /// <summary>
+    /// GPU ドライバの更新・リセット等でデバイスが失われた例外か。失われたデバイスは
+    /// 復帰しないため、OverlayManager は資源を作り直す。
+    /// </summary>
+    public static bool IsDeviceLost(Exception ex) =>
+        ex is SharpDXException sdx
+        && (sdx.ResultCode == SharpDX.DXGI.ResultCode.DeviceRemoved
+            || sdx.ResultCode == SharpDX.DXGI.ResultCode.DeviceReset
+            || sdx.ResultCode == SharpDX.DXGI.ResultCode.DeviceHung);
 
     public void Dispose()
     {

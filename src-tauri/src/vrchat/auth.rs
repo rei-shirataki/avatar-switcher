@@ -23,11 +23,11 @@ static COOKIE_STORE: OnceCell<Arc<CookieStoreMutex>> = OnceCell::new();
 /// Primary storage path: `cookies.enc` (encrypted binary).
 /// Falls back to `cookies.json` when the OS keychain is unavailable.
 static COOKIES_PATH: OnceCell<PathBuf> = OnceCell::new();
-/// Primary path for the encryption key (reliable across restarts).
+/// Fallback path for the encryption key, used only when the OS keychain cannot
+/// hold it (and as the migration source from older versions).
 static KEY_FILE_PATH: OnceCell<PathBuf> = OnceCell::new();
 /// Per-installation encryption key, cached after first retrieval.
-/// Primary source: `key.bin` file (always written on first use).
-/// Secondary source: OS keychain (migration / additional backup).
+/// Primary source: OS keychain. Fallback: `key.bin`.
 static ENCRYPTION_KEY: OnceCell<Option<[u8; 32]>> = OnceCell::new();
 
 const KEYRING_SERVICE: &str = "avatar-switcher";
@@ -187,31 +187,96 @@ where
 /// 2. `key.bin` file — fallback for environments without a working keychain
 ///    (removed once the key is verified readable from the keychain).
 ///
-/// Returns `None` only when all sources fail; cookies are then stored as
-/// plain JSON.
+/// Returns `None` when no key can be persisted, or when the keychain is
+/// unreachable and there is no `key.bin` (see `KeyPlan::NoKeyThisSession`);
+/// cookies are then stored as plain JSON.
 fn get_encryption_key() -> Option<&'static [u8; 32]> {
     ENCRYPTION_KEY.get_or_init(init_encryption_key).as_ref()
 }
 
-fn init_encryption_key() -> Option<[u8; 32]> {
-    // Try keyring first (more secure), then key.bin as offline backup.
-    let key = try_keyring_key_load().or_else(|| try_file_key_load());
+/// キーチェーンからの鍵読み込み結果。
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum KeyringLoad {
+    Found([u8; 32]),
+    /// エントリが無い（初回起動・旧バージョンからの移行）、または中身が壊れていて使えない。
+    Missing,
+    /// キーチェーン自体にアクセスできない。一時的な障害で、保存済みの鍵が
+    /// 残っている可能性があるため、新しい鍵で上書きしてはならない。
+    Unavailable,
+}
 
-    if let Some(key) = key {
-        persist_key(&key);
-        return Some(key);
+/// 鍵の取得方針。キーチェーンと `key.bin` の状態から決める純粋関数で、
+/// I/O は `init_encryption_key` が行う。
+#[derive(Debug, PartialEq)]
+enum KeyPlan {
+    /// キーチェーンの鍵を使う。`key.bin` が同じ鍵なら不要なので削除する。
+    UseKeyring([u8; 32]),
+    /// `key.bin` の鍵をキーチェーンへ移す（旧バージョンからの移行）。
+    Migrate([u8; 32]),
+    /// 鍵がどこにも無いので新しく生成して保存する。
+    Generate,
+    /// キーチェーンが使えないので `key.bin` の鍵をそのまま使い、何も書き換えない。
+    UseFileOnly([u8; 32]),
+    /// キーチェーンが使えず `key.bin` も無い。キーチェーンに鍵が残っている
+    /// 可能性があるため、この起動では鍵を生成せず暗号化を諦める。
+    NoKeyThisSession,
+}
+
+fn plan_key(keyring: KeyringLoad, file: Option<[u8; 32]>) -> KeyPlan {
+    match (keyring, file) {
+        (KeyringLoad::Found(key), _) => KeyPlan::UseKeyring(key),
+        (KeyringLoad::Missing, Some(key)) => KeyPlan::Migrate(key),
+        (KeyringLoad::Missing, None) => KeyPlan::Generate,
+        (KeyringLoad::Unavailable, Some(key)) => KeyPlan::UseFileOnly(key),
+        (KeyringLoad::Unavailable, None) => KeyPlan::NoKeyThisSession,
     }
+}
 
-    // No persisted key found — generate a fresh one and save it.
-    let mut key = [0u8; 32];
-    OsRng.fill_bytes(&mut key);
-    log::info!("Generated new encryption key.");
+fn init_encryption_key() -> Option<[u8; 32]> {
+    let file_key = try_file_key_load();
+    match plan_key(try_keyring_key_load(), file_key) {
+        KeyPlan::UseKeyring(key) => {
+            // key.bin は平文なので、キーチェーンと同じ鍵なら残す理由が無い。
+            // 異なる場合はどちらで cookies.enc を暗号化したか判断できないため残す。
+            if file_key.is_some_and(|file_key| file_key != key) {
+                log::warn!("key.bin differs from the keyring key; keeping both.");
+            } else {
+                remove_key_file();
+            }
+            Some(key)
+        }
+        KeyPlan::Migrate(key) => {
+            persist_key(&key);
+            Some(key)
+        }
+        KeyPlan::Generate => {
+            let mut key = [0u8; 32];
+            OsRng.fill_bytes(&mut key);
+            log::info!("Generated new encryption key.");
+            if persist_key(&key) {
+                Some(key)
+            } else {
+                log::warn!("Cannot persist encryption key. Cookies will be stored unencrypted.");
+                None
+            }
+        }
+        KeyPlan::UseFileOnly(key) => {
+            log::warn!("Keyring unavailable; using key.bin without touching the keyring.");
+            Some(key)
+        }
+        KeyPlan::NoKeyThisSession => {
+            log::warn!(
+                "Keyring unavailable and no key.bin. Not generating a new key so that a key \
+                 still stored in the keyring is not overwritten; cookies are unencrypted this session."
+            );
+            None
+        }
+    }
+}
 
-    if persist_key(&key) {
-        Some(key)
-    } else {
-        log::warn!("Cannot persist encryption key. Cookies will be stored unencrypted.");
-        None
+fn remove_key_file() {
+    if let Some(key_path) = KEY_FILE_PATH.get() {
+        std::fs::remove_file(key_path).ok();
     }
 }
 
@@ -221,10 +286,8 @@ fn init_encryption_key() -> Option<[u8; 32]> {
 /// 読めない環境があり得るので、読み戻し検証に通らない場合は `key.bin` を
 /// フォールバックとして残す（鍵を失うとログインセッションも失うため）。
 fn persist_key(key: &[u8; 32]) -> bool {
-    if try_keyring_save(key) && try_keyring_key_load().as_ref() == Some(key) {
-        if let Some(key_path) = KEY_FILE_PATH.get() {
-            std::fs::remove_file(key_path).ok();
-        }
+    if try_keyring_save(key) && try_keyring_key_load() == KeyringLoad::Found(*key) {
+        remove_key_file();
         return true;
     }
     save_key_to_file(key)
@@ -245,24 +308,34 @@ fn try_file_key_load() -> Option<[u8; 32]> {
     Some(key)
 }
 
-/// Load an existing key from the OS keychain. Returns `None` if the keychain
-/// is unavailable or no valid key is stored (does NOT generate a new key).
-fn try_keyring_key_load() -> Option<[u8; 32]> {
-    let entry = keyring::Entry::new(KEYRING_SERVICE, KEYRING_ACCOUNT)
-        .map_err(|e| log::warn!("Keyring unavailable: {e}."))
-        .ok()?;
-    let b64 = entry.get_password().ok()?;
-    let bytes = base64::engine::general_purpose::STANDARD
-        .decode(b64.trim())
-        .map_err(|e| log::warn!("Keyring key is not valid base64: {e}."))
-        .ok()?;
-    if bytes.len() != 32 {
+/// Load an existing key from the OS keychain (does NOT generate a new key).
+/// "No entry" and "keychain unreachable" are reported separately so that a
+/// transient failure never leads to overwriting the stored key.
+fn try_keyring_key_load() -> KeyringLoad {
+    let entry = match keyring::Entry::new(KEYRING_SERVICE, KEYRING_ACCOUNT) {
+        Ok(entry) => entry,
+        Err(e) => {
+            log::warn!("Keyring unavailable: {e}.");
+            return KeyringLoad::Unavailable;
+        }
+    };
+    let b64 = match entry.get_password() {
+        Ok(b64) => b64,
+        Err(keyring::Error::NoEntry) => return KeyringLoad::Missing,
+        Err(e) => {
+            log::warn!("Cannot read key from keyring: {e}.");
+            return KeyringLoad::Unavailable;
+        }
+    };
+    let Ok(bytes) = base64::engine::general_purpose::STANDARD.decode(b64.trim()) else {
+        log::warn!("Keyring key is not valid base64; ignoring.");
+        return KeyringLoad::Missing;
+    };
+    let Ok(key) = <[u8; 32]>::try_from(bytes.as_slice()) else {
         log::warn!("Keyring key has unexpected length {}; ignoring.", bytes.len());
-        return None;
-    }
-    let mut key = [0u8; 32];
-    key.copy_from_slice(&bytes);
-    Some(key)
+        return KeyringLoad::Missing;
+    };
+    KeyringLoad::Found(key)
 }
 
 /// Write `key` to `key.bin`. Returns `true` on success.
@@ -330,26 +403,32 @@ fn decrypt_cookies(data: &[u8]) -> Option<Vec<u8>> {
 ///
 /// `cookies.json` はここでは削除しない。`persist_cookies()` が暗号化書き込み
 /// 成功後に削除することで、書き込み途中の失敗でクッキーを失わないようにする。
-fn load_cookie_store(enc_path: &PathBuf, legacy_path: &PathBuf) -> CookieStore {
+///
+/// 戻り値の `bool` は「`cookies.enc` が存在するのに復号できなかった」ことを示す。
+/// キーチェーンの一時障害が原因なら次回起動で読める可能性があるため、呼び出し側は
+/// この場合に起動時の `persist_cookies()` で `cookies.enc` を上書きしてはならない。
+fn load_cookie_store(enc_path: &PathBuf, legacy_path: &PathBuf) -> (CookieStore, bool) {
+    let mut enc_unreadable = false;
     // Try encrypted store first.
     if enc_path.exists() {
         if let Ok(data) = std::fs::read(enc_path) {
             if let Some(json) = decrypt_cookies(&data) {
-                return deserialize_cookie_store(&json);
+                return (deserialize_cookie_store(&json), false);
             }
         }
         // cookies.enc exists but failed to load — fall through to the plaintext backup.
         log::warn!("cookies.enc の読み込みに失敗しました。cookies.json にフォールバックします。");
+        enc_unreadable = true;
     }
 
     // Plaintext fallback (migration path or keyring-unavailable path).
     if legacy_path.exists() {
         let content = std::fs::read_to_string(legacy_path).unwrap_or_default();
-        return deserialize_cookie_store(content.as_bytes());
         // Deletion of cookies.json is deferred to persist_cookies().
+        return (deserialize_cookie_store(content.as_bytes()), enc_unreadable);
     }
 
-    CookieStore::new(None)
+    (CookieStore::new(None), enc_unreadable)
 }
 
 /// Cookie ストアをバイト列（JSON 配列 `[{"n":"name","v":"value"}, ...]`）から復元する。
@@ -381,8 +460,11 @@ fn persist_cookies() {
         //
         // `iter_any()` returns all cookies including session (non-persistent) ones.
         // We serialize them manually as a JSON array of {n, v} objects.
+        // `iter_any()` には期限切れのものも含まれる。属性（期限）は保存しないため、
+        // ここで除かないと次回起動時に期限の無い Cookie として復活してしまう。
         let cookies: Vec<serde_json::Value> = store
             .iter_any()
+            .filter(|c| !c.is_expired())
             .map(|c| serde_json::json!({"n": c.name(), "v": c.value()}))
             .collect();
         serde_json::to_writer(&mut buf, &cookies).ok();
@@ -407,7 +489,12 @@ fn persist_cookies() {
     }
 
     // Encryption unavailable or round-trip failed: persist as plain JSON.
-    atomic_write(&plain_path, &buf).ok();
+    // persist_cookies() は常に最新のメモリ上の状態を書くので、平文で書けたなら
+    // 残っている cookies.enc は古い。消さないと次回起動時に cookies.enc が優先され、
+    // 新しいセッションが古いもので上書きされてしまう。
+    if atomic_write(&plain_path, &buf).is_ok() {
+        std::fs::remove_file(enc_path).ok();
+    }
 }
 
 // ── Initialisation ────────────────────────────────────────────────────────────
@@ -420,7 +507,14 @@ pub async fn init(app_data_dir: PathBuf) {
     let _ = COOKIES_PATH.set(enc_path.clone());
     let _ = KEY_FILE_PATH.set(key_path);
 
-    let store = load_cookie_store(&enc_path, &legacy_path);
+    // 復号でキーチェーン（Credential Manager、ブロッキング）とファイルに触れるため、
+    // async ワーカーを塞がないよう blocking スレッドで行う。
+    let (store, enc_unreadable) = {
+        let (enc_path, legacy_path) = (enc_path.clone(), legacy_path.clone());
+        tokio::task::spawn_blocking(move || load_cookie_store(&enc_path, &legacy_path))
+            .await
+            .unwrap_or_else(|_| (CookieStore::new(None), false))
+    };
     let store = Arc::new(CookieStoreMutex::new(store));
     let _ = COOKIE_STORE.set(store.clone());
 
@@ -440,6 +534,20 @@ pub async fn init(app_data_dir: PathBuf) {
     // executor.  This handles the migration cookies.json → cookies.enc and
     // ensures an already-logged-in session survives the next restart even
     // when the user never triggers login() in this session.
+    //
+    // cookies.enc を復号できなかった場合（キーチェーンの一時障害など）は書き込まない。
+    // ここで書くと空のストアで cookies.enc を置き換え、キーチェーンが復旧しても
+    // ログイン状態を取り戻せなくなる。ログインし直せば login() 側で保存される。
+    if enc_unreadable {
+        log::warn!("cookies.enc を復号できなかったため、起動時の保存をスキップします。");
+        return;
+    }
+    persist_cookies_blocking().await;
+}
+
+/// `persist_cookies` はファイル書き込みとキーチェーンアクセスを伴うため、
+/// async の文脈からは blocking スレッドで実行する。
+async fn persist_cookies_blocking() {
     tokio::task::spawn_blocking(persist_cookies).await.ok();
 }
 
@@ -490,7 +598,7 @@ pub async fn login(username: &str, password: &str) -> Result<LoginResult> {
     }
 
     let body: AuthUserResponse = resp.json().await?;
-    persist_cookies();
+    persist_cookies_blocking().await;
 
     if let Some(methods) = body.requires_two_factor_auth {
         // VRChat は通常 `["totp"]` か `["emailOtp"]` を返す。emailOtp が
@@ -571,7 +679,7 @@ pub async fn verify_2fa(code: &str, method: &str) -> Result<bool> {
     }
 
     let body: TwoFactorVerifyResponse = resp.json().await?;
-    persist_cookies();
+    persist_cookies_blocking().await;
     Ok(body.verified)
 }
 
@@ -629,6 +737,34 @@ pub async fn logout() -> Result<()> {
         std::fs::remove_file(plain_path).ok();
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod key_plan_tests {
+    use super::*;
+
+    const A: [u8; 32] = [1; 32];
+    const B: [u8; 32] = [2; 32];
+
+    #[test]
+    fn keyring_key_wins_over_key_file() {
+        assert_eq!(plan_key(KeyringLoad::Found(A), Some(B)), KeyPlan::UseKeyring(A));
+        assert_eq!(plan_key(KeyringLoad::Found(A), None), KeyPlan::UseKeyring(A));
+    }
+
+    #[test]
+    fn missing_entry_migrates_key_file_or_generates() {
+        assert_eq!(plan_key(KeyringLoad::Missing, Some(B)), KeyPlan::Migrate(B));
+        assert_eq!(plan_key(KeyringLoad::Missing, None), KeyPlan::Generate);
+    }
+
+    #[test]
+    fn unavailable_keyring_never_generates_a_new_key() {
+        // 一時障害でキーチェーンが読めないときに鍵を生成すると、保存済みの鍵を
+        // 上書きして cookies.enc を復号できなくなる。
+        assert_eq!(plan_key(KeyringLoad::Unavailable, Some(B)), KeyPlan::UseFileOnly(B));
+        assert_eq!(plan_key(KeyringLoad::Unavailable, None), KeyPlan::NoKeyThisSession);
+    }
 }
 
 #[cfg(test)]

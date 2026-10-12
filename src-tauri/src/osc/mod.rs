@@ -66,8 +66,28 @@ static OSC_SOCKET: Lazy<Option<UdpSocket>> = Lazy::new(|| {
     }
 });
 
-static OSC_HOST_OVERRIDE: Lazy<Option<String>> =
-    Lazy::new(|| std::env::var("AVATAR_SWITCHER_OSC_HOST").ok());
+/// 送信ソケットは 127.0.0.1 に bind しているため、loopback 以外の宛先には送れない
+/// （send_to が失敗する）。ホスト名だと送信のたびに同期の名前解決も走るので、
+/// IPv4 の loopback アドレスだけを受け付ける。
+static OSC_HOST_OVERRIDE: Lazy<Option<String>> = Lazy::new(|| {
+    let raw = std::env::var("AVATAR_SWITCHER_OSC_HOST").ok()?;
+    match parse_loopback_host(&raw) {
+        Some(host) => Some(host),
+        None => {
+            log::warn!(
+                "AVATAR_SWITCHER_OSC_HOST は loopback の IP アドレスのみ指定できます。無視します: {}",
+                raw
+            );
+            None
+        }
+    }
+});
+
+/// 送信ソケットは IPv4 なので、IPv6 の ::1 も受け付けない。
+fn parse_loopback_host(raw: &str) -> Option<String> {
+    let ip: std::net::Ipv4Addr = raw.trim().parse().ok()?;
+    ip.is_loopback().then(|| ip.to_string())
+}
 static OSC_PORT_OVERRIDE: Lazy<Option<u16>> = Lazy::new(|| {
     std::env::var("AVATAR_SWITCHER_OSC_PORT")
         .ok()
@@ -89,6 +109,8 @@ fn get_osc_addr() -> String {
 }
 
 pub fn send_avatar_change(avatar_id: &str) -> anyhow::Result<()> {
+    // REST 経路と同じ形式チェックを OSC 送信の前にも行い、任意の文字列を VRChat へ送らない。
+    crate::vrchat::ids::validate_avatar_id(avatar_id)?;
     let Some(socket) = OSC_SOCKET.as_ref() else {
         return Err(anyhow::anyhow!("OSC ソケットが初期化されていません"));
     };
@@ -203,17 +225,26 @@ fn dispatch_packet(packet: OscPacket, app: &AppHandle) {
     }
 }
 
+/// 先頭引数が有限の Float ならその値。NaN / ±Inf は JSON では null になり、
+/// フロント（number 前提）に型の合わない値を渡してしまうため捨てる。
+fn first_finite_float(args: &[OscType]) -> Option<f32> {
+    match args.first() {
+        Some(OscType::Float(v)) if v.is_finite() => Some(*v),
+        _ => None,
+    }
+}
+
 fn dispatch_message(msg: OscMessage, app: &AppHandle) {
     match msg.addr.as_str() {
         OSC_ADDR_EYE_HEIGHT_PARAM | OSC_ADDR_EYE_HEIGHT_DIRECT => {
-            if let Some(OscType::Float(v)) = msg.args.first() {
-                let _ = app.emit(EVENT_EYE_HEIGHT, *v);
-                crate::steamvr::bridge::broadcast_eye_height(*v, false);
+            if let Some(v) = first_finite_float(&msg.args) {
+                let _ = app.emit(EVENT_EYE_HEIGHT, v);
+                crate::steamvr::bridge::broadcast_eye_height(v, false);
             }
         }
         OSC_ADDR_SCALE_FACTOR => {
-            if let Some(OscType::Float(v)) = msg.args.first() {
-                let _ = app.emit(EVENT_SCALE_FACTOR, *v);
+            if let Some(v) = first_finite_float(&msg.args) {
+                let _ = app.emit(EVENT_SCALE_FACTOR, v);
             }
         }
         OSC_ADDR_SCALE_MODIFIED => {
@@ -236,13 +267,13 @@ fn dispatch_message(msg: OscMessage, app: &AppHandle) {
             }
         }
         OSC_ADDR_EYE_HEIGHT_MIN => {
-            if let Some(OscType::Float(v)) = msg.args.first() {
-                let _ = app.emit(EVENT_EYE_HEIGHT_MIN, *v);
+            if let Some(v) = first_finite_float(&msg.args) {
+                let _ = app.emit(EVENT_EYE_HEIGHT_MIN, v);
             }
         }
         OSC_ADDR_EYE_HEIGHT_MAX => {
-            if let Some(OscType::Float(v)) = msg.args.first() {
-                let _ = app.emit(EVENT_EYE_HEIGHT_MAX, *v);
+            if let Some(v) = first_finite_float(&msg.args) {
+                let _ = app.emit(EVENT_EYE_HEIGHT_MAX, v);
             }
         }
         OSC_ADDR_EYE_HEIGHT_SCALING_ALLOWED => {
@@ -256,5 +287,28 @@ fn dispatch_message(msg: OscMessage, app: &AppHandle) {
             let _ = app.emit(EVENT_EYE_HEIGHT_SCALING_ALLOWED, b);
         }
         _ => {}
+    }
+}
+
+#[cfg(test)]
+mod float_tests {
+    use super::*;
+
+    #[test]
+    fn non_finite_floats_are_dropped() {
+        assert_eq!(first_finite_float(&[OscType::Float(1.5)]), Some(1.5));
+        assert_eq!(first_finite_float(&[OscType::Float(f32::NAN)]), None);
+        assert_eq!(first_finite_float(&[OscType::Float(f32::INFINITY)]), None);
+        assert_eq!(first_finite_float(&[OscType::Int(1)]), None);
+        assert_eq!(first_finite_float(&[]), None);
+    }
+
+    #[test]
+    fn osc_host_override_accepts_only_loopback_ip() {
+        assert_eq!(parse_loopback_host("127.0.0.1").as_deref(), Some("127.0.0.1"));
+        assert_eq!(parse_loopback_host(" 127.0.0.2 ").as_deref(), Some("127.0.0.2"));
+        assert_eq!(parse_loopback_host("::1"), None);
+        assert_eq!(parse_loopback_host("192.168.1.10"), None);
+        assert_eq!(parse_loopback_host("localhost"), None);
     }
 }

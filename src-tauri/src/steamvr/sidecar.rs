@@ -7,9 +7,11 @@
 use std::path::PathBuf;
 use std::process::Stdio;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::Mutex;
 use std::time::Duration;
 use tauri::{AppHandle, Manager};
-use tokio::process::Command;
+use tokio::io::AsyncWriteExt;
+use tokio::process::{ChildStdin, Command};
 
 /// 現在起動中の overlay-sidecar の OS プロセスID。0 なら未起動。
 static SIDECAR_PID: AtomicU32 = AtomicU32::new(0);
@@ -17,13 +19,24 @@ static SIDECAR_PID: AtomicU32 = AtomicU32::new(0);
 /// shutdown() が呼ばれたら true。監視ループはこれを見て再起動を止める。
 static SHUTTING_DOWN: AtomicBool = AtomicBool::new(false);
 
+/// 起動中のサイドカーの標準入力。サイドカーはこれが閉じられる（EOF）と正常終了する。
+/// アプリ自体がクラッシュした場合も OS が閉じるため、サイドカーが孤児にならない。
+static SIDECAR_STDIN: Mutex<Option<ChildStdin>> = Mutex::new(None);
+
+/// shutdown() で標準入力を閉じてから、サイドカーが自分で終了するのを待つ上限。
+/// 超えたら強制終了する。
+const GRACEFUL_EXIT_TIMEOUT: Duration = Duration::from_secs(3);
+
 const RESTART_BACKOFF_SECS: [u64; 4] = [1, 3, 10, 30];
+/// この時間以上動き続けたら正常に起動できたとみなし、バックオフを最初に戻す。
+/// 起動直後に落ちるたびに戻していると、クラッシュループが1秒間隔で続いてしまう。
+const HEALTHY_RUN: Duration = Duration::from_secs(60);
 
 /// サイドカー実行ファイルのパスを解決する。
-/// 1. 環境変数 `AVATAR_SWITCHER_OVERLAY_SIDECAR_PATH`（開発用オーバーライド）
+/// 1. 環境変数 `AVATAR_SWITCHER_OVERLAY_SIDECAR_PATH`（開発用オーバーライド。デバッグビルドのみ）
 /// 2. Tauri のリソースディレクトリ配下（本番、tauri.conf.json の bundle.resources 経由で配置）
 fn resolve_sidecar_path(app: &AppHandle) -> Option<PathBuf> {
-    if let Ok(p) = std::env::var("AVATAR_SWITCHER_OVERLAY_SIDECAR_PATH") {
+    if let Some(p) = super::dev_override_env("AVATAR_SWITCHER_OVERLAY_SIDECAR_PATH") {
         let path = PathBuf::from(p);
         if path.exists() {
             return Some(path);
@@ -90,10 +103,22 @@ pub(crate) async fn spawn(
 
             match launch(&path, ws_port, ui_port, &token, placement_mode, log_path.as_deref()).await {
                 Ok(mut child) => {
-                    attempt = 0;
+                    let started = std::time::Instant::now();
                     SIDECAR_PID.store(child.id().unwrap_or(0), Ordering::SeqCst);
+                    // tokio の Child::wait() は待機前に stdin を閉じるため、先に取り出して
+                    // サイドカーの生存中は開いたままにする（SIDECAR_STDIN 参照）。
+                    *lock_stdin() = child.stdin.take();
+                    if SHUTTING_DOWN.load(Ordering::SeqCst) {
+                        // shutdown() が上の登録より先に走っていた場合は、ここで終了させる。
+                        lock_stdin().take();
+                        let _ = child.start_kill();
+                    }
                     let status = child.wait().await;
+                    lock_stdin().take();
                     SIDECAR_PID.store(0, Ordering::SeqCst);
+                    if started.elapsed() >= HEALTHY_RUN {
+                        attempt = 0;
+                    }
                     match status {
                         Ok(s) => log::warn!("[steamvr] overlay-sidecar が終了しました: {:?}", s),
                         Err(e) => log::warn!("[steamvr] overlay-sidecar の監視に失敗: {}", e),
@@ -124,10 +149,9 @@ async fn launch(
     let mut cmd = Command::new(path);
     cmd.arg("--ws-port")
         .arg(ws_port.to_string())
-        .arg("--token")
-        .arg(token)
         .arg("--placement-mode")
         .arg(placement_mode.as_cli_arg())
+        .stdin(Stdio::piped())
         .kill_on_drop(true);
     if let Some(ui_port) = ui_port {
         cmd.arg("--ui-port").arg(ui_port.to_string());
@@ -148,75 +172,69 @@ async fn launch(
         }
     }
 
-    cmd.spawn()
-}
-
-/// ログがこのサイズを超えていたら起動時に退避する。
-const LOG_ROTATE_BYTES: u64 = 5 * 1024 * 1024;
-
-/// `overlay-sidecar.log` が肥大していれば `.log.1` へ退避する（1 世代のみ）。
-/// 追記のみだと再起動のたびに際限なく増えるため。失敗しても起動は妨げない。
-fn rotate_log_if_large(path: &std::path::Path, max_bytes: u64) {
-    let Ok(meta) = std::fs::metadata(path) else { return };
-    if meta.len() <= max_bytes {
-        return;
+    let mut child = cmd.spawn()?;
+    // トークンはコマンドラインに載せると同一ユーザーの他プロセスからプロセス一覧
+    // （WMI 等）で読めるため、標準入力の1行目で渡す。
+    if let Some(stdin) = child.stdin.as_mut() {
+        stdin.write_all(format!("{token}\n").as_bytes()).await?;
+        stdin.flush().await?;
     }
-    let mut backup = path.as_os_str().to_os_string();
-    backup.push(".1");
-    let _ = std::fs::remove_file(&backup);
-    if let Err(e) = std::fs::rename(path, &backup) {
-        log::warn!("[steamvr] ログのローテーションに失敗: {}", e);
-    }
+    Ok(child)
 }
 
 fn open_log_append(path: &std::path::Path) -> std::io::Result<(std::fs::File, std::fs::File)> {
-    rotate_log_if_large(path, LOG_ROTATE_BYTES);
+    crate::logging::rotate_log_if_large(path, crate::logging::LOG_ROTATE_BYTES);
     let out = std::fs::OpenOptions::new().create(true).append(true).open(path)?;
     let err = out.try_clone()?;
     Ok((out, err))
 }
 
+fn lock_stdin() -> std::sync::MutexGuard<'static, Option<ChildStdin>> {
+    SIDECAR_STDIN.lock().unwrap_or_else(|e| e.into_inner())
+}
+
 /// アプリ終了時にサイドカープロセスを確実に終了させる。
 ///
+/// まず標準入力を閉じてサイドカー自身に後片付け（オーバーレイ破棄・CEF 終了）を
+/// させ、`GRACEFUL_EXIT_TIMEOUT` 以内に終わらなければ強制終了する。
 /// `app.exit()` 経由のプロセス終了は Rust の Drop（`kill_on_drop`）実行を
-/// 保証しないため、PID を直接指定して同期的に kill する。
+/// 保証しないため、強制終了は PID を直接指定して同期的に行う。
 pub(crate) fn shutdown() {
     SHUTTING_DOWN.store(true, Ordering::SeqCst);
-    let pid = SIDECAR_PID.swap(0, Ordering::SeqCst);
+    lock_stdin().take();
+    let pid = SIDECAR_PID.load(Ordering::SeqCst);
     if pid == 0 {
         return;
     }
     log::info!("[steamvr] overlay-sidecar (pid={}) を終了します", pid);
+    // 監視タスク（tokio ワーカー）が終了を検知すると SIDECAR_PID を 0 に戻す。
+    let deadline = std::time::Instant::now() + GRACEFUL_EXIT_TIMEOUT;
+    while std::time::Instant::now() < deadline {
+        if SIDECAR_PID.load(Ordering::SeqCst) != pid {
+            return;
+        }
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    log::warn!("[steamvr] overlay-sidecar が終了しないため強制終了します (pid={})", pid);
+    force_kill(pid);
+}
+
+fn force_kill(pid: u32) {
     #[cfg(target_os = "windows")]
     {
-        let _ = std::process::Command::new("taskkill")
+        use std::os::windows::process::CommandExt;
+        // PATH 解決だとインストール先などに置かれた同名ファイルを実行し得るため、
+        // System32 の taskkill を絶対パスで呼ぶ。CREATE_NO_WINDOW でコンソールを出さない。
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        let system_root = std::env::var_os("SystemRoot").unwrap_or_else(|| "C:\\Windows".into());
+        let taskkill = PathBuf::from(system_root).join("System32").join("taskkill.exe");
+        let _ = std::process::Command::new(taskkill)
             .args(["/PID", &pid.to_string(), "/T", "/F"])
+            .creation_flags(CREATE_NO_WINDOW)
             .output();
     }
     #[cfg(not(target_os = "windows"))]
     {
-        let _ = std::process::Command::new("kill").arg(pid.to_string()).output();
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn large_log_is_rotated_and_small_log_is_kept() {
-        let dir = std::env::temp_dir().join(format!("avsw-log-test-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
-        let log = dir.join("overlay-sidecar.log");
-
-        std::fs::write(&log, b"0123456789").unwrap();
-        rotate_log_if_large(&log, 100);
-        assert!(log.exists(), "上限以下ならそのまま");
-
-        rotate_log_if_large(&log, 5);
-        assert!(!log.exists());
-        assert!(dir.join("overlay-sidecar.log.1").exists());
-
-        std::fs::remove_dir_all(&dir).ok();
+        let _ = std::process::Command::new("/bin/kill").arg(pid.to_string()).output();
     }
 }

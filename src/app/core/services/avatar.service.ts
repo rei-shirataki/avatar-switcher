@@ -1,4 +1,4 @@
-import { DestroyRef, Injectable, computed, inject, signal } from '@angular/core';
+import { DestroyRef, Injectable, computed, effect, inject, signal, untracked } from '@angular/core';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { TauriService } from './tauri.service';
 import { VRChatAuthService } from './vrchat-auth.service';
@@ -58,6 +58,13 @@ export class AvatarService {
    *  Date.now() - 0 が常に TTL 超過扱いになり二重ロードしてしまうので、
    *  明示フラグでガードする。 */
   private _inFlight = false;
+  /** ログアウト・アカウント切替のたびに増える世代。取得中に変わったら結果を捨てる。 */
+  private _generation = 0;
+  /** 一覧取得の通し番号。より新しい取得が始まっていれば古い結果で上書きしない。 */
+  private _avatarsReq = 0;
+  private _favoritesReq = 0;
+  /** 直近に観測したログインユーザーID（アカウント切替の検知用）。 */
+  private _userId: string | null = null;
   private readonly unlisteners: UnlistenFn[] = [];
   /** onDestroy 済みか。listen() の Promise 解決が onDestroy より後になった場合、
    *  unlisteners への push ではなく即座に unlisten してリークを防ぐために参照する。 */
@@ -71,6 +78,16 @@ export class AvatarService {
       listen<string>('osc:avatar-change', e => this.applyExternalAvatarChange(e.payload)),
       err => console.warn('osc:avatar-change の購読に失敗しました:', err),
     );
+
+    // ログアウト・別アカウントでのログイン時に、前のアカウントのアバター一覧を
+    // メモリに残さない（10分の TTL 内だと次のアカウントにそのまま表示されていた）。
+    effect(() => {
+      const id = this.auth.user()?.id ?? null;
+      untracked(() => {
+        if (this._userId !== null && this._userId !== id) this.resetForAccountChange();
+        this._userId = id;
+      });
+    });
 
     inject(DestroyRef).onDestroy(() => {
       this.destroyed = true;
@@ -98,7 +115,8 @@ export class AvatarService {
     const found = this.allAvatars().find(a => a.id === avatarId);
     if (!found) return;
     const override = this._overrides()[avatarId];
-    const imageUrl = override?.customThumbnail ?? found.thumbnailImageUrl ?? found.imageUrl;
+    // Rust 側は欠けた URL を null ではなく空文字列で返すため、?? ではなく || で次へ回す。
+    const imageUrl = override?.customThumbnail || found.thumbnailImageUrl || found.imageUrl;
     if (imageUrl) {
       this.auth.updateCurrentAvatarImage(imageUrl);
     }
@@ -123,19 +141,40 @@ export class AvatarService {
     // セッション内で既に一度ロード済み（=_loadedAt > 0）なら fresh のみ。
     // 初回（_loadedAt === 0）は SWR（ディスクキャッシュ即読み → 並列再フェッチ）。
     const isFirstLoad = this._loadedAt === 0;
+    return this.startLoad(() => (isFirstLoad ? this._initWithSwr() : this._initFresh()));
+  }
+
+  /**
+   * ロード処理を開始して `_initPromise` に登録する。完了・失敗時の状態更新は、
+   * その時点でも自分が `_initPromise` である場合に限る。refresh() やアカウント切替で
+   * 置き換えられた古いロードが後から失敗しても、新しいロードの状態を壊さない。
+   */
+  private startLoad(loader: () => Promise<unknown>): Promise<void> {
     this._inFlight = true;
-    this._initPromise = (isFirstLoad ? this._initWithSwr() : this._initFresh())
+    const p: Promise<void> = loader()
       .then(() => {
-        this._loadedAt = Date.now();
+        if (this._initPromise === p) this._loadedAt = Date.now();
       })
       .catch((e) => {
-        this._initPromise = null;
+        if (this._initPromise === p) this._initPromise = null;
         throw e;
       })
       .finally(() => {
-        this._inFlight = false;
+        if (this._initPromise === p || this._initPromise === null) this._inFlight = false;
       });
-    return this._initPromise;
+    this._initPromise = p;
+    return p;
+  }
+
+  /** アカウントが変わったときに、アカウント固有のメモリ状態を捨てる。 */
+  private resetForAccountChange(): void {
+    this._generation++;
+    this._avatars.set([]);
+    this._favorites.set([]);
+    this._switching.set(null);
+    this._initPromise = null;
+    this._loadedAt = 0;
+    this._inFlight = false;
   }
 
   /**
@@ -146,10 +185,12 @@ export class AvatarService {
    */
   private async _initWithSwr(): Promise<void> {
     // ─ stale 部分（ディスクキャッシュ即読み） ─
+    const gen = this._generation;
     const [cachedAv, cachedFav] = await Promise.all([
       this.tauri.invoke<VRCAvatar[]>('vrchat_get_cached_avatars').catch(() => [] as VRCAvatar[]),
       this.tauri.invoke<VRCAvatar[]>('vrchat_get_cached_favorites').catch(() => [] as VRCAvatar[]),
     ]);
+    if (gen !== this._generation) return;
     // 自前 / お気に入りそれぞれ独立にキャッシュ有無を判定する。
     // 片方だけある状態（例: 初回お気に入り取得失敗）でも、ある方は stale 表示
     // して即時 UX を維持し、無い方だけスピナー付きで loadXxx() する。
@@ -183,8 +224,7 @@ export class AvatarService {
   /** バックグラウンド再フェッチ。失敗しても stale データを残し、ユーザー操作を妨げない。 */
   private async _fetchAvatarsBg(): Promise<void> {
     try {
-      const avatars = await this.tauri.invoke<VRCAvatar[]>('vrchat_get_my_avatars');
-      this._avatars.set(avatars);
+      await this.fetchAvatars();
     } catch (e) {
       console.warn('自前アバターの再フェッチに失敗（キャッシュ表示を維持）:', e);
     }
@@ -192,8 +232,7 @@ export class AvatarService {
 
   private async _fetchFavoritesBg(): Promise<void> {
     try {
-      const favs = await this.tauri.invoke<VRCAvatar[]>('vrchat_get_favorite_avatars');
-      this._favorites.set(favs);
+      await this.fetchFavorites();
     } catch (e) {
       console.warn('お気に入りの再フェッチに失敗（キャッシュ表示を維持）:', e);
     }
@@ -205,26 +244,34 @@ export class AvatarService {
    * （ユーザー操作の即時フィードバックのため）。
    */
   async refresh(): Promise<void> {
-    this._initPromise = null;
     this._loadedAt = 0;
-    this._inFlight = true;
-    this._initPromise = Promise.all([
-      this.loadAvatars(),
-      this.loadFavorites(),
-      this.loadFolders(),
-      this.loadOverrides(),
-    ])
-      .then(() => { this._loadedAt = Date.now(); })
-      .catch((e) => { this._initPromise = null; throw e; })
-      .finally(() => { this._inFlight = false; });
-    await this._initPromise;
+    await this.startLoad(() =>
+      Promise.all([this.loadAvatars(), this.loadFavorites(), this.loadFolders(), this.loadOverrides()]),
+    );
+  }
+
+  /**
+   * 一覧を取得して反映する。取得中により新しい取得が始まった場合や、
+   * ログアウト・アカウント切替があった場合は、古い結果で上書きしない。
+   */
+  private async fetchAvatars(): Promise<void> {
+    const req = ++this._avatarsReq;
+    const gen = this._generation;
+    const avatars = await this.tauri.invoke<VRCAvatar[]>('vrchat_get_my_avatars');
+    if (req === this._avatarsReq && gen === this._generation) this._avatars.set(avatars);
+  }
+
+  private async fetchFavorites(): Promise<void> {
+    const req = ++this._favoritesReq;
+    const gen = this._generation;
+    const favs = await this.tauri.invoke<VRCAvatar[]>('vrchat_get_favorite_avatars');
+    if (req === this._favoritesReq && gen === this._generation) this._favorites.set(favs);
   }
 
   async loadFavorites(): Promise<void> {
     this._loadingFavorites.set(true);
     try {
-      const favs = await this.tauri.invoke<VRCAvatar[]>('vrchat_get_favorite_avatars');
-      this._favorites.set(favs);
+      await this.fetchFavorites();
     } finally {
       this._loadingFavorites.set(false);
     }
@@ -237,8 +284,7 @@ export class AvatarService {
   async loadAvatars(): Promise<void> {
     this._loading.set(true);
     try {
-      const avatars = await this.tauri.invoke<VRCAvatar[]>('vrchat_get_my_avatars');
-      this._avatars.set(avatars);
+      await this.fetchAvatars();
     } finally {
       this._loading.set(false);
     }
@@ -351,7 +397,7 @@ export class AvatarService {
       // オーバーライドがあればそちらを優先（VRChat に未反映のカスタムサムネ）。
       const override = this._overrides()[avatarId];
       const found = this.allAvatars().find(a => a.id === avatarId);
-      const imageUrl = override?.customThumbnail ?? found?.thumbnailImageUrl ?? found?.imageUrl;
+      const imageUrl = override?.customThumbnail || found?.thumbnailImageUrl || found?.imageUrl;
       if (imageUrl) {
         this.auth.updateCurrentAvatarImage(imageUrl);
       }
@@ -367,11 +413,9 @@ export class AvatarService {
   }
 
   async renameFolder(folderId: string, name: string): Promise<void> {
-    const folder = this._folders().find(f => f.id === folderId);
-    if (!folder) return;
-    const updated = { ...folder, name };
-    await this.tauri.invoke('folders_update', { folder: updated });
-    this._folders.update(fs => fs.map(f => f.id === folderId ? updated : f));
+    const renamed = await this.tauri.invoke<AvatarFolder>('folders_rename', { folderId, name });
+    // 名前だけを反映する。avatarIds まで置き換えると、並行して完了した追加・削除を巻き戻す。
+    this._folders.update(fs => fs.map(f => (f.id === folderId ? { ...f, name: renamed.name } : f)));
   }
 
   async deleteFolder(folderId: string): Promise<void> {

@@ -3,7 +3,7 @@ use once_cell::sync::Lazy;
 use serde::Serialize;
 use serde_json::{json, Value};
 use std::net::{IpAddr, Ipv4Addr, UdpSocket};
-use std::sync::atomic::{AtomicU16, Ordering};
+use std::sync::atomic::{AtomicU16, AtomicU64, Ordering};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -46,6 +46,9 @@ static VRCHAT_OSCQUERY_HTTP_PORT: AtomicU16 = AtomicU16::new(0);
 /// 最後に発見した VRChat の mDNS フルネーム。
 /// `ServiceRemoved` が同じ名前で来たときだけポートをデフォルトに戻す。
 static CURRENT_VRCHAT_FULLNAME: Mutex<Option<String>> = Mutex::new(None);
+/// mDNS の発見ごとに増える通し番号。HOST_INFO による検証が非同期なので、
+/// 古い発見の検証結果が新しい発見の結果を上書きしないために使う。
+static RESOLVE_SEQ: AtomicU64 = AtomicU64::new(0);
 
 pub fn get_vrchat_osc_port() -> u16 {
     VRCHAT_OSC_PORT.load(Ordering::Relaxed)
@@ -246,53 +249,35 @@ fn on_mdns_event(event: ServiceEvent) {
                 return;
             }
 
-            if let Ok(mut guard) = CURRENT_VRCHAT_FULLNAME.lock() {
-                *guard = Some(name.clone());
-            }
-
-            // サービスレコード自体のポートは VRChat の OSCQuery HTTP サーバーのポート。
-            // TXT レコードの有無に関わらず必ず取得できるので、先に保存しておく
-            // （能動的なパラメータ値取得で使う）。
+            // mDNS 広告は LAN 上の誰でも送れ、アドレスに 127.0.0.1 を載せることも
+            // TXT の oscPort を好きな値にすることもできる。そのため広告の内容は信用せず、
+            // 自マシンの loopback 上で広告どおりのポートが実際に HOST_INFO に応答した
+            // 場合だけ採用する（loopback で待ち受けられるのは自マシン上のプロセスのみ）。
+            // OSC ポートも TXT ではなく HOST_INFO の応答から取る。
             let http_port = info.get_port();
-            VRCHAT_OSCQUERY_HTTP_PORT.store(http_port, Ordering::Relaxed);
-
-            // TXT レコード "oscPort" から直接取得
-            if let Some(port_str) = info.get_properties().get_property_val_str("oscPort") {
-                if let Ok(port) = port_str.parse::<u16>() {
-                    VRCHAT_OSC_PORT.store(port, Ordering::Relaxed);
-                    log::info!("[OSCQuery] VRChat 発見: {} → OSC ポート {}", name, port);
-                    return;
-                }
-            }
-
-            // TXT になければ HTTP HOST_INFO を問い合わせる
-            // 同一マシン前提のため宛先は 127.0.0.1 固定。
-            let expected_name = name.clone();
-
+            let seq = RESOLVE_SEQ.fetch_add(1, Ordering::Relaxed) + 1;
             tokio::spawn(async move {
                 match query_vrchat_osc_port("127.0.0.1", http_port).await {
                     Ok(port) => {
-                        // 完了時点で別のインスタンスが新たに登録されていれば古い結果は捨てる。
-                        let still_current = CURRENT_VRCHAT_FULLNAME
-                            .lock()
-                            .ok()
-                            .and_then(|g| g.clone())
-                            .as_deref()
-                            == Some(expected_name.as_str());
-                        if !still_current {
+                        // 完了時点でより新しい発見があれば古い結果は捨てる。
+                        if RESOLVE_SEQ.load(Ordering::Relaxed) != seq {
                             log::debug!(
                                 "[OSCQuery] HOST_INFO 結果を破棄（より新しい発見あり）: {} → {}",
-                                expected_name, port
+                                name, port
                             );
                             return;
                         }
+                        if let Ok(mut guard) = CURRENT_VRCHAT_FULLNAME.lock() {
+                            *guard = Some(name.clone());
+                        }
+                        VRCHAT_OSCQUERY_HTTP_PORT.store(http_port, Ordering::Relaxed);
                         VRCHAT_OSC_PORT.store(port, Ordering::Relaxed);
-                        log::info!(
-                            "[OSCQuery] VRChat HOST_INFO 取得: {} → OSC ポート {}",
-                            expected_name, port
-                        );
+                        log::info!("[OSCQuery] VRChat 発見: {} → OSC ポート {}", name, port);
                     }
-                    Err(e) => log::warn!("[OSCQuery] HOST_INFO 取得失敗 ({}): {}", expected_name, e),
+                    Err(e) => log::warn!(
+                        "[OSCQuery] 広告されたポートで HOST_INFO を取得できないため無視: {} (port {}): {}",
+                        name, http_port, e
+                    ),
                 }
             });
         }

@@ -28,6 +28,15 @@ internal sealed class OverlayManager
     private readonly CancellationToken _shutdownToken;
 
     private volatile bool _active;
+    /// <summary>
+    /// RenderLoop の1ティック分の処理と <see cref="Deactivate"/> の資源解放を直列化する。
+    /// これが無いと、ティック実行中に MainLoop がテクスチャ・D3Dデバイス・ブラウザを破棄し
+    /// OpenVR.Shutdown まで進めてしまい、解放済みのネイティブ資源に触れてプロセスごと
+    /// 落ちる（AccessViolation は .NET では catch できない）。
+    /// </summary>
+    private readonly object _frameLock = new();
+    /// <summary>RenderLoop が D3D デバイスの喪失を検知したら立てる。MainLoop が資源を作り直す。</summary>
+    private volatile bool _deviceLost;
     private D3D11Context? _d3D;
     private AvatarPanelOverlay? _panel;
     private OverlayPointer? _pointer;
@@ -48,10 +57,30 @@ internal sealed class OverlayManager
         _shutdownToken = shutdownToken;
     }
 
+    private Thread? _mainThread;
+    private Thread? _renderThread;
+
     public void Run()
     {
-        new Thread(MainLoop) { IsBackground = true }.Start();
-        new Thread(RenderLoop) { IsBackground = true }.Start();
+        _mainThread = new Thread(MainLoop) { IsBackground = true, Name = "overlay-main" };
+        _renderThread = new Thread(RenderLoop) { IsBackground = true, Name = "overlay-render" };
+        _mainThread.Start();
+        _renderThread.Start();
+    }
+
+    /// <summary>
+    /// shutdownToken のキャンセル後、両ループが抜ける（MainLoop は最後に Deactivate する）のを待つ。
+    /// </summary>
+    public bool WaitForExit(TimeSpan timeout)
+    {
+        var deadline = DateTime.UtcNow + timeout;
+        foreach (var thread in new[] { _mainThread, _renderThread })
+        {
+            if (thread == null) continue;
+            var remaining = deadline - DateTime.UtcNow;
+            if (remaining < TimeSpan.Zero || !thread.Join(remaining)) return false;
+        }
+        return true;
     }
 
     private void MainLoop()
@@ -66,7 +95,8 @@ internal sealed class OverlayManager
             {
                 if (!TryActivate())
                 {
-                    Thread.Sleep(RetryInterval);
+                    // 終了要求ですぐ抜けられるよう、Sleep ではなくキャンセル待ちで待機する。
+                    _shutdownToken.WaitHandle.WaitOne(RetryInterval);
                     continue;
                 }
 
@@ -74,38 +104,66 @@ internal sealed class OverlayManager
                 _ = _bridge.SendSteamVrStatusAsync(true, _shutdownToken);
             }
 
-            UpdateActionSets();
-            DetectOverlayInteract();
-            DetectOpenOverlayToggle();
-            DetectScroll();
-
-            while (OpenVR.System.PollNextEvent(ref e, (uint)Marshal.SizeOf(e)))
+            if (_deviceLost)
             {
-                var eventType = (EVREventType)e.eventType;
-                if (eventType == EVREventType.VREvent_Quit)
-                {
-                    Console.WriteLine("[steamvr] SteamVRからQuitイベントを受信、後片付けします");
-                    Deactivate();
-                    _ = _bridge.SendSteamVrStatusAsync(false, _shutdownToken);
-                    break;
-                }
+                // 失われた D3D デバイスは復帰しないため、いったん停止して次のティックで
+                // TryActivate からデバイス・テクスチャ・ブラウザを作り直す。
+                Console.Error.WriteLine("[steamvr] D3Dデバイスが失われたため、オーバーレイを作り直します");
+                Deactivate();
+                // Deactivate は実行中のレンダーティックの終了を待つので、その後で戻す。
+                _deviceLost = false;
+                continue;
+            }
 
-                // #37: SteamVR Dashboard表示中はパネルが重なったままにならないよう、
-                // 開閉に合わせて一時的に隠す/戻す（AvatarPanelOverlay側でユーザーの
-                // 表示意図とは独立に管理するため、ここでは開閉の通知だけでよい）。
-                if (eventType == EVREventType.VREvent_DashboardActivated)
+            // バックグラウンドスレッドの未処理例外は .NET ではプロセスを終了させるため、
+            // 1ティック分の失敗はログに留めて次ティックへ回復させる。
+            try
+            {
+                UpdateActionSets();
+                DetectOverlayInteract();
+                DetectOpenOverlayToggle();
+                DetectScroll();
+
+                while (OpenVR.System.PollNextEvent(ref e, (uint)Marshal.SizeOf(e)))
                 {
-                    _panel?.SetDashboardVisible(true);
+                    var eventType = (EVREventType)e.eventType;
+                    if (eventType == EVREventType.VREvent_Quit)
+                    {
+                        Console.WriteLine("[steamvr] SteamVRからQuitイベントを受信、後片付けします");
+                        Deactivate();
+                        _ = _bridge.SendSteamVrStatusAsync(false, _shutdownToken);
+                        break;
+                    }
+
+                    // #37: SteamVR Dashboard表示中はパネルが重なったままにならないよう、
+                    // 開閉に合わせて一時的に隠す/戻す（AvatarPanelOverlay側でユーザーの
+                    // 表示意図とは独立に管理するため、ここでは開閉の通知だけでよい）。
+                    if (eventType == EVREventType.VREvent_DashboardActivated)
+                    {
+                        _panel?.SetDashboardVisible(true);
+                    }
+                    else if (eventType == EVREventType.VREvent_DashboardDeactivated)
+                    {
+                        _panel?.SetDashboardVisible(false);
+                    }
                 }
-                else if (eventType == EVREventType.VREvent_DashboardDeactivated)
-                {
-                    _panel?.SetDashboardVisible(false);
-                }
+            }
+            catch (Exception ex)
+            {
+                LogMainLoopError(ex);
             }
         }
 
         Deactivate();
     }
+
+    private static readonly TimeSpan ErrorLogInterval = TimeSpan.FromSeconds(10);
+    private readonly ThrottledLog _mainLoopErrorLog = new(ErrorLogInterval);
+    private readonly ThrottledLog _renderErrorLog = new(ErrorLogInterval);
+
+    /// <summary>同じ原因の例外が毎ティック(32ms)出続けてもログが埋まらないよう間引く。</summary>
+    private void LogMainLoopError(Exception ex) =>
+        _mainLoopErrorLog.Log($"[steamvr] 入力/イベント処理中に例外: {ex}");
 
     private bool _warnedVrInitFailure;
 
@@ -128,6 +186,9 @@ internal sealed class OverlayManager
             }
 
             _warnedVrInitFailure = false;
+            // 1回だけ出す診断ログは起動（SteamVR 接続）ごとに出し直す。
+            _warnedInteractDiag = false;
+            _warnedScrollDiag = false;
 
             var input = OpenVR.Input;
             if (input == null || OpenVR.Overlay == null)
@@ -288,7 +349,7 @@ internal sealed class OverlayManager
         }
 
         var role = OpenVR.System.GetControllerRoleForTrackedDeviceIndex(originInfo.trackedDeviceIndex);
-        Console.WriteLine($"[steamvr] OverlayInteract 変化: role={role} bState={actionData.bState}");
+        // トリガーは VRChat の通常操作でも常に使われるため、変化のたびにはログを出さない。
         _pointer?.SetPressed(role, actionData.bState);
     }
 
@@ -388,7 +449,7 @@ internal sealed class OverlayManager
 
     private void RenderLoop()
     {
-        var timer = new RefreshRateTimer();
+        using var timer = new RefreshRateTimer();
         while (!_shutdownToken.IsCancellationRequested)
         {
             if (_active)
@@ -396,10 +457,10 @@ internal sealed class OverlayManager
                 timer.TickStart();
                 try
                 {
-                    // MainLoop 側の Deactivate()（OpenVR.Shutdown 呼び出し）と競合し、
-                    // このスレッドが解放済みの OpenVR インターフェースに触れる可能性が
-                    // ある（参照実装 OyasumiVR も同じ構造で同じレースを許容している）。
-                    // クラッシュさせず次ティックへ回復させるだけの安全網。
+                    // MainLoop 側の Deactivate() とは _frameLock で直列化している。
+                    // ロック内で _active を見直すことで、Deactivate が _active=false にした後の
+                    // ティックは資源に触れず、実行中のティックは解放前に必ず終わる。
+                    // catch は OpenVR 呼び出し等のマネージド例外で次ティックへ回復させるための安全網。
                     //
                     // レイキャスト/ポインタ座標の更新(UpdateRaycast)もここに置く。
                     // 以前はMainLoop側の32ms固定ティックでDetectOverlayInteract()の
@@ -410,12 +471,20 @@ internal sealed class OverlayManager
                     // 原因だったと判明（参照実装OyasumiVRはOverlayPointer.Startを
                     // HMDリフレッシュレートの専用スレッドで回し、座標を常に新鮮に
                     // 保っている。同じ構成に合わせた）。
-                    _pointer?.UpdateRaycast();
-                    _panel?.UpdateFrame();
+                    lock (_frameLock)
+                    {
+                        if (_active)
+                        {
+                            _pointer?.UpdateRaycast();
+                            _panel?.UpdateFrame();
+                        }
+                    }
                 }
                 catch (Exception ex)
                 {
-                    Console.Error.WriteLine($"[steamvr] フレーム更新中に例外: {ex.Message}");
+                    // 毎ティック（最大 144 回/秒）同じ例外が出続けることがあるため間引く。
+                    _renderErrorLog.Log($"[steamvr] フレーム更新中に例外: {ex.Message}");
+                    if (D3D11Context.IsDeviceLost(ex)) _deviceLost = true;
                 }
 
                 timer.SleepUntilNextTick();
@@ -431,7 +500,11 @@ internal sealed class OverlayManager
     {
         if (!_active) return;
         _active = false;
-        ReleaseResources();
+        // 実行中のレンダーティックが終わるのを待ってから解放する（_frameLock 参照）。
+        lock (_frameLock)
+        {
+            ReleaseResources();
+        }
         Console.WriteLine("[steamvr] OverlayManager を停止しました");
     }
 

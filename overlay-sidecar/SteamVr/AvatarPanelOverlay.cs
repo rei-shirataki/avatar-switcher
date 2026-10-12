@@ -89,8 +89,10 @@ internal sealed class AvatarPanelOverlay : IDisposable
         var err = OvrUtils.GetOrCreateOverlay(OverlayKey, OverlayName, ref _overlayHandle);
         if (err != EVROverlayError.None)
         {
-            Console.Error.WriteLine($"[steamvr] オーバーレイの作成に失敗しました: {err}");
-            return;
+            // 黙って return すると TryActivate が成功扱いになり、Rust 側へ running=true を
+            // 通知したままパネルが SteamVR 再起動まで使えなくなる。例外にして
+            // TryActivate の後始末・再試行に乗せる。
+            throw new InvalidOperationException($"オーバーレイの作成に失敗しました: {err}");
         }
 
         OpenVR.Overlay.SetOverlayWidthInMeters(_overlayHandle, _placementMode == PlacementMode.Hand ? HandWidthMeters : WidthMeters);
@@ -126,21 +128,28 @@ internal sealed class AvatarPanelOverlay : IDisposable
     ///    http://127.0.0.1 経由にすることで回避する
     /// 3. どちらも無ければ M1 のテストページにフォールバック（overlay-ui未セットアップでも
     ///    オーバーレイ描画パイプライン自体の疎通確認は引き続きできるようにする）
-    /// いずれも Rust core の WS ブリッジへ接続するための port/token をクエリで渡す。
+    /// いずれも Rust core の WS ブリッジへ接続するための port/token をフラグメント（#）で渡す。
+    /// クエリと違いフラグメントは HTTP リクエスト・Referer・サーバーログに載らない。
     /// </summary>
     private string ResolveOverlayUiUrl()
     {
-        var query = $"?port={_wsPort}&token={Uri.EscapeDataString(_wsToken)}";
+        var fragment = $"#port={_wsPort}&token={Uri.EscapeDataString(_wsToken)}";
 
         var devUrl = Environment.GetEnvironmentVariable("AVATAR_SWITCHER_OVERLAY_UI_DEV_URL");
         if (!string.IsNullOrEmpty(devUrl))
         {
-            return devUrl.TrimEnd('/') + "/" + query;
+            // トークンを渡す先なので、自マシンの開発サーバー以外は受け付けない。
+            if (IsLoopbackHttpUrl(devUrl))
+            {
+                return devUrl.TrimEnd('/') + "/" + fragment;
+            }
+            Console.Error.WriteLine("[steamvr] AVATAR_SWITCHER_OVERLAY_UI_DEV_URL は http://127.0.0.1 または " +
+                "http://localhost のURL（フラグメント無し）のみ指定できます。無視します。");
         }
 
         if (_uiPort is { } uiPort)
         {
-            return $"http://127.0.0.1:{uiPort}/index.html{query}";
+            return $"http://127.0.0.1:{uiPort}/index.html{fragment}";
         }
 
         Console.WriteLine("[steamvr] overlay-ui 静的ファイルサーバーが起動していないため M1 テストページで代替します" +
@@ -314,12 +323,18 @@ internal sealed class AvatarPanelOverlay : IDisposable
             Console.Error.WriteLine($"[overlay-ui] load error: {TruncateSource(e.FailedUrl)} {e.ErrorCode} {e.ErrorText}");
     }
 
+    internal static bool IsLoopbackHttpUrl(string url) =>
+        Uri.TryCreate(url, UriKind.Absolute, out var uri)
+        && uri.Scheme == Uri.UriSchemeHttp
+        && (uri.Host == "127.0.0.1" || uri.Host == "localhost")
+        && string.IsNullOrEmpty(uri.Fragment);
+
     /// <summary>M1のテストページはdata URIで読み込むため、そのままログに出すと1行が数KBになる。</summary>
     private static string TruncateSource(string source)
     {
-        // WS 接続用のトークンがクエリに載っているため、ログにはクエリを残さない。
-        var queryStart = source.IndexOf('?');
-        if (queryStart >= 0) source = source[..queryStart];
+        // WS 接続用のトークンがフラグメントに載っているため、ログにはクエリ・フラグメントを残さない。
+        var cut = source.IndexOfAny(['?', '#']);
+        if (cut >= 0) source = source[..cut];
         return source.Length > 80 ? source[..80] + "…" : source;
     }
 

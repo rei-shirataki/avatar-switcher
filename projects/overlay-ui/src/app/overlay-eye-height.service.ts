@@ -54,6 +54,12 @@ function cubicBezier(x1: number, y1: number, x2: number, y2: number): (t: number
 }
 const SMOOTH_EASE = cubicBezier(0.65, 0.0, 0.35, 1.0);
 
+/** ボタン操作と同じ 0.01 m 桁に丸める。VRChat からは 1.6000001 のような生の float が
+ *  届き、加算でも 1.7000000000000002 のような誤差が溜まるため（eye-height.service.ts と同じ）。 */
+function round2(v: number): number {
+  return Math.round(v * 100) / 100;
+}
+
 /**
  * eye-height.service.ts の簡略版(#27, v1スコープ)。現在値表示+ステップボタン+
  * リセット+送信モード切替を対象とし、プリセット・ワールド範囲表示は持たない。
@@ -68,8 +74,10 @@ export class OverlayEyeHeightService {
 
   private readonly _value = signal<number | null>(null);
   /** 直近の目標値。補間中の中間値ではなくこれを起点にstep()することで、
-   *  スムーズモード中の連打でも期待通りの累計分だけ動く（desktopの_targetと同じ）。 */
-  private readonly _target = signal<number>(0);
+   *  スムーズモード中の連打でも期待通りの累計分だけ動く（desktopの_targetと同じ）。
+   *  VRChatから現在値を一度も受け取っていない間はnull。0などの仮の値を起点にすると、
+   *  最初のタップで clamp(0 + delta) = 下限値 が送られアバターが縮んでしまう。 */
+  private readonly _target = signal<number | null>(null);
   private readonly _isSmoothing = signal(false);
   private readonly _mode = signal<EyeHeightMode>(DEFAULT_MODE);
   private readonly _resetting = signal(false);
@@ -86,6 +94,10 @@ export class OverlayEyeHeightService {
   private smoothTimer: ReturnType<typeof setInterval> | null = null;
   /** 直近のスムーズ補間終了時刻(performance.now())。ECHO_SUPPRESS_MSの起点。 */
   private _smoothEndedAt = Number.NEGATIVE_INFINITY;
+  /** 直近に自分で eyeheight.set を送った時刻(performance.now())。instantモードでも
+   *  送信直後に届く自分の値のエコーで _target を巻き戻さないための起点
+   *  （eye-height.service.ts の _lastSelfSendAt と同じ）。 */
+  private _lastSelfSendAt = Number.NEGATIVE_INFINITY;
   /** reset()のフォールバックタイマー。reset応答(isReset)が先に届いた場合はここで
    *  clearTimeoutする。クリアし忘れると、次のreset()呼び出しの途中でこの孤立タイマーが
    *  発火し、進行中の2回目のreset応答を通常のechoとして扱ってしまう。 */
@@ -109,16 +121,19 @@ export class OverlayEyeHeightService {
           clearTimeout(this.resetTimeoutHandle);
           this.resetTimeoutHandle = null;
         }
-        this._value.set(v);
-        this._target.set(v);
+        this._value.set(round2(v));
+        this._target.set(round2(v));
         return;
       }
       // 補間の実行中・終了直後は自前の値を信頼し、遅れて届く中間値エコーで
       // 巻き戻さない（詳細はECHO_SUPPRESS_MSのコメント参照）。
       if (this._isSmoothing()) return;
       if (performance.now() - this._smoothEndedAt < ECHO_SUPPRESS_MS) return;
-      this._value.set(v);
-      this._target.set(v);
+      // instantモードで長押し(150ms間隔)中に、1つ前に送った値のエコーが遅れて届くと
+      // _target が巻き戻り、同じ値を送り直して増減が止まったり戻ったりする。
+      if (performance.now() - this._lastSelfSendAt < ECHO_SUPPRESS_MS) return;
+      this._value.set(round2(v));
+      this._target.set(round2(v));
     });
     this.bridge.onEyeHeightSettingsUpdate((limitEnabled) => this._limitEnabled.set(limitEnabled));
   }
@@ -135,15 +150,24 @@ export class OverlayEyeHeightService {
    * 現在値→目標値を補間しながら連続送信する。
    */
   step(delta: number): void {
-    const next = this.clamp(this._target() + delta);
+    const current = this._target();
+    // 現在値が不明（eyeheight.query に応答が無い等）な間は起点が無いので送らない。
+    if (current === null) return;
+    const next = round2(this.clamp(current + delta));
     this._target.set(next);
     this.cancelSmooth();
     if (this._mode() === 'smooth') {
       this.startSmoothTo(next);
     } else {
       this._value.set(next);
-      this.bridge.setEyeHeight(next);
+      this.send(next);
     }
+  }
+
+  private send(value: number): void {
+    // 応答を待たず「発火した瞬間」からエコーが戻り得るので、ここで打刻する。
+    this._lastSelfSendAt = performance.now();
+    this.bridge.setEyeHeight(value);
   }
 
   /** スムージング中なら停止する。 */
@@ -163,7 +187,7 @@ export class OverlayEyeHeightService {
     const start = this._value() ?? target;
     if (Math.abs(target - start) < 0.005) {
       this._value.set(target);
-      this.bridge.setEyeHeight(target);
+      this.send(target);
       return;
     }
     const startTime = performance.now();
@@ -181,13 +205,13 @@ export class OverlayEyeHeightService {
         this._isSmoothing.set(false);
         this._smoothEndedAt = performance.now();
         this._value.set(target);
-        this.bridge.setEyeHeight(target);
+        this.send(target);
         return;
       }
       const eased = SMOOTH_EASE(t);
       const raw = this.clamp(start + (target - start) * eased);
       this._value.set(raw);
-      this.bridge.setEyeHeight(raw);
+      this.send(raw);
     }, SMOOTH_STEP_MS);
     this.smoothTimer = timer;
   }

@@ -75,6 +75,7 @@ async fn fetch_my_avatars_page(offset: u32) -> Result<Vec<VRCAvatar>> {
 /// 穴あきのリストを成功として返すと、呼び出し側（UI・SWR キャッシュ）の完全な
 /// 既存データを不完全なもので上書きしてしまうため。失敗時は stale 表示を維持させる。
 pub async fn get_my_avatars_all() -> Result<Vec<VRCAvatar>> {
+    let epoch = cache::epoch();
     let mut all: Vec<VRCAvatar> = Vec::new();
     let mut start_page: u32 = 0;
     loop {
@@ -129,7 +130,7 @@ pub async fn get_my_avatars_all() -> Result<Vec<VRCAvatar>> {
         start_page += batch_size;
     }
 
-    cache::save_avatars(&all);
+    tokio::task::block_in_place(|| cache::save_avatars(epoch, &all));
     Ok(all)
 }
 
@@ -221,6 +222,7 @@ async fn fetch_favorite_group(group: &'static str) -> Result<Vec<VRCAvatar>> {
 /// VRChat API のレート制限内に収まる（経験的に 1 秒あたり数十リクエストまで許容）。
 /// 各グループ内のページング（通常 1 ページで終わる）は順次のまま。
 pub async fn get_favorite_avatars() -> Result<Vec<VRCAvatar>> {
+    let epoch = cache::epoch();
     let groups: [&'static str; 6] = [
         "avatars1", "avatars2", "avatars3", "avatars4", "avatars5", "avatars6",
     ];
@@ -240,7 +242,7 @@ pub async fn get_favorite_avatars() -> Result<Vec<VRCAvatar>> {
     // 1 グループでも一過性の失敗があれば Err（欠損したリストをキャッシュ・UI へ流さない）。
     let all_avatars = merge_group_results(results)?;
 
-    cache::save_favorites(&all_avatars);
+    tokio::task::block_in_place(|| cache::save_favorites(epoch, &all_avatars));
     Ok(all_avatars)
 }
 

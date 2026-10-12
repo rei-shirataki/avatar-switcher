@@ -45,6 +45,10 @@ internal sealed class OffscreenBrowser : ChromiumWebBrowser, IRenderHandler
             DefaultEncoding = "UTF-8",
         };
 
+        // ブラウザ生成前に設定しないと最初のナビゲーションに間に合わない。
+        RequestHandler = new NavigationGuard(address);
+        LifeSpanHandler = new NoPopupLifeSpanHandler();
+
         CreateBrowser(windowInfo, browserSettings);
 
         Size = new System.Drawing.Size((int)width, (int)height);
@@ -66,6 +70,13 @@ internal sealed class OffscreenBrowser : ChromiumWebBrowser, IRenderHandler
         {
             if (_width <= 0 || _height <= 0) return;
 
+            // CEF のペイントサイズとテクスチャサイズは通常どちらも同じ解像度だが、
+            // 食い違った場合（Size 変更・デバイススケール等）にマップ領域を越えて
+            // 書き込まないよう、重なる範囲だけコピーする。
+            var desc = _renderTarget.Description;
+            var copyWidth = Math.Min(_width, desc.Width);
+            var copyHeight = Math.Min(_height, desc.Height);
+
             var context = _renderTarget.Device.ImmediateContext;
             var dataBox = context.MapSubresource(_renderTarget, 0, MapMode.WriteDiscard, MapFlags.None);
             if (!dataBox.IsEmpty)
@@ -74,17 +85,18 @@ internal sealed class OffscreenBrowser : ChromiumWebBrowser, IRenderHandler
                 var destinationPtr = dataBox.DataPointer;
                 var pitch = _width * 4;
                 var rowPitch = dataBox.RowPitch;
-                if (pitch == rowPitch)
+                if (pitch == rowPitch && copyWidth == _width && copyHeight == _height)
                 {
                     WinApi.RtlCopyMemory(destinationPtr, sourcePtr, (uint)(_width * _height * 4));
                 }
                 else
                 {
                     // テクスチャの実メモリ行幅(rowPitch)がピクセル幅(pitch)と一致しない
-                    // (ドライバのアライメント都合)場合は1行ずつコピーする。
-                    for (var y = 0; y < _height; y++)
+                    // (ドライバのアライメント都合)場合やサイズが異なる場合は1行ずつコピーする。
+                    var copyBytes = (uint)(copyWidth * 4);
+                    for (var y = 0; y < copyHeight; y++)
                     {
-                        WinApi.RtlCopyMemory(destinationPtr, sourcePtr, (uint)pitch);
+                        WinApi.RtlCopyMemory(destinationPtr, sourcePtr, copyBytes);
                         sourcePtr += pitch;
                         destinationPtr += rowPitch;
                     }
@@ -99,15 +111,22 @@ internal sealed class OffscreenBrowser : ChromiumWebBrowser, IRenderHandler
         }
     }
 
-    /// <summary>
-    /// ChromiumWebBrowser.Dispose() は非virtualなため override ではなく意図的に
-    /// メソッド隠蔽(new)している。参照実装 (OyasumiVR OffscreenBrowser.cs) も同様。
-    /// </summary>
-    public new void Dispose()
-    {
-        RenderHandler = null;
-        base.Dispose();
+    private bool _disposed;
 
+    /// <summary>
+    /// 以前は Dispose() を new で隠蔽していたため、IDisposable や基底型経由
+    /// （CefSharp 自身の終了時の破棄など）で呼ばれるとピン留めしたペイントバッファと
+    /// ロックが解放されなかった。基底の Dispose(bool) をオーバーライドしてどの経路でも解放する。
+    /// </summary>
+    protected override void Dispose(bool disposing)
+    {
+        if (_disposed) return;
+        _disposed = true;
+
+        if (disposing) RenderHandler = null;
+        base.Dispose(disposing);
+
+        // ピン留めは GC から見えないので、ファイナライザ経由（disposing=false）でも解放する。
         _paintBufferLock.EnterWriteLock();
         try
         {
@@ -118,7 +137,7 @@ internal sealed class OffscreenBrowser : ChromiumWebBrowser, IRenderHandler
             _paintBufferLock.ExitWriteLock();
         }
 
-        _paintBufferLock.Dispose();
+        if (disposing) _paintBufferLock.Dispose();
     }
 
     // ── IRenderHandler ──────────────────────────────────────────────────

@@ -42,13 +42,13 @@ pub async fn vrchat_get_favorite_avatars() -> Result<Vec<VRCAvatar>, String> {
 /// キャッシュが無い／壊れている場合は空配列を返す。
 #[tauri::command]
 pub async fn vrchat_get_cached_avatars() -> Result<Vec<VRCAvatar>, String> {
-    Ok(cache::load_avatars())
+    Ok(tokio::task::block_in_place(cache::load_avatars))
 }
 
 /// 前回取得したお気に入りアバターをディスクキャッシュから即時返す（SWR の stale 部分）。
 #[tauri::command]
 pub async fn vrchat_get_cached_favorites() -> Result<Vec<VRCAvatar>, String> {
-    Ok(cache::load_favorites())
+    Ok(tokio::task::block_in_place(cache::load_favorites))
 }
 
 #[tauri::command]

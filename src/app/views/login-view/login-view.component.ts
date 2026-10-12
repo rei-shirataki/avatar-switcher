@@ -3,6 +3,7 @@ import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { VRChatAuthService } from '../../core/services/vrchat-auth.service';
 import { CommonModule } from '@angular/common';
+import { errorMessage } from '../../core/utils/error.util';
 
 type LoginStep = 'credentials' | '2fa';
 
@@ -43,7 +44,7 @@ export class LoginViewComponent {
         this.error.set(result.error ?? 'ログインに失敗しました');
       }
     } catch (e: unknown) {
-      this.error.set(e instanceof Error ? e.message : '接続エラーが発生しました');
+      this.error.set(errorMessage(e, '接続エラーが発生しました'));
     } finally {
       this.loading.set(false);
     }
@@ -61,7 +62,7 @@ export class LoginViewComponent {
         this.error.set('認証コードが正しくありません');
       }
     } catch (e: unknown) {
-      this.error.set(e instanceof Error ? e.message : '認証エラー');
+      this.error.set(errorMessage(e, '認証エラー'));
     } finally {
       this.loading.set(false);
     }

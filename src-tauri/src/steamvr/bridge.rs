@@ -19,6 +19,7 @@ use std::time::Duration;
 use tauri::AppHandle;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::broadcast;
+use tokio_tungstenite::tungstenite::protocol::WebSocketConfig;
 use tokio_tungstenite::tungstenite::Message;
 
 /// SteamVR の稼働状態。overlay-sidecar からの `sidecar.steamvr-status` で更新される。
@@ -70,6 +71,19 @@ pub(crate) fn broadcast_eye_height_settings(limit_enabled: bool) {
 
 /// hello メッセージの受信を待つ最大時間。これを過ぎたら未認証とみなし切断する。
 const HELLO_TIMEOUT: Duration = Duration::from_secs(5);
+
+/// クライアントから受け取るメッセージ・フレームの上限。クライアントが送るのは
+/// hello やアバターID程度の小さな JSON だけなので、既定（64MiB）では大きすぎる。
+/// 認証前の接続からも巨大なメッセージでメモリを消費させられないようにする。
+const MAX_INCOMING_MESSAGE_BYTES: usize = 64 * 1024;
+
+fn ws_config() -> WebSocketConfig {
+    WebSocketConfig {
+        max_message_size: Some(MAX_INCOMING_MESSAGE_BYTES),
+        max_frame_size: Some(MAX_INCOMING_MESSAGE_BYTES),
+        ..Default::default()
+    }
+}
 
 /// WS サーバーを 127.0.0.1 の空きポートに bind し、受け入れループを spawn する。
 /// 戻り値は bind したポート番号（サイドカー起動時の引数、overlay-ui への
@@ -144,7 +158,9 @@ fn constant_time_eq(a: &str, b: &str) -> bool {
 }
 
 async fn handle_connection(stream: TcpStream, peer: SocketAddr, app: AppHandle, token: Arc<str>) {
-    let ws_stream = match tokio_tungstenite::accept_hdr_async(stream, check_origin).await {
+    let accepted =
+        tokio_tungstenite::accept_hdr_async_with_config(stream, check_origin, Some(ws_config())).await;
+    let ws_stream = match accepted {
         Ok(s) => s,
         Err(e) => {
             log::warn!("[steamvr] WSハンドシェイク失敗 ({}): {}", peer, e);

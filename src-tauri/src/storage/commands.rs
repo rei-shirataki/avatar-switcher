@@ -61,7 +61,8 @@ pub async fn folders_create(app: AppHandle, name: String) -> Result<AvatarFolder
     validate_folder_name(&name)?;
     let _guard = FOLDERS_LOCK.lock().await;
     let mut folders = load_folders(&app);
-    let order = folders.len() as u32;
+    // len() だと削除後に既存 order と重複するため最大値+1 にする。
+    let order = folders.iter().map(|f| f.order + 1).max().unwrap_or(0);
     let folder = AvatarFolder {
         id: uuid::Uuid::new_v4().to_string(),
         name: name.trim().to_string(),

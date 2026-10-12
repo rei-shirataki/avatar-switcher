@@ -144,17 +144,13 @@ internal sealed class OverlayManager
         Deactivate();
     }
 
-    private static readonly TimeSpan MainLoopErrorLogInterval = TimeSpan.FromSeconds(10);
-    private DateTime _lastMainLoopErrorLog = DateTime.MinValue;
+    private static readonly TimeSpan ErrorLogInterval = TimeSpan.FromSeconds(10);
+    private readonly ThrottledLog _mainLoopErrorLog = new(ErrorLogInterval);
+    private readonly ThrottledLog _renderErrorLog = new(ErrorLogInterval);
 
     /// <summary>同じ原因の例外が毎ティック(32ms)出続けてもログが埋まらないよう間引く。</summary>
-    private void LogMainLoopError(Exception ex)
-    {
-        var now = DateTime.UtcNow;
-        if (now - _lastMainLoopErrorLog < MainLoopErrorLogInterval) return;
-        _lastMainLoopErrorLog = now;
-        Console.Error.WriteLine($"[steamvr] 入力/イベント処理中に例外: {ex}");
-    }
+    private void LogMainLoopError(Exception ex) =>
+        _mainLoopErrorLog.Log($"[steamvr] 入力/イベント処理中に例外: {ex}");
 
     private bool _warnedVrInitFailure;
 
@@ -177,6 +173,9 @@ internal sealed class OverlayManager
             }
 
             _warnedVrInitFailure = false;
+            // 1回だけ出す診断ログは起動（SteamVR 接続）ごとに出し直す。
+            _warnedInteractDiag = false;
+            _warnedScrollDiag = false;
 
             var input = OpenVR.Input;
             if (input == null || OpenVR.Overlay == null)
@@ -337,7 +336,7 @@ internal sealed class OverlayManager
         }
 
         var role = OpenVR.System.GetControllerRoleForTrackedDeviceIndex(originInfo.trackedDeviceIndex);
-        Console.WriteLine($"[steamvr] OverlayInteract 変化: role={role} bState={actionData.bState}");
+        // トリガーは VRChat の通常操作でも常に使われるため、変化のたびにはログを出さない。
         _pointer?.SetPressed(role, actionData.bState);
     }
 
@@ -470,7 +469,8 @@ internal sealed class OverlayManager
                 }
                 catch (Exception ex)
                 {
-                    Console.Error.WriteLine($"[steamvr] フレーム更新中に例外: {ex.Message}");
+                    // 毎ティック（最大 144 回/秒）同じ例外が出続けることがあるため間引く。
+                    _renderErrorLog.Log($"[steamvr] フレーム更新中に例外: {ex.Message}");
                 }
 
                 timer.SleepUntilNextTick();

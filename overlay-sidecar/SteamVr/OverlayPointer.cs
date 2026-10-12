@@ -262,7 +262,11 @@ internal sealed class OverlayPointer : IDisposable
                 // #37フォローアップ: LastUvはRenderLoopスレッドが次ティックでクリアするまで
                 // 残るため、Dashboardが開いた直後の数msはIsShownを見ないと隠れたパネルへ
                 // クリックが漏れる（UpdateForController側のIsShownチェックだけでは防げない）。
-                Console.WriteLine($"[steamvr] クリックを無視: browser={(_target?.Browser == null ? "null" : "ok")} LastUv={(uv == null ? "null(パネルに当たっていない)" : "ok")} IsShown={_target?.IsShown}");
+                // パネルを狙っていないトリガーは VRChat の通常操作なのでログを出さない。
+                if (uv != null && _target?.IsShown == true)
+                {
+                    Console.WriteLine("[steamvr] クリックを無視: ブラウザ未生成");
+                }
                 return;
             }
 

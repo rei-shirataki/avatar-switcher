@@ -315,8 +315,13 @@ internal sealed class AvatarPanelOverlay : IDisposable
     }
 
     /// <summary>M1のテストページはdata URIで読み込むため、そのままログに出すと1行が数KBになる。</summary>
-    private static string TruncateSource(string source) =>
-        source.Length > 80 ? source[..80] + "…" : source;
+    private static string TruncateSource(string source)
+    {
+        // WS 接続用のトークンがクエリに載っているため、ログにはクエリを残さない。
+        var queryStart = source.IndexOf('?');
+        if (queryStart >= 0) source = source[..queryStart];
+        return source.Length > 80 ? source[..80] + "…" : source;
+    }
 
     public void Dispose()
     {

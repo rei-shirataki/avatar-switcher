@@ -7,6 +7,7 @@
 //! 機微情報は含まない（公開メタデータのみ）ため、平文 JSON で保存する。
 //! Cookie と同じ `app_data_dir` 配下に置く。
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
 use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
@@ -22,6 +23,9 @@ static CACHE_DIR: OnceCell<PathBuf> = OnceCell::new();
 /// 並列の save 呼び出しが file write を競合させないための排他ロック。
 /// 書き込みしか使わないので RwLock ではなく Mutex を採用。
 static SAVE_LOCK: OnceCell<Mutex<()>> = OnceCell::new();
+/// `clear()` のたびに増える世代番号。取得開始時の世代を `save_*` に渡し、
+/// 取得中にログアウト（clear）された場合は前のアカウントのデータを書き戻さない。
+static EPOCH: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Serialize, Deserialize)]
 struct CacheFile {
@@ -82,10 +86,15 @@ pub(crate) fn atomic_write(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
     })
 }
 
-fn save_to(name: &str, avatars: &[VRCAvatar]) {
+fn save_to(name: &str, epoch: u64, avatars: &[VRCAvatar]) {
     let Some(p) = path(name) else { return; };
     let Some(lock) = SAVE_LOCK.get() else { return; };
     let _guard = lock.lock().unwrap_or_else(|e| e.into_inner());
+    // clear() と同じロックの中で世代を確認するので、clear() 後に書き戻すことはない。
+    if EPOCH.load(Ordering::SeqCst) != epoch {
+        log::info!("{}: 取得中にキャッシュが破棄されたため保存しません。", name);
+        return;
+    }
     let cache = CacheFile {
         version: CACHE_VERSION,
         avatars: avatars.to_vec(),
@@ -96,17 +105,51 @@ fn save_to(name: &str, avatars: &[VRCAvatar]) {
     }
 }
 
+/// 現在の世代。取得を始める前に読み、結果を `save_*` に渡す。
+pub fn epoch() -> u64 { EPOCH.load(Ordering::SeqCst) }
+
 pub fn load_avatars() -> Vec<VRCAvatar> { load_from(AVATARS_FILE) }
-pub fn save_avatars(avatars: &[VRCAvatar]) { save_to(AVATARS_FILE, avatars) }
+pub fn save_avatars(epoch: u64, avatars: &[VRCAvatar]) { save_to(AVATARS_FILE, epoch, avatars) }
 
 pub fn load_favorites() -> Vec<VRCAvatar> { load_from(FAVORITES_FILE) }
-pub fn save_favorites(avatars: &[VRCAvatar]) { save_to(FAVORITES_FILE, avatars) }
+pub fn save_favorites(epoch: u64, avatars: &[VRCAvatar]) { save_to(FAVORITES_FILE, epoch, avatars) }
 
-/// ログアウト時にキャッシュを破棄する。
+/// ログアウト時にキャッシュを破棄する。世代を進めるので、実行中の取得が
+/// 完了しても前のアカウントのデータは保存されない。
 pub fn clear() {
+    let _guard = SAVE_LOCK.get().map(|l| l.lock().unwrap_or_else(|e| e.into_inner()));
+    EPOCH.fetch_add(1, Ordering::SeqCst);
     for name in [AVATARS_FILE, FAVORITES_FILE] {
         if let Some(p) = path(name) {
             std::fs::remove_file(&p).ok();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn save_started_before_clear_is_discarded() {
+        let dir = std::env::temp_dir().join(format!("avsw-cache-test-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        init(dir.clone());
+        let file = dir.join(AVATARS_FILE);
+
+        let epoch_before = epoch();
+        save_avatars(epoch_before, &[]);
+        assert!(file.exists(), "同じ世代なら保存される");
+
+        clear();
+        assert!(!file.exists());
+        // ログアウト前に始まった取得が後から完了しても書き戻さない。
+        save_avatars(epoch_before, &[]);
+        assert!(!file.exists(), "clear 前の世代の結果が保存された");
+
+        save_avatars(epoch(), &[]);
+        assert!(file.exists(), "clear 後に始めた取得は保存される");
+
+        std::fs::remove_dir_all(&dir).ok();
     }
 }

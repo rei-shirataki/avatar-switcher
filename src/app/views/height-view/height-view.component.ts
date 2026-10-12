@@ -52,7 +52,7 @@ interface Preset {
               inputmode="decimal"
               class="flex-1 bg-[var(--charcoal-color-dark-neutral--5)] border border-[var(--charcoal-color-container-secondary-default)] rounded-ch-m py-2.5 px-3 text-lg font-semibold text-text font-[var(--font-mono)] outline-none transition-colors duration-150 text-right focus:border-primary"
               [value]="displayValue()"
-              (change)="onValueChange($any($event.target).value)"
+              (change)="onValueChange($any($event.target))"
             />
             <span class="text-sm text-text-tertiary font-[var(--font-mono)]">m</span>
             <button
@@ -241,10 +241,13 @@ export class HeightViewComponent implements OnInit {
     this.loadPresets();
   }
 
-  onValueChange(raw: number | string): void {
-    const v = coerceFiniteNumber(raw);
-    if (v === null) return;
-    this.eyeHeight.setValue(v);
+  onValueChange(input: HTMLInputElement): void {
+    const v = coerceFiniteNumber(input.value);
+    if (v !== null) this.eyeHeight.setValue(v);
+    // 不正な入力や、範囲外がクランプされて値が変わらなかった場合はシグナルが変化せず
+    // [value] が再描画されないため、入力欄に実際の値を書き戻す（打った値のまま残ると
+    // 適用されていない値が表示され続ける）。
+    input.value = this.displayValue();
   }
 
   adjust(delta: number): void {

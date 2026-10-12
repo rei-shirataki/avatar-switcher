@@ -55,10 +55,30 @@ internal sealed class OverlayManager
         _shutdownToken = shutdownToken;
     }
 
+    private Thread? _mainThread;
+    private Thread? _renderThread;
+
     public void Run()
     {
-        new Thread(MainLoop) { IsBackground = true }.Start();
-        new Thread(RenderLoop) { IsBackground = true }.Start();
+        _mainThread = new Thread(MainLoop) { IsBackground = true, Name = "overlay-main" };
+        _renderThread = new Thread(RenderLoop) { IsBackground = true, Name = "overlay-render" };
+        _mainThread.Start();
+        _renderThread.Start();
+    }
+
+    /// <summary>
+    /// shutdownToken のキャンセル後、両ループが抜ける（MainLoop は最後に Deactivate する）のを待つ。
+    /// </summary>
+    public bool WaitForExit(TimeSpan timeout)
+    {
+        var deadline = DateTime.UtcNow + timeout;
+        foreach (var thread in new[] { _mainThread, _renderThread })
+        {
+            if (thread == null) continue;
+            var remaining = deadline - DateTime.UtcNow;
+            if (remaining < TimeSpan.Zero || !thread.Join(remaining)) return false;
+        }
+        return true;
     }
 
     private void MainLoop()
@@ -73,7 +93,8 @@ internal sealed class OverlayManager
             {
                 if (!TryActivate())
                 {
-                    Thread.Sleep(RetryInterval);
+                    // 終了要求ですぐ抜けられるよう、Sleep ではなくキャンセル待ちで待機する。
+                    _shutdownToken.WaitHandle.WaitOne(RetryInterval);
                     continue;
                 }
 

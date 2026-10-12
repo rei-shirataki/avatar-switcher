@@ -7,16 +7,25 @@
 use std::path::PathBuf;
 use std::process::Stdio;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::Mutex;
 use std::time::Duration;
 use tauri::{AppHandle, Manager};
 use tokio::io::AsyncWriteExt;
-use tokio::process::Command;
+use tokio::process::{ChildStdin, Command};
 
 /// 現在起動中の overlay-sidecar の OS プロセスID。0 なら未起動。
 static SIDECAR_PID: AtomicU32 = AtomicU32::new(0);
 
 /// shutdown() が呼ばれたら true。監視ループはこれを見て再起動を止める。
 static SHUTTING_DOWN: AtomicBool = AtomicBool::new(false);
+
+/// 起動中のサイドカーの標準入力。サイドカーはこれが閉じられる（EOF）と正常終了する。
+/// アプリ自体がクラッシュした場合も OS が閉じるため、サイドカーが孤児にならない。
+static SIDECAR_STDIN: Mutex<Option<ChildStdin>> = Mutex::new(None);
+
+/// shutdown() で標準入力を閉じてから、サイドカーが自分で終了するのを待つ上限。
+/// 超えたら強制終了する。
+const GRACEFUL_EXIT_TIMEOUT: Duration = Duration::from_secs(3);
 
 const RESTART_BACKOFF_SECS: [u64; 4] = [1, 3, 10, 30];
 /// この時間以上動き続けたら正常に起動できたとみなし、バックオフを最初に戻す。
@@ -97,9 +106,15 @@ pub(crate) async fn spawn(
                     let started = std::time::Instant::now();
                     SIDECAR_PID.store(child.id().unwrap_or(0), Ordering::SeqCst);
                     // tokio の Child::wait() は待機前に stdin を閉じるため、先に取り出して
-                    // サイドカーの生存中は開いたままにする（launch() のコメント参照）。
-                    let _stdin = child.stdin.take();
+                    // サイドカーの生存中は開いたままにする（SIDECAR_STDIN 参照）。
+                    *lock_stdin() = child.stdin.take();
+                    if SHUTTING_DOWN.load(Ordering::SeqCst) {
+                        // shutdown() が上の登録より先に走っていた場合は、ここで終了させる。
+                        lock_stdin().take();
+                        let _ = child.start_kill();
+                    }
                     let status = child.wait().await;
+                    lock_stdin().take();
                     SIDECAR_PID.store(0, Ordering::SeqCst);
                     if started.elapsed() >= HEALTHY_RUN {
                         attempt = 0;
@@ -192,26 +207,53 @@ fn open_log_append(path: &std::path::Path) -> std::io::Result<(std::fs::File, st
     Ok((out, err))
 }
 
+fn lock_stdin() -> std::sync::MutexGuard<'static, Option<ChildStdin>> {
+    SIDECAR_STDIN.lock().unwrap_or_else(|e| e.into_inner())
+}
+
 /// アプリ終了時にサイドカープロセスを確実に終了させる。
 ///
+/// まず標準入力を閉じてサイドカー自身に後片付け（オーバーレイ破棄・CEF 終了）を
+/// させ、`GRACEFUL_EXIT_TIMEOUT` 以内に終わらなければ強制終了する。
 /// `app.exit()` 経由のプロセス終了は Rust の Drop（`kill_on_drop`）実行を
-/// 保証しないため、PID を直接指定して同期的に kill する。
+/// 保証しないため、強制終了は PID を直接指定して同期的に行う。
 pub(crate) fn shutdown() {
     SHUTTING_DOWN.store(true, Ordering::SeqCst);
-    let pid = SIDECAR_PID.swap(0, Ordering::SeqCst);
+    lock_stdin().take();
+    let pid = SIDECAR_PID.load(Ordering::SeqCst);
     if pid == 0 {
         return;
     }
     log::info!("[steamvr] overlay-sidecar (pid={}) を終了します", pid);
+    // 監視タスク（tokio ワーカー）が終了を検知すると SIDECAR_PID を 0 に戻す。
+    let deadline = std::time::Instant::now() + GRACEFUL_EXIT_TIMEOUT;
+    while std::time::Instant::now() < deadline {
+        if SIDECAR_PID.load(Ordering::SeqCst) != pid {
+            return;
+        }
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    log::warn!("[steamvr] overlay-sidecar が終了しないため強制終了します (pid={})", pid);
+    force_kill(pid);
+}
+
+fn force_kill(pid: u32) {
     #[cfg(target_os = "windows")]
     {
-        let _ = std::process::Command::new("taskkill")
+        use std::os::windows::process::CommandExt;
+        // PATH 解決だとインストール先などに置かれた同名ファイルを実行し得るため、
+        // System32 の taskkill を絶対パスで呼ぶ。CREATE_NO_WINDOW でコンソールを出さない。
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        let system_root = std::env::var_os("SystemRoot").unwrap_or_else(|| "C:\\Windows".into());
+        let taskkill = PathBuf::from(system_root).join("System32").join("taskkill.exe");
+        let _ = std::process::Command::new(taskkill)
             .args(["/PID", &pid.to_string(), "/T", "/F"])
+            .creation_flags(CREATE_NO_WINDOW)
             .output();
     }
     #[cfg(not(target_os = "windows"))]
     {
-        let _ = std::process::Command::new("kill").arg(pid.to_string()).output();
+        let _ = std::process::Command::new("/bin/kill").arg(pid.to_string()).output();
     }
 }
 

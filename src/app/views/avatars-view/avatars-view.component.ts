@@ -346,10 +346,22 @@ export class AvatarsViewComponent implements OnInit {
   private showToast(msg: string, kind: ToastKind = 'success') {
     this.toastKind.set(kind);
     this.successMessage.set(msg);
-    setTimeout(() => this.successMessage.set(null), 2500);
+    // 前のトーストのタイマーが残っていると、新しいトーストを早く消してしまう。
+    if (this.toastTimer !== null) clearTimeout(this.toastTimer);
+    this.toastTimer = setTimeout(() => {
+      this.successMessage.set(null);
+      this.toastTimer = null;
+    }, 2500);
   }
 
+  /** 編集セッションの通し番号。パネルの開閉・編集の開始/取消で進める。
+   *  画像の読み込み・加工は非同期なので、完了時に番号が変わっていれば結果を捨て、
+   *  別のアバターの編集に画像が紛れ込まないようにする。 */
+  private editSession = 0;
+  private toastTimer: ReturnType<typeof setTimeout> | null = null;
+
   openDetailPanel(avatar: VRCAvatar) {
+    this.editSession++;
     this._detailAvatarId.set(avatar.id);
     this.detailHighResLoaded.set(false);
     this.detailEditMode.set(false);
@@ -357,6 +369,7 @@ export class AvatarsViewComponent implements OnInit {
   }
 
   closeDetailPanel() {
+    this.editSession++;
     this._detailAvatarId.set(null);
     this.detailEditMode.set(false);
     this.detailEditThumbnail.set(null);
@@ -392,12 +405,14 @@ export class AvatarsViewComponent implements OnInit {
       this.avatarService.avatars().find(a => a.id === av.id) ??
       this.avatarService.favorites().find(a => a.id === av.id);
     this.detailEditName = originalAvatar?.name ?? av.name;
+    this.editSession++;
     this.detailEditThumbnail.set(null);
     this.detailEditError.set(null);
     this.detailEditMode.set(true);
   }
 
   cancelEdit() {
+    this.editSession++;
     this.detailEditMode.set(false);
     this.detailEditThumbnail.set(null);
     this.detailEditError.set(null);
@@ -407,14 +422,16 @@ export class AvatarsViewComponent implements OnInit {
     const input = event.target as HTMLInputElement;
     const file = input.files?.[0];
     if (!file) return;
+    const session = this.editSession;
     const reader = new FileReader();
     reader.onload = async () => {
       try {
         const processed = await this.processAvatarImage(reader.result as string);
+        if (session !== this.editSession) return;
         this.detailEditThumbnail.set(processed);
       } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : String(e);
-        this.detailEditError.set(msg);
+        if (session !== this.editSession) return;
+        this.detailEditError.set(errorMessage(e, '画像の読み込みに失敗しました'));
       }
     };
     reader.readAsDataURL(file);
@@ -534,6 +551,7 @@ export class AvatarsViewComponent implements OnInit {
         }
       }
 
+      this.editSession++;
       this.detailEditMode.set(false);
       this.detailEditThumbnail.set(null);
       this.showToast('変更を保存しました');

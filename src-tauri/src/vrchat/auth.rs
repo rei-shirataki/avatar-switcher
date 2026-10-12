@@ -71,7 +71,57 @@ pub fn truncate_for_log(s: &str, max: usize) -> &str {
 /// `send` クロージャは毎回新しい `RequestBuilder` を組み立てる必要があるため、
 /// 呼び出し側でリクエストごとに closure 内で `client.method(...).send()` を
 /// 呼び直すこと。
+///
+/// 429/5xx/通信エラーを再試行する。冪等でない POST（`POST /file` 等）には
+/// [`send_with_retry_rate_limited`] を使うこと。
 pub async fn send_with_retry<F, Fut>(send: F, context: &str) -> reqwest::Result<reqwest::Response>
+where
+    F: Fn() -> Fut,
+    Fut: std::future::Future<Output = reqwest::Result<reqwest::Response>>,
+{
+    send_with_policy(send, context, RetryPolicy::Idempotent).await
+}
+
+/// 冪等でない POST 向け。429（リクエスト未処理が保証される）のみ再試行し、
+/// 5xx・通信エラーは処理済みの可能性があるため再送せず呼び出し側へ返す。
+/// 再送すると VRChat 側に重複した file / version を作りうる。
+pub async fn send_with_retry_rate_limited<F, Fut>(
+    send: F,
+    context: &str,
+) -> reqwest::Result<reqwest::Response>
+where
+    F: Fn() -> Fut,
+    Fut: std::future::Future<Output = reqwest::Result<reqwest::Response>>,
+{
+    send_with_policy(send, context, RetryPolicy::RateLimitOnly).await
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum RetryPolicy {
+    Idempotent,
+    RateLimitOnly,
+}
+
+fn should_retry_status(policy: RetryPolicy, status: reqwest::StatusCode) -> bool {
+    match policy {
+        RetryPolicy::Idempotent => {
+            status == reqwest::StatusCode::TOO_MANY_REQUESTS || status.is_server_error()
+        }
+        RetryPolicy::RateLimitOnly => status == reqwest::StatusCode::TOO_MANY_REQUESTS,
+    }
+}
+
+/// `Retry-After`（秒指定のみ。HTTP-date 形式は無視）を待機ミリ秒へ。上限 30 秒。
+fn parse_retry_after_ms(value: &str) -> Option<u64> {
+    let secs: u64 = value.trim().parse().ok()?;
+    Some(secs.saturating_mul(1000).min(30_000))
+}
+
+async fn send_with_policy<F, Fut>(
+    send: F,
+    context: &str,
+    policy: RetryPolicy,
+) -> reqwest::Result<reqwest::Response>
 where
     F: Fn() -> Fut,
     Fut: std::future::Future<Output = reqwest::Result<reqwest::Response>>,
@@ -84,10 +134,17 @@ where
         match send().await {
             Ok(resp) => {
                 let status = resp.status();
-                let retryable =
-                    status == reqwest::StatusCode::TOO_MANY_REQUESTS || status.is_server_error();
-                if !retryable || attempt == MAX_ATTEMPTS {
+                if !should_retry_status(policy, status) || attempt == MAX_ATTEMPTS {
                     return Ok(resp);
+                }
+                // サーバーが待機時間を指示している場合はそれを優先する。
+                if let Some(ms) = resp
+                    .headers()
+                    .get(reqwest::header::RETRY_AFTER)
+                    .and_then(|v| v.to_str().ok())
+                    .and_then(parse_retry_after_ms)
+                {
+                    delay_ms = ms.max(delay_ms);
                 }
                 log::warn!(
                     "{}: HTTP {} (試行 {}/{}), {} ms 待機後に再試行します。",
@@ -99,7 +156,7 @@ where
                 );
             }
             Err(e) => {
-                if attempt == MAX_ATTEMPTS {
+                if attempt == MAX_ATTEMPTS || policy == RetryPolicy::RateLimitOnly {
                     return Err(e);
                 }
                 log::warn!(
@@ -492,7 +549,7 @@ pub async fn verify_2fa(code: &str, method: &str) -> Result<bool> {
 
     let client = get_client().await?;
     let body_json = serde_json::json!({ "code": code });
-    let resp = send_with_retry(
+    let resp = send_with_retry_rate_limited(
         || {
             client
                 .post(&endpoint)
@@ -572,4 +629,30 @@ pub async fn logout() -> Result<()> {
         std::fs::remove_file(plain_path).ok();
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod retry_tests {
+    use super::*;
+    use reqwest::StatusCode;
+
+    #[test]
+    fn idempotent_policy_retries_429_and_5xx() {
+        assert!(should_retry_status(RetryPolicy::Idempotent, StatusCode::TOO_MANY_REQUESTS));
+        assert!(should_retry_status(RetryPolicy::Idempotent, StatusCode::BAD_GATEWAY));
+        assert!(!should_retry_status(RetryPolicy::Idempotent, StatusCode::NOT_FOUND));
+    }
+
+    #[test]
+    fn rate_limit_only_policy_does_not_retry_5xx() {
+        assert!(should_retry_status(RetryPolicy::RateLimitOnly, StatusCode::TOO_MANY_REQUESTS));
+        assert!(!should_retry_status(RetryPolicy::RateLimitOnly, StatusCode::INTERNAL_SERVER_ERROR));
+    }
+
+    #[test]
+    fn retry_after_seconds_are_parsed_and_capped() {
+        assert_eq!(parse_retry_after_ms("3"), Some(3000));
+        assert_eq!(parse_retry_after_ms(" 120 "), Some(30_000));
+        assert_eq!(parse_retry_after_ms("Wed, 21 Oct 2026 07:28:00 GMT"), None);
+    }
 }

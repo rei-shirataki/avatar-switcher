@@ -89,6 +89,38 @@ fn parse_loopback_host(raw: &str) -> Option<String> {
     let ip: std::net::Ipv4Addr = raw.trim().parse().ok()?;
     ip.is_loopback().then(|| ip.to_string())
 }
+
+/// 受信ソケットと OSCQuery HTTP サーバーを loopback だけで待ち受けるか（#107）。
+/// `AVATAR_SWITCHER_OSC_LOOPBACK_ONLY=1`（または `true`）で有効になる。
+///
+/// mDNS 広告には実 LAN IP しか載らない（mdns-sd は広告を送るインターフェイスと
+/// 同じサブネットのアドレスだけを送り、loopback インターフェイスでは送らない）。
+/// VRChat が広告アドレスではなく 127.0.0.1 に接続してくるなら loopback だけで
+/// 足りるが、実機で確かめるまでは既定を全インターフェイス（0.0.0.0）のままにする。
+static LOOPBACK_ONLY: Lazy<bool> = Lazy::new(|| {
+    let enabled = std::env::var("AVATAR_SWITCHER_OSC_LOOPBACK_ONLY")
+        .map(|raw| parse_flag(&raw))
+        .unwrap_or(false);
+    log::info!(
+        "[OSC] 受信・OSCQuery HTTP の待ち受けアドレス: {}",
+        if enabled { "127.0.0.1（AVATAR_SWITCHER_OSC_LOOPBACK_ONLY）" } else { "0.0.0.0" }
+    );
+    enabled
+});
+
+fn parse_flag(raw: &str) -> bool {
+    matches!(raw.trim().to_ascii_lowercase().as_str(), "1" | "true")
+}
+
+/// 受信ソケットと OSCQuery HTTP サーバーの bind アドレス。
+pub(crate) fn listen_host() -> &'static str {
+    if *LOOPBACK_ONLY {
+        "127.0.0.1"
+    } else {
+        "0.0.0.0"
+    }
+}
+
 static OSC_PORT_OVERRIDE: Lazy<Option<u16>> = Lazy::new(|| {
     std::env::var("AVATAR_SWITCHER_OSC_PORT")
         .ok()
@@ -162,9 +194,10 @@ fn send_float(addr: &str, value: f32) -> anyhow::Result<()> {
 /// OSC 受信ソケットを bind し、受信ループを spawn する。
 /// 戻り値は確保された受信ポート (OSCQuery 広告用)。失敗時は呼び出し側でフォールバック。
 pub async fn init_receiver(app: AppHandle) -> anyhow::Result<u16> {
-    // 0.0.0.0 で bind。OSCQuery は実 LAN IP を広告するため、VRChat からの
+    // 既定は 0.0.0.0 で bind。OSCQuery は実 LAN IP を広告するため、VRChat からの
     // OSC パケットは LAN インターフェイス経由で届く（同一マシンでも）。
-    let socket = TokioUdpSocket::bind("0.0.0.0:0").await?;
+    // AVATAR_SWITCHER_OSC_LOOPBACK_ONLY 指定時は 127.0.0.1 に限定する（#107）。
+    let socket = TokioUdpSocket::bind((listen_host(), 0)).await?;
     let port = socket.local_addr()?.port();
     tokio::spawn(receive_loop(socket, app));
     Ok(port)
@@ -181,9 +214,9 @@ async fn receive_loop(socket: TokioUdpSocket, app: AppHandle) {
     loop {
         match socket.recv_from(&mut buf).await {
             Ok((n, src)) => {
-                // 0.0.0.0 で bind しているため LAN の任意ホストからパケットが届き得る。
+                // 0.0.0.0 で bind している場合は LAN の任意ホストからパケットが届き得る。
                 // 同一マシン前提のアプリなので、loopback と自マシンの LAN IP 以外は捨てる。
-                // 外部からの偽 OSC で UI 状態・localStorage を書き換えられるのを防ぐ。
+                // 外部からの偽 OSC で UI 状態・localStorage を書き換えられるのを減らす。
                 if !is_trusted_src(&src) {
                     continue;
                 }
@@ -205,6 +238,10 @@ async fn receive_loop(socket: TokioUdpSocket, app: AppHandle) {
 
 /// 受信ソースが同一マシン由来か判定する。loopback または自マシンの LAN IPv4 のみ通す。
 /// 自マシンの LAN IP は TTL 付きでキャッシュする（DHCP 更新・VPN 切替に追随するため）。
+///
+/// UDP の送信元アドレスは LAN 内から偽装できるため、これは完全な防御ではない
+/// （自機の LAN IP を騙った偽 OSC は通る）。偽装まで防ぐには loopback で
+/// 待ち受ける（`AVATAR_SWITCHER_OSC_LOOPBACK_ONLY`）必要がある（#107）。
 fn is_trusted_src(src: &SocketAddr) -> bool {
     if src.ip().is_loopback() {
         return true;
@@ -311,5 +348,14 @@ mod float_tests {
         assert_eq!(parse_loopback_host("::1"), None);
         assert_eq!(parse_loopback_host("192.168.1.10"), None);
         assert_eq!(parse_loopback_host("localhost"), None);
+    }
+
+    #[test]
+    fn loopback_only_flag_accepts_1_or_true() {
+        assert!(parse_flag("1"));
+        assert!(parse_flag(" TRUE "));
+        assert!(!parse_flag("0"));
+        assert!(!parse_flag("yes"));
+        assert!(!parse_flag(""));
     }
 }

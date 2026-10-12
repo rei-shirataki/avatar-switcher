@@ -33,10 +33,11 @@
     <!-- 長押しで連続増減できるよう、単発のclickではなくmousedown起点のオートリピート
          (EyeHeightControlComponent.startRepeat)にしている。mouseup/mouseleave両方で
          止めるのは、VRコントローラーの精度不足でポインタがボタン外へ逸れたまま
-         離した場合でもリピートが残留しないようにするため。 -->
-    <button class="py-2.5 px-[14px] border-2 border-transparent rounded-lg bg-background text-text text-base font-[inherit] cursor-pointer hover:border-accent-hover" type="button" (mousedown)="startRepeat(-0.1)" (mouseup)="stopRepeat()" (mouseleave)="stopRepeat()">-0.1</button>
-    <button class="py-2.5 px-[14px] border-2 border-transparent rounded-lg bg-background text-text text-base font-[inherit] cursor-pointer hover:border-accent-hover" type="button" (mousedown)="startRepeat(-0.01)" (mouseup)="stopRepeat()" (mouseleave)="stopRepeat()">-0.01</button>
-    <button class="py-2.5 px-[14px] border-2 border-transparent rounded-lg bg-background text-text text-base font-[inherit] cursor-pointer hover:border-accent-hover" type="button" (mousedown)="startRepeat(0.01)" (mouseup)="stopRepeat()" (mouseleave)="stopRepeat()">+0.01</button>
-    <button class="py-2.5 px-[14px] border-2 border-transparent rounded-lg bg-background text-text text-base font-[inherit] cursor-pointer hover:border-accent-hover" type="button" (mousedown)="startRepeat(0.1)" (mouseup)="stopRepeat()" (mouseleave)="stopRepeat()">+0.1</button>
+         離した場合でもリピートが残留しないようにするため。
+         現在値を受け取るまでは増減の起点が無いため無効化する（OverlayEyeHeightService.step 参照）。 -->
+    <button class="py-2.5 px-[14px] border-2 border-transparent rounded-lg bg-background text-text text-base font-[inherit] cursor-pointer enabled:hover:border-accent-hover disabled:opacity-50 disabled:cursor-default" type="button" [disabled]="eyeHeight.value() === null" (mousedown)="startRepeat(-0.1)" (mouseup)="stopRepeat()" (mouseleave)="stopRepeat()">-0.1</button>
+    <button class="py-2.5 px-[14px] border-2 border-transparent rounded-lg bg-background text-text text-base font-[inherit] cursor-pointer enabled:hover:border-accent-hover disabled:opacity-50 disabled:cursor-default" type="button" [disabled]="eyeHeight.value() === null" (mousedown)="startRepeat(-0.01)" (mouseup)="stopRepeat()" (mouseleave)="stopRepeat()">-0.01</button>
+    <button class="py-2.5 px-[14px] border-2 border-transparent rounded-lg bg-background text-text text-base font-[inherit] cursor-pointer enabled:hover:border-accent-hover disabled:opacity-50 disabled:cursor-default" type="button" [disabled]="eyeHeight.value() === null" (mousedown)="startRepeat(0.01)" (mouseup)="stopRepeat()" (mouseleave)="stopRepeat()">+0.01</button>
+    <button class="py-2.5 px-[14px] border-2 border-transparent rounded-lg bg-background text-text text-base font-[inherit] cursor-pointer enabled:hover:border-accent-hover disabled:opacity-50 disabled:cursor-default" type="button" [disabled]="eyeHeight.value() === null" (mousedown)="startRepeat(0.1)" (mouseup)="stopRepeat()" (mouseleave)="stopRepeat()">+0.1</button>
   </div>
 </div>

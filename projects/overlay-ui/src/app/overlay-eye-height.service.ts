@@ -68,8 +68,10 @@ export class OverlayEyeHeightService {
 
   private readonly _value = signal<number | null>(null);
   /** 直近の目標値。補間中の中間値ではなくこれを起点にstep()することで、
-   *  スムーズモード中の連打でも期待通りの累計分だけ動く（desktopの_targetと同じ）。 */
-  private readonly _target = signal<number>(0);
+   *  スムーズモード中の連打でも期待通りの累計分だけ動く（desktopの_targetと同じ）。
+   *  VRChatから現在値を一度も受け取っていない間はnull。0などの仮の値を起点にすると、
+   *  最初のタップで clamp(0 + delta) = 下限値 が送られアバターが縮んでしまう。 */
+  private readonly _target = signal<number | null>(null);
   private readonly _isSmoothing = signal(false);
   private readonly _mode = signal<EyeHeightMode>(DEFAULT_MODE);
   private readonly _resetting = signal(false);
@@ -135,7 +137,10 @@ export class OverlayEyeHeightService {
    * 現在値→目標値を補間しながら連続送信する。
    */
   step(delta: number): void {
-    const next = this.clamp(this._target() + delta);
+    const current = this._target();
+    // 現在値が不明（eyeheight.query に応答が無い等）な間は起点が無いので送らない。
+    if (current === null) return;
+    const next = this.clamp(current + delta);
     this._target.set(next);
     this.cancelSmooth();
     if (this._mode() === 'smooth') {

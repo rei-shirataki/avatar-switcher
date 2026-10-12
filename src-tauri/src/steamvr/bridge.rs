@@ -103,8 +103,48 @@ async fn accept_loop(listener: TcpListener, app: AppHandle, token: Arc<str>) {
     }
 }
 
+/// ブラウザ由来の接続（`Origin` あり）はローカルの overlay-ui（静的サーバー /
+/// `ng serve`）のものだけを通す。ネイティブの sidecar は Origin を送らない。
+/// 任意の Web ページが 127.0.0.1 の WS へ接続を試みる経路を、トークン検証の前に
+/// 塞ぐ多層防御。
+fn is_allowed_origin(origin: Option<&str>) -> bool {
+    match origin {
+        None => true,
+        Some(o) => o.starts_with("http://127.0.0.1:") || o.starts_with("http://localhost:"),
+    }
+}
+
+fn check_origin(
+    req: &tokio_tungstenite::tungstenite::handshake::server::Request,
+    resp: tokio_tungstenite::tungstenite::handshake::server::Response,
+) -> Result<
+    tokio_tungstenite::tungstenite::handshake::server::Response,
+    tokio_tungstenite::tungstenite::handshake::server::ErrorResponse,
+> {
+    let origin = req.headers().get("origin").and_then(|v| v.to_str().ok());
+    if is_allowed_origin(origin) {
+        Ok(resp)
+    } else {
+        log::warn!("[steamvr] 許可されない Origin からの接続を拒否: {:?}", origin);
+        let mut err = tokio_tungstenite::tungstenite::handshake::server::ErrorResponse::new(
+            Some("forbidden origin".to_string()),
+        );
+        *err.status_mut() = tokio_tungstenite::tungstenite::http::StatusCode::FORBIDDEN;
+        Err(err)
+    }
+}
+
+/// タイミング差からトークンを推測されないよう、長さが同じ限り全バイトを比較する。
+fn constant_time_eq(a: &str, b: &str) -> bool {
+    let (a, b) = (a.as_bytes(), b.as_bytes());
+    if a.len() != b.len() {
+        return false;
+    }
+    a.iter().zip(b).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
+}
+
 async fn handle_connection(stream: TcpStream, peer: SocketAddr, app: AppHandle, token: Arc<str>) {
-    let ws_stream = match tokio_tungstenite::accept_async(stream).await {
+    let ws_stream = match tokio_tungstenite::accept_hdr_async(stream, check_origin).await {
         Ok(s) => s,
         Err(e) => {
             log::warn!("[steamvr] WSハンドシェイク失敗 ({}): {}", peer, e);
@@ -121,7 +161,7 @@ async fn handle_connection(stream: TcpStream, peer: SocketAddr, app: AppHandle, 
         }
     };
     let pid = match serde_json::from_str::<ClientMessage>(&hello_text) {
-        Ok(ClientMessage::Hello { pid, token: t }) if t == token.as_ref() => pid,
+        Ok(ClientMessage::Hello { pid, token: t }) if constant_time_eq(&t, &token) => pid,
         _ => {
             log::warn!("[steamvr] トークン認証に失敗、切断します: {}", peer);
             return;
@@ -381,5 +421,31 @@ async fn handle_avatars_select(avatar_id: &str) -> ServerMessage {
                 message: e.to_string(),
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn origin_absent_or_local_is_allowed() {
+        assert!(is_allowed_origin(None));
+        assert!(is_allowed_origin(Some("http://127.0.0.1:51234")));
+        assert!(is_allowed_origin(Some("http://localhost:4200")));
+    }
+
+    #[test]
+    fn foreign_origin_is_rejected() {
+        assert!(!is_allowed_origin(Some("https://evil.example")));
+        assert!(!is_allowed_origin(Some("http://127.0.0.1.evil.example")));
+        assert!(!is_allowed_origin(Some("null")));
+    }
+
+    #[test]
+    fn constant_time_eq_matches_equality() {
+        assert!(constant_time_eq("abc", "abc"));
+        assert!(!constant_time_eq("abc", "abd"));
+        assert!(!constant_time_eq("abc", "abcd"));
     }
 }

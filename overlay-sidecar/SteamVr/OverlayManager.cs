@@ -449,7 +449,7 @@ internal sealed class OverlayManager
 
     private void RenderLoop()
     {
-        var timer = new RefreshRateTimer();
+        using var timer = new RefreshRateTimer();
         while (!_shutdownToken.IsCancellationRequested)
         {
             if (_active)

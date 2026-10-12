@@ -71,10 +71,9 @@ async fn fetch_my_avatars_page(offset: u32) -> Result<Vec<VRCAvatar>> {
 /// 100 件未満が返ったページが含まれるバッチでループを終了する。
 /// 成功時にディスクキャッシュに保存し、次回起動時の SWR 即時表示に使う。
 ///
-/// 個別ページのフェッチ失敗（JoinError / API エラー）は warn ログを残して継続する。
-/// お気に入り側と挙動を統一し、1 ページの失敗で全件破棄しないことで、ユーザー体験を守る。
-/// ただし「途中ページが失敗」した場合に reached_end 判定が後ろにずれる可能性があるため、
-/// 失敗があった場合は安全側に倒してそのバッチで終了する（穴あきリストを返さない）。
+/// 1 ページでも取得に失敗した場合は `Err` を返し、ディスクキャッシュも更新しない。
+/// 穴あきのリストを成功として返すと、呼び出し側（UI・SWR キャッシュ）の完全な
+/// 既存データを不完全なもので上書きしてしまうため。失敗時は stale 表示を維持させる。
 pub async fn get_my_avatars_all() -> Result<Vec<VRCAvatar>> {
     let mut all: Vec<VRCAvatar> = Vec::new();
     let mut start_page: u32 = 0;
@@ -105,7 +104,7 @@ pub async fn get_my_avatars_all() -> Result<Vec<VRCAvatar>> {
                 }
                 Ok(Err(e)) => {
                     log::warn!(
-                        "自前アバター page {} の取得に失敗: {}（取得済み分は保持）",
+                        "自前アバター page {} の取得に失敗: {}",
                         start_page + i as u32,
                         e
                     );
@@ -113,7 +112,7 @@ pub async fn get_my_avatars_all() -> Result<Vec<VRCAvatar>> {
                 }
                 Err(e) => {
                     log::warn!(
-                        "自前アバター page {} のタスク結合失敗: {}（取得済み分は保持）",
+                        "自前アバター page {} のタスク結合失敗: {}",
                         start_page + i as u32,
                         e
                     );
@@ -121,13 +120,30 @@ pub async fn get_my_avatars_all() -> Result<Vec<VRCAvatar>> {
                 }
             }
         }
-        if reached_end || had_failure {
+        if had_failure {
+            return Err(anyhow!("アバター一覧の取得に一部失敗しました（キャッシュは更新しません）"));
+        }
+        if reached_end {
             break;
         }
         start_page += batch_size;
     }
 
     cache::save_avatars(&all);
+    Ok(all)
+}
+
+/// リトライ後も残る一過性エラー（レート制限・サーバーエラー）かどうか。
+fn is_transient_status(status: reqwest::StatusCode) -> bool {
+    status == reqwest::StatusCode::TOO_MANY_REQUESTS || status.is_server_error()
+}
+
+/// グループごとの取得結果を統合する。1 件でも失敗があれば全体を失敗とする。
+fn merge_group_results(results: Vec<Result<Vec<VRCAvatar>>>) -> Result<Vec<VRCAvatar>> {
+    let mut all = Vec::new();
+    for r in results {
+        all.extend(r?);
+    }
     Ok(all)
 }
 
@@ -155,16 +171,26 @@ async fn fetch_favorite_group(group: &'static str) -> Result<Vec<VRCAvatar>> {
         {
             Ok(r) => r,
             Err(e) => {
-                log::warn!("お気に入りグループ {} の取得で通信エラー: {}", group, e);
-                break;
+                return Err(anyhow!("お気に入りグループ {} の取得で通信エラー: {}", group, e));
             }
         };
 
         if !resp.status().is_success() {
             let status = resp.status();
             let text = resp.text().await.unwrap_or_default();
+            // 429/5xx は一過性。空グループとして扱うとキャッシュを欠損データで
+            // 上書きするため失敗として伝播する。それ以外の 4xx（VRC+ 未加入で
+            // 利用できないグループ等）は恒常的な「空」として扱う。
+            if is_transient_status(status) {
+                return Err(anyhow!(
+                    "お気に入りグループ {} の取得に失敗しました: {} - {}",
+                    group,
+                    status,
+                    truncate_for_log(&text, 500)
+                ));
+            }
             log::warn!(
-                "お気に入りグループ {} の取得に失敗しました: {} - {}",
+                "お気に入りグループ {} は利用できません: {} - {}",
                 group,
                 status,
                 truncate_for_log(&text, 500)
@@ -172,7 +198,10 @@ async fn fetch_favorite_group(group: &'static str) -> Result<Vec<VRCAvatar>> {
             break;
         }
 
-        let avatars: Vec<VRCAvatar> = resp.json().await?;
+        let avatars: Vec<VRCAvatar> = resp
+            .json()
+            .await
+            .map_err(|e| anyhow!("お気に入りグループ {} のレスポンス解析に失敗: {}", group, e))?;
         let count = avatars.len() as u32;
 
         acc.extend(avatars.into_iter().filter(|a| {
@@ -201,14 +230,15 @@ pub async fn get_favorite_avatars() -> Result<Vec<VRCAvatar>> {
         handles.push(tokio::spawn(fetch_favorite_group(group)));
     }
 
-    let mut all_avatars: Vec<VRCAvatar> = Vec::new();
+    let mut results: Vec<Result<Vec<VRCAvatar>>> = Vec::with_capacity(handles.len());
     for h in handles {
-        match h.await {
-            Ok(Ok(avatars)) => all_avatars.extend(avatars),
-            Ok(Err(e)) => log::warn!("お気に入り取得失敗: {}", e),
-            Err(e) => log::warn!("お気に入り取得タスクの結合に失敗: {}", e),
-        }
+        results.push(match h.await {
+            Ok(r) => r,
+            Err(e) => Err(anyhow!("お気に入り取得タスクの結合に失敗: {}", e)),
+        });
     }
+    // 1 グループでも一過性の失敗があれば Err（欠損したリストをキャッシュ・UI へ流さない）。
+    let all_avatars = merge_group_results(results)?;
 
     cache::save_favorites(&all_avatars);
     Ok(all_avatars)
@@ -283,4 +313,40 @@ pub async fn update_avatar(avatar_id: &str, name: &str) -> Result<VRCAvatar> {
     )
     .await?;
     Ok(resp.json::<VRCAvatar>().await?)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use reqwest::StatusCode;
+
+    fn avatar(id: &str) -> VRCAvatar {
+        serde_json::from_value(serde_json::json!({ "id": id, "name": id })).unwrap()
+    }
+
+    #[test]
+    fn rate_limit_and_server_errors_are_transient() {
+        assert!(is_transient_status(StatusCode::TOO_MANY_REQUESTS));
+        assert!(is_transient_status(StatusCode::BAD_GATEWAY));
+    }
+
+    #[test]
+    fn client_errors_are_not_transient() {
+        assert!(!is_transient_status(StatusCode::FORBIDDEN));
+        assert!(!is_transient_status(StatusCode::BAD_REQUEST));
+    }
+
+    #[test]
+    fn merge_returns_all_when_every_group_succeeds() {
+        let merged =
+            merge_group_results(vec![Ok(vec![avatar("a")]), Ok(vec![]), Ok(vec![avatar("b")])])
+                .unwrap();
+        assert_eq!(merged.len(), 2);
+    }
+
+    #[test]
+    fn merge_fails_when_any_group_fails() {
+        let r = merge_group_results(vec![Ok(vec![avatar("a")]), Err(anyhow!("429"))]);
+        assert!(r.is_err());
+    }
 }

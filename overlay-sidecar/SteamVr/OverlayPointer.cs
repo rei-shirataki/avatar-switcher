@@ -200,8 +200,19 @@ internal sealed class OverlayPointer : IDisposable
         var browser = _target?.Browser;
         if (browser == null || pointer.LastUv == null) return;
         var (x, y) = ToBrowserPixels(pointer.LastUv.Value, browser);
-        browser.GetBrowser().GetHost().SendMouseMoveEvent(x, y, mouseLeave,
+        TryGetHost(browser)?.SendMouseMoveEvent(x, y, mouseLeave,
             pointer.Pressed ? CefEventFlags.LeftMouseButton : CefEventFlags.None);
+    }
+
+    /// <summary>
+    /// CEFブラウザの生成完了前・破棄後は GetBrowser() が使えない（null または例外）ため、
+    /// 入力を送れる状態のときだけホストを返す。SteamVR/sidecar 起動直後にトリガーを
+    /// 引くとこの状態でクリックが届き、MainLoop スレッドの未処理例外でプロセスが落ちていた。
+    /// </summary>
+    private static IBrowserHost? TryGetHost(OffscreenBrowser browser)
+    {
+        if (browser.IsDisposed || !browser.IsBrowserInitialized) return null;
+        return browser.GetBrowser()?.GetHost();
     }
 
     /// <summary>UV原点(左下)とCEFのピクセル原点(左上)でY軸が逆になるため反転する。</summary>
@@ -250,7 +261,7 @@ internal sealed class OverlayPointer : IDisposable
         }
         var (x, y) = ToBrowserPixels(uv.Value, browser);
         Console.WriteLine($"[steamvr] クリック送信: role={role} pressed={pressed} x={x} y={y}");
-        browser.GetBrowser().GetHost().SendMouseClickEvent(x, y, MouseButtonType.Left, mouseUp: !pressed, clickCount: 1, CefEventFlags.None);
+        TryGetHost(browser)?.SendMouseClickEvent(x, y, MouseButtonType.Left, mouseUp: !pressed, clickCount: 1, CefEventFlags.None);
     }
 
     /// <summary>
@@ -286,7 +297,7 @@ internal sealed class OverlayPointer : IDisposable
 
         var (x, y) = ToBrowserPixels(uv.Value, browser);
         var wheelDeltaY = (int)(deltaY * ScrollPixelsPerUnit);
-        browser.GetBrowser().GetHost().SendMouseWheelEvent(x, y, 0, wheelDeltaY, CefEventFlags.None);
+        TryGetHost(browser)?.SendMouseWheelEvent(x, y, 0, wheelDeltaY, CefEventFlags.None);
     }
 
     public void Dispose()

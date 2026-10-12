@@ -81,37 +81,58 @@ internal sealed class OverlayManager
                 _ = _bridge.SendSteamVrStatusAsync(true, _shutdownToken);
             }
 
-            UpdateActionSets();
-            DetectOverlayInteract();
-            DetectOpenOverlayToggle();
-            DetectScroll();
-
-            while (OpenVR.System.PollNextEvent(ref e, (uint)Marshal.SizeOf(e)))
+            // バックグラウンドスレッドの未処理例外は .NET ではプロセスを終了させるため、
+            // 1ティック分の失敗はログに留めて次ティックへ回復させる。
+            try
             {
-                var eventType = (EVREventType)e.eventType;
-                if (eventType == EVREventType.VREvent_Quit)
-                {
-                    Console.WriteLine("[steamvr] SteamVRからQuitイベントを受信、後片付けします");
-                    Deactivate();
-                    _ = _bridge.SendSteamVrStatusAsync(false, _shutdownToken);
-                    break;
-                }
+                UpdateActionSets();
+                DetectOverlayInteract();
+                DetectOpenOverlayToggle();
+                DetectScroll();
 
-                // #37: SteamVR Dashboard表示中はパネルが重なったままにならないよう、
-                // 開閉に合わせて一時的に隠す/戻す（AvatarPanelOverlay側でユーザーの
-                // 表示意図とは独立に管理するため、ここでは開閉の通知だけでよい）。
-                if (eventType == EVREventType.VREvent_DashboardActivated)
+                while (OpenVR.System.PollNextEvent(ref e, (uint)Marshal.SizeOf(e)))
                 {
-                    _panel?.SetDashboardVisible(true);
+                    var eventType = (EVREventType)e.eventType;
+                    if (eventType == EVREventType.VREvent_Quit)
+                    {
+                        Console.WriteLine("[steamvr] SteamVRからQuitイベントを受信、後片付けします");
+                        Deactivate();
+                        _ = _bridge.SendSteamVrStatusAsync(false, _shutdownToken);
+                        break;
+                    }
+
+                    // #37: SteamVR Dashboard表示中はパネルが重なったままにならないよう、
+                    // 開閉に合わせて一時的に隠す/戻す（AvatarPanelOverlay側でユーザーの
+                    // 表示意図とは独立に管理するため、ここでは開閉の通知だけでよい）。
+                    if (eventType == EVREventType.VREvent_DashboardActivated)
+                    {
+                        _panel?.SetDashboardVisible(true);
+                    }
+                    else if (eventType == EVREventType.VREvent_DashboardDeactivated)
+                    {
+                        _panel?.SetDashboardVisible(false);
+                    }
                 }
-                else if (eventType == EVREventType.VREvent_DashboardDeactivated)
-                {
-                    _panel?.SetDashboardVisible(false);
-                }
+            }
+            catch (Exception ex)
+            {
+                LogMainLoopError(ex);
             }
         }
 
         Deactivate();
+    }
+
+    private static readonly TimeSpan MainLoopErrorLogInterval = TimeSpan.FromSeconds(10);
+    private DateTime _lastMainLoopErrorLog = DateTime.MinValue;
+
+    /// <summary>同じ原因の例外が毎ティック(32ms)出続けてもログが埋まらないよう間引く。</summary>
+    private void LogMainLoopError(Exception ex)
+    {
+        var now = DateTime.UtcNow;
+        if (now - _lastMainLoopErrorLog < MainLoopErrorLogInterval) return;
+        _lastMainLoopErrorLog = now;
+        Console.Error.WriteLine($"[steamvr] 入力/イベント処理中に例外: {ex}");
     }
 
     private bool _warnedVrInitFailure;

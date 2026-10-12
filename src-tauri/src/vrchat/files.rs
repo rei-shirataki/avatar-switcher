@@ -343,11 +343,26 @@ async fn upload_after_create(
 
 // ─── ユーティリティ ────────────────────────────────────────────
 
+/// アップロードを受け付ける画像の上限（フロントの MAX_FILE_BYTES と同じ 10MiB）。
+/// IPC で巨大な data URL を渡されても、デコード前に弾いてメモリを確保しない。
+const MAX_UPLOAD_BYTES: usize = 10 * 1024 * 1024;
+
 fn parse_data_url(data_url: &str) -> Result<(&'static str, Vec<u8>)> {
     let (header, b64_data) = data_url
         .split_once(',')
         .ok_or_else(|| anyhow!("data URL のフォーマットが不正です"))?;
-    let mime: &'static str = if header.contains("image/png") { "image/png" } else { "image/jpeg" };
+    let mime: &'static str = match header {
+        "data:image/png;base64" => "image/png",
+        "data:image/jpeg;base64" => "image/jpeg",
+        _ => return Err(anyhow!("PNG / JPEG の base64 data URL のみ対応しています")),
+    };
+    // base64 は 4 文字で 3 バイト。デコード後のサイズを先に見積もって上限を確認する。
+    if b64_data.len() / 4 * 3 > MAX_UPLOAD_BYTES {
+        return Err(anyhow!(
+            "画像が大きすぎます（上限 {} MB）",
+            MAX_UPLOAD_BYTES / 1024 / 1024
+        ));
+    }
     let raw = B64.decode(b64_data)?;
 
     // Verify binary magic bytes so a mismatched or non-image payload is rejected
@@ -451,4 +466,34 @@ async fn poll_until_complete(file_id: &str, version_id: u32) -> Result<()> {
         }
     }
     Err(anyhow!("VRChat 側でのファイル処理がタイムアウトしました。"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn accepts_png_and_jpeg_data_urls() {
+        let png = format!("data:image/png;base64,{}", B64.encode(b"\x89PNG\r\n\x1a\nrest"));
+        assert_eq!(parse_data_url(&png).unwrap().0, "image/png");
+        let jpeg = format!("data:image/jpeg;base64,{}", B64.encode([0xFF, 0xD8, 0xFF, 0x00]));
+        assert_eq!(parse_data_url(&jpeg).unwrap().0, "image/jpeg");
+    }
+
+    #[test]
+    fn rejects_other_types_missing_base64_and_bad_magic() {
+        let gif = format!("data:image/gif;base64,{}", B64.encode(b"GIF89a"));
+        assert!(parse_data_url(&gif).is_err());
+        assert!(parse_data_url("data:image/png,rawdata").is_err());
+        assert!(parse_data_url("no-comma").is_err());
+        let fake_png = format!("data:image/png;base64,{}", B64.encode(b"not a png"));
+        assert!(parse_data_url(&fake_png).is_err());
+    }
+
+    #[test]
+    fn rejects_oversized_payload_before_decoding() {
+        let huge = format!("data:image/jpeg;base64,{}", "A".repeat(MAX_UPLOAD_BYTES / 3 * 4 + 8));
+        let err = parse_data_url(&huge).unwrap_err().to_string();
+        assert!(err.contains("大きすぎ"), "{err}");
+    }
 }

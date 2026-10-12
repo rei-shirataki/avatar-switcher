@@ -1,7 +1,7 @@
 use anyhow::{anyhow, Result};
 use base64::engine::general_purpose::STANDARD as B64;
 use base64::Engine as _;
-use crate::vrchat::auth::{get_client, send_with_retry, truncate_for_log, USER_AGENT, VRCHAT_API};
+use crate::vrchat::auth::{get_client, send_with_retry, send_with_retry_rate_limited, truncate_for_log, USER_AGENT, VRCHAT_API};
 
 // ─── ヘルパー ──────────────────────────────────────────────────
 
@@ -125,7 +125,7 @@ pub async fn upload_image(data_url: &str) -> Result<String> {
         "tags":      []
     });
     let body = resp_json(
-        send_with_retry(
+        send_with_retry_rate_limited(
             || {
                 client
                     .post(format!("{}/file", VRCHAT_API))
@@ -186,7 +186,7 @@ async fn upload_after_create(
         "fileSizeInBytes":      file_size
     });
     let body = resp_json(
-        send_with_retry(
+        send_with_retry_rate_limited(
             || {
                 client
                     .post(format!("{}/file/{}", VRCHAT_API, file_id))

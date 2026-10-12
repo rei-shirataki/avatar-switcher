@@ -48,3 +48,15 @@ jobs:
       - name: Cargo clippy
         working-directory: src-tauri
         run: cargo clippy --all-targets
+
+      - name: Cargo test
+        working-directory: src-tauri
+        run: cargo test --lib
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Build overlay-sidecar
+        working-directory: overlay-sidecar
+        run: dotnet build -c Release

@@ -21,7 +21,8 @@ $env:RUST_LOG = "info"
 npm run tauri dev
 ```
 
-開発起動で SteamVR オーバーレイも確認する場合は、sidecar と overlay-ui を事前にビルドして環境変数で指す。
+開発起動で SteamVR オーバーレイも確認する場合は、sidecar と overlay-ui を事前にビルドして環境変数で指す
+（これらの環境変数は開発起動などのデバッグビルドでのみ有効。インストーラー版では無視される）。
 
 ```powershell
 dotnet publish overlay-sidecar -c Release -o overlay-sidecar/publish

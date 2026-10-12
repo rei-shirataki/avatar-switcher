@@ -33,10 +33,10 @@ const RESTART_BACKOFF_SECS: [u64; 4] = [1, 3, 10, 30];
 const HEALTHY_RUN: Duration = Duration::from_secs(60);
 
 /// サイドカー実行ファイルのパスを解決する。
-/// 1. 環境変数 `AVATAR_SWITCHER_OVERLAY_SIDECAR_PATH`（開発用オーバーライド）
+/// 1. 環境変数 `AVATAR_SWITCHER_OVERLAY_SIDECAR_PATH`（開発用オーバーライド。デバッグビルドのみ）
 /// 2. Tauri のリソースディレクトリ配下（本番、tauri.conf.json の bundle.resources 経由で配置）
 fn resolve_sidecar_path(app: &AppHandle) -> Option<PathBuf> {
-    if let Ok(p) = std::env::var("AVATAR_SWITCHER_OVERLAY_SIDECAR_PATH") {
+    if let Some(p) = super::dev_override_env("AVATAR_SWITCHER_OVERLAY_SIDECAR_PATH") {
         let path = PathBuf::from(p);
         if path.exists() {
             return Some(path);

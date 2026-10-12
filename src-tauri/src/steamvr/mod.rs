@@ -73,10 +73,11 @@ async fn start_overlay_ui_static_server(app: &AppHandle) -> Option<u16> {
 
 /// overlay-ui の `dist/overlay-ui/browser` 相当のディレクトリを解決する。
 /// 1. 環境変数 `AVATAR_SWITCHER_OVERLAY_UI_DIST_PATH`（開発用オーバーライド。
-///    `sidecar::resolve_sidecar_path` と同じ流儀で開発用オーバーライドを最優先する）
+///    `sidecar::resolve_sidecar_path` と同じ流儀で開発用オーバーライドを最優先する。
+///    WS トークンを渡すページを差し替えられるため、デバッグビルドでのみ有効）
 /// 2. Tauri のリソースディレクトリ配下（本番、tauri.conf.json の bundle.resources 経由で配置）
 fn resolve_overlay_ui_dist_dir(app: &AppHandle) -> Option<PathBuf> {
-    if let Ok(p) = std::env::var("AVATAR_SWITCHER_OVERLAY_UI_DIST_PATH") {
+    if let Some(p) = dev_override_env("AVATAR_SWITCHER_OVERLAY_UI_DIST_PATH") {
         let path = PathBuf::from(p);
         if path.join("index.html").exists() {
             return Some(path);
@@ -91,6 +92,18 @@ fn resolve_overlay_ui_dist_dir(app: &AppHandle) -> Option<PathBuf> {
         .join("index.html")
         .exists()
         .then_some(resource_path)
+}
+
+/// 開発用の環境変数オーバーライドを読む。リリースビルドでは無視する
+/// （実行ファイルや WS トークンを渡すページを環境変数ひとつで差し替えられてしまうため）。
+pub(crate) fn dev_override_env(name: &str) -> Option<String> {
+    let value = std::env::var(name).ok()?;
+    if cfg!(debug_assertions) {
+        Some(value)
+    } else {
+        log::warn!("[steamvr] {} はデバッグビルドでのみ有効です。無視します。", name);
+        None
+    }
 }
 
 /// アプリ終了時に呼ぶ。サイドカープロセスを確実に終了させる。

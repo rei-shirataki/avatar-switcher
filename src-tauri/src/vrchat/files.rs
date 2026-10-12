@@ -22,8 +22,29 @@ async fn resp_json(resp: reqwest::Response, context: &str) -> Result<serde_json:
     })
 }
 
-/// S3 presigned URL に PUT する専用クライアント。
-/// VRChat 認証クッキーを送らないよう独立クライアントを使用し、
+/// S3 への PUT 1回あたりの上限。無いと接続が停滞したときにアップロードが永久に
+/// 終わらず、UI のスピナーが回り続け、失敗時の cleanup_file も走らない。
+const S3_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(60);
+const S3_CONNECT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+
+/// S3 presigned URL に PUT する専用クライアント（使い回す）。
+/// VRChat 認証クッキーを送らないよう独立クライアントを使用する。
+fn s3_client() -> Result<&'static reqwest::Client> {
+    static CLIENT: std::sync::OnceLock<reqwest::Client> = std::sync::OnceLock::new();
+    if let Some(c) = CLIENT.get() {
+        return Ok(c);
+    }
+    let client = reqwest::Client::builder()
+        .user_agent(USER_AGENT)
+        .https_only(true)
+        .timeout(S3_TIMEOUT)
+        .connect_timeout(S3_CONNECT_TIMEOUT)
+        .build()
+        .map_err(|e| anyhow!("S3 client build error: {}", e))?;
+    Ok(CLIENT.get_or_init(|| client))
+}
+
+/// S3 presigned URL に PUT する。
 /// Content-MD5 を必ず付与して VRChat 側の整合性検証を通過させる。
 async fn s3_put(
     url: &str,
@@ -32,10 +53,7 @@ async fn s3_put(
     body: Vec<u8>,
     context: &str,
 ) -> Result<()> {
-    let s3_client = reqwest::Client::builder()
-        .user_agent(USER_AGENT)
-        .build()
-        .map_err(|e| anyhow!("S3 client build error: {}", e))?;
+    let s3_client = s3_client()?;
 
     let resp = send_with_retry(
         || {

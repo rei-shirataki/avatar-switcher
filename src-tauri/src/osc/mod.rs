@@ -66,8 +66,28 @@ static OSC_SOCKET: Lazy<Option<UdpSocket>> = Lazy::new(|| {
     }
 });
 
-static OSC_HOST_OVERRIDE: Lazy<Option<String>> =
-    Lazy::new(|| std::env::var("AVATAR_SWITCHER_OSC_HOST").ok());
+/// 送信ソケットは 127.0.0.1 に bind しているため、loopback 以外の宛先には送れない
+/// （send_to が失敗する）。ホスト名だと送信のたびに同期の名前解決も走るので、
+/// IPv4 の loopback アドレスだけを受け付ける。
+static OSC_HOST_OVERRIDE: Lazy<Option<String>> = Lazy::new(|| {
+    let raw = std::env::var("AVATAR_SWITCHER_OSC_HOST").ok()?;
+    match parse_loopback_host(&raw) {
+        Some(host) => Some(host),
+        None => {
+            log::warn!(
+                "AVATAR_SWITCHER_OSC_HOST は loopback の IP アドレスのみ指定できます。無視します: {}",
+                raw
+            );
+            None
+        }
+    }
+});
+
+/// 送信ソケットは IPv4 なので、IPv6 の ::1 も受け付けない。
+fn parse_loopback_host(raw: &str) -> Option<String> {
+    let ip: std::net::Ipv4Addr = raw.trim().parse().ok()?;
+    ip.is_loopback().then(|| ip.to_string())
+}
 static OSC_PORT_OVERRIDE: Lazy<Option<u16>> = Lazy::new(|| {
     std::env::var("AVATAR_SWITCHER_OSC_PORT")
         .ok()
@@ -281,5 +301,14 @@ mod float_tests {
         assert_eq!(first_finite_float(&[OscType::Float(f32::INFINITY)]), None);
         assert_eq!(first_finite_float(&[OscType::Int(1)]), None);
         assert_eq!(first_finite_float(&[]), None);
+    }
+
+    #[test]
+    fn osc_host_override_accepts_only_loopback_ip() {
+        assert_eq!(parse_loopback_host("127.0.0.1").as_deref(), Some("127.0.0.1"));
+        assert_eq!(parse_loopback_host(" 127.0.0.2 ").as_deref(), Some("127.0.0.2"));
+        assert_eq!(parse_loopback_host("::1"), None);
+        assert_eq!(parse_loopback_host("192.168.1.10"), None);
+        assert_eq!(parse_loopback_host("localhost"), None);
     }
 }

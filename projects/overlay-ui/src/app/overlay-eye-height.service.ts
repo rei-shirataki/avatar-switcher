@@ -1,17 +1,16 @@
 import { Injectable, inject, signal } from '@angular/core';
 import { OverlayBridgeService } from './overlay-bridge.service';
+import {
+  EYE_HEIGHT_MIN,
+  EYE_HEIGHT_MAX,
+  EYE_HEIGHT_SAFE_MIN,
+  EYE_HEIGHT_SAFE_MAX,
+} from '../../../../shared/eye-height.constants';
 
 /** reset()応答(eyeheight-update)が万一届かなかった場合にボタンを永久に無効化
  *  したままにしないための保険。ローカルOSC送信の失敗はまず起きないが、
  *  fire-and-forgetのためRust側のエラー応答は拾っていない。 */
 const RESET_TIMEOUT_MS = 3000;
-
-const EYE_HEIGHT_MIN = 0.2;
-const EYE_HEIGHT_MAX = 5.0;
-/** eye-height.service.ts::EYE_HEIGHT_SAFE_MIN/MAX と同じ、上限適用オフ時の
- *  最小限のセーフガード（#55）。 */
-const EYE_HEIGHT_SAFE_MIN = 0.01;
-const EYE_HEIGHT_SAFE_MAX = 100;
 
 /** 送信モード。eye-height.service.ts::EyeHeightMode と同じ意味。
  *  - `instant`: 目標値を1発で送る。

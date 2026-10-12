@@ -374,7 +374,7 @@ pub async fn query_avatar_scale_snapshot() -> anyhow::Result<AvatarScaleSnapshot
     Ok(AvatarScaleSnapshot { eye_height, scale_factor, scale_modified })
 }
 
-/// アイハイトのアプリ既定値。メインアプリ`eye-height.service.ts::EYE_HEIGHT_DEFAULT`
+/// アイハイトのアプリ既定値。`shared/eye-height.constants.ts::EYE_HEIGHT_DEFAULT`
 /// と同じ値。プレハブ身長を計算できない（ScaleFactor/ScaleModifiedいずれも
 /// 未公開）アバターでのリセット操作のフォールバック先。
 pub const EYE_HEIGHT_DEFAULT: f32 = 1.6;

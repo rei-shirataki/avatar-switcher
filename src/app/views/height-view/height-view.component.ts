@@ -161,8 +161,8 @@ interface Preset {
                 <input
                   type="number"
                   class="bg-[var(--charcoal-color-dark-neutral--5)] border border-[var(--charcoal-color-container-secondary-default)] rounded-ch-m py-[9px] px-3 text-[13px] text-text font-[var(--font-sans)] outline-none transition-colors duration-150 w-full box-border focus:border-primary font-[var(--font-mono)] text-right font-semibold"
-                  [min]="minValue()"
-                  [max]="maxValue()"
+                  [min]="eyeHeight.presetMinValue()"
+                  [max]="eyeHeight.presetMaxValue()"
                   step="0.01"
                   [ngModel]="draftValue()"
                   (ngModelChange)="draftValue.set($event)"
@@ -170,7 +170,9 @@ interface Preset {
                 />
                 <span class="text-sm text-text-tertiary font-[var(--font-mono)]">m</span>
               </div>
-              <span class="text-[10px] text-text-placeholder">{{ minValue() }} 〜 {{ maxValue() }} m</span>
+              <!-- プリセットはグローバル保存のため、ここはワールド範囲(minValue/maxValue)ではなく
+                   confirmSave()と同じアプリ静的範囲を表示する（表示と実際の検証範囲を一致させる）。 -->
+              <span class="text-[10px] text-text-placeholder">{{ eyeHeight.presetMinValue() }} 〜 {{ eyeHeight.presetMaxValue() }} m</span>
             </label>
 
             @if (dialogError()) {

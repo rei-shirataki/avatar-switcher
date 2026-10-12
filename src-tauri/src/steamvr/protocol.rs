@@ -118,10 +118,15 @@ pub enum ServerMessage {
     /// 受信ハンドラから broadcast される。
     #[serde(rename = "avatar-changed", rename_all = "camelCase")]
     AvatarChanged { avatar_id: String },
-    /// VRChat側のEyeHeightAsMeters/eyeheight OSC受信を全クライアントへpushする
-    /// （#27、`AvatarChanged`と同じ仕組み）。
+    /// VRChat側のEyeHeightAsMeters/eyeheight OSC受信、`EyeHeightQuery`/`EyeHeightReset`
+    /// の応答を全クライアントへpushする（#27、`AvatarChanged`と同じ仕組み）。
+    /// `is_reset`は`EyeHeightReset`自身の応答である場合のみ`true`。3つの発生源
+    /// （受動OSCエコー・`EyeHeightQuery`応答・`EyeHeightReset`応答）が同じ
+    /// メッセージ型を共有しており、値だけでは見分けが付かないため、受信側
+    /// (overlay-eye-height.service.ts)がリセット応答だけを確実に識別できるように
+    /// 明示的なフラグとして持たせている。
     #[serde(rename = "eyeheight-update", rename_all = "camelCase")]
-    EyeHeightUpdate { value: f32 },
+    EyeHeightUpdate { value: f32, is_reset: bool },
     /// `EyeHeightSettingsGet` の応答、およびデスクトップUIでの設定変更時に
     /// 接続中の全クライアントへ push される（#55）。
     #[serde(rename = "eyeheight-settings.update", rename_all = "camelCase")]
@@ -233,9 +238,10 @@ mod tests {
             other => panic!("デシリアライズ失敗: {other:?}"),
         }
 
-        let json = serde_json::to_string(&ServerMessage::EyeHeightUpdate { value: 1.5 }).unwrap();
+        let json = serde_json::to_string(&ServerMessage::EyeHeightUpdate { value: 1.5, is_reset: true }).unwrap();
         assert!(json.contains("\"eyeheight-update\""), "typeタグが不正: {json}");
         assert!(json.contains("\"value\":1.5"), "valueフィールドが不正: {json}");
+        assert!(json.contains("\"isReset\":true"), "isResetフィールドが不正: {json}");
 
         let query_json = r#"{"type":"eyeheight.query"}"#;
         assert!(matches!(

@@ -182,26 +182,8 @@ async fn launch(
     Ok(child)
 }
 
-/// ログがこのサイズを超えていたら起動時に退避する。
-const LOG_ROTATE_BYTES: u64 = 5 * 1024 * 1024;
-
-/// `overlay-sidecar.log` が肥大していれば `.log.1` へ退避する（1 世代のみ）。
-/// 追記のみだと再起動のたびに際限なく増えるため。失敗しても起動は妨げない。
-fn rotate_log_if_large(path: &std::path::Path, max_bytes: u64) {
-    let Ok(meta) = std::fs::metadata(path) else { return };
-    if meta.len() <= max_bytes {
-        return;
-    }
-    let mut backup = path.as_os_str().to_os_string();
-    backup.push(".1");
-    let _ = std::fs::remove_file(&backup);
-    if let Err(e) = std::fs::rename(path, &backup) {
-        log::warn!("[steamvr] ログのローテーションに失敗: {}", e);
-    }
-}
-
 fn open_log_append(path: &std::path::Path) -> std::io::Result<(std::fs::File, std::fs::File)> {
-    rotate_log_if_large(path, LOG_ROTATE_BYTES);
+    crate::logging::rotate_log_if_large(path, crate::logging::LOG_ROTATE_BYTES);
     let out = std::fs::OpenOptions::new().create(true).append(true).open(path)?;
     let err = out.try_clone()?;
     Ok((out, err))
@@ -254,27 +236,5 @@ fn force_kill(pid: u32) {
     #[cfg(not(target_os = "windows"))]
     {
         let _ = std::process::Command::new("/bin/kill").arg(pid.to_string()).output();
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn large_log_is_rotated_and_small_log_is_kept() {
-        let dir = std::env::temp_dir().join(format!("avsw-log-test-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
-        let log = dir.join("overlay-sidecar.log");
-
-        std::fs::write(&log, b"0123456789").unwrap();
-        rotate_log_if_large(&log, 100);
-        assert!(log.exists(), "上限以下ならそのまま");
-
-        rotate_log_if_large(&log, 5);
-        assert!(!log.exists());
-        assert!(dir.join("overlay-sidecar.log.1").exists());
-
-        std::fs::remove_dir_all(&dir).ok();
     }
 }

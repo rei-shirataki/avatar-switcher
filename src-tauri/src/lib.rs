@@ -1,3 +1,4 @@
+mod logging;
 mod vrchat;
 mod osc;
 mod storage;
@@ -11,8 +12,8 @@ use tauri::{
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    // OSC/OSCQuery の再接続調査用。RUST_LOG 未設定時は info レベルで出す。
-    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
+    // OSC/OSCQuery の再接続調査用。リリースビルドでも残るよう setup でファイル出力を足す。
+    logging::init();
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
@@ -73,6 +74,7 @@ pub fn run() {
                 .app_data_dir()
                 .unwrap_or_else(|_| std::path::PathBuf::from("."));
             std::fs::create_dir_all(&app_data_dir).ok();
+            logging::attach_file(&app_data_dir);
             vrchat::cache::init(app_data_dir);
 
             let app_handle = app.handle().clone();

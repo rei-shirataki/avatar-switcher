@@ -41,9 +41,10 @@ npm run tauri dev
 | 設定ストア | 上記 `app-settings.json` |
 | アバターキャッシュ | 上記 `avatars_cache.json` / `favorites_cache.json` |
 | sidecar ログ | 上記 `overlay-sidecar.log` |
+| Rust 側ログ | 上記 `avatar-switcher.log`（インストーラー版でも出力される） |
 | CEF キャッシュ | `%LOCALAPPDATA%\com.rei-shirataki.avatar-switcher\overlay-cef-cache\<PID>\` |
 
-Rust 側ログは起動したコンソールに出力される（`RUST_LOG=info`）。ログ文字列は下記の
+Rust 側ログは起動したコンソールと `avatar-switcher.log` に出力される（`RUST_LOG=info`）。ログ文字列は下記の
 「期待ログ」を grep する。
 
 ---
@@ -390,5 +391,5 @@ NG があれば、症状・再現手順・該当ログを添えて Issue にす�
 - WS の Origin 判定・定数時間比較（`steamvr::bridge::tests`）
 - WS 応答への `requestId` の付与（`steamvr::protocol::tests`）
 - mDNS 発見元判定・`OSC_PORT` 検証（`osc::oscquery::trust_tests`）
-- ログローテーション（`steamvr::sidecar::tests`）
+- ログローテーション（`logging::tests`）
 - オーバーライドの置換・クリア（`storage::commands::tests`）

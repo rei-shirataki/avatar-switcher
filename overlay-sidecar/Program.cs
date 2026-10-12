@@ -73,6 +73,38 @@ internal static class Program
         return 0;
     }
 
+    /// <summary>
+    /// 過去のサイドカー（終了済みPID）が残したキャッシュディレクトリを削除する。
+    /// PID ごとに作る設計のため、放置すると起動のたびにディスクを消費し続ける。
+    /// 稼働中のPIDのものは複数サイドカー同居の可能性があるため触らない。
+    /// </summary>
+    private static void CleanupStaleCaches(string cacheRoot)
+    {
+        if (!Directory.Exists(cacheRoot)) return;
+        foreach (var dir in Directory.EnumerateDirectories(cacheRoot))
+        {
+            if (!int.TryParse(Path.GetFileName(dir), out var pid) || pid == Environment.ProcessId) continue;
+            try
+            {
+                using var _ = System.Diagnostics.Process.GetProcessById(pid);
+                continue; // まだ生きている
+            }
+            catch (ArgumentException)
+            {
+                // 該当PIDのプロセスなし = 終了済み
+            }
+
+            try
+            {
+                Directory.Delete(dir, recursive: true);
+            }
+            catch (Exception e)
+            {
+                Console.Error.WriteLine($"[steamvr] 古いCEFキャッシュの削除に失敗: {dir} ({e.Message})");
+            }
+        }
+    }
+
     private static bool InitCef()
     {
         var settings = new CefSettings();
@@ -88,6 +120,7 @@ internal static class Program
         var cacheRoot = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "com.rei-shirataki.avatar-switcher", "overlay-cef-cache");
+        CleanupStaleCaches(cacheRoot);
         settings.RootCachePath = Path.Combine(cacheRoot, Environment.ProcessId.ToString());
         settings.CachePath = "";
         settings.PersistSessionCookies = false;

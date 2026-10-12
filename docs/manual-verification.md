@@ -336,6 +336,16 @@ Rust 側ログは起動したコンソールと `avatar-switcher.log` に出力�
 3. 身長変更・リセット（OSCQuery 経由）が機能し、VRChat 側のアバター切替がアプリ UI に反映されること。
 4. VPN（または複数 NIC）を有効にした状態で 1〜3 を再度確認する。
 5. ネットワークを切替（Wi-Fi ↔ 有線、DHCP 更新）後も、1 分ほど待って OSC の受信が継続すること。
+6. （#107）`$env:AVATAR_SWITCHER_OSC_LOOPBACK_ONLY = "1"` を設定してアプリを起動し、1〜4 を再度確認する。
+   起動ログに `待ち受けアドレス: 127.0.0.1（AVATAR_SWITCHER_OSC_LOOPBACK_ONLY）` が出ること。
+   - `netstat -ano | findstr <アプリの PID>` で、OSC 受信（UDP）と OSCQuery HTTP（TCP）が
+     `127.0.0.1` で待ち受けていること。mDNS（UDP 5353）は全インターフェイスのままなので、
+     ファイアウォールの許可ダイアログが消えるかどうかも記録する。
+   - mDNS 広告には引き続き実 LAN IP が載る（mdns-sd は 127.0.0.1 を広告しない）。
+     このため、VRChat が広告アドレスではなく 127.0.0.1 に接続してくる場合だけ動く。
+   - すべて OK なら、`src-tauri/src/osc/mod.rs` の `listen_host` の既定を loopback に切り替えてよい。
+     NG なら現状（0.0.0.0）を維持する。この場合、`is_trusted_src` では LAN 内からの
+     送信元偽装を防げないことを受け入れる（OSCQuery HTTP は読み取り専用で書き込み経路は無い）。
 
 期待結果:
 - `自マシン以外のアドレスの VRChat 広告を無視` の警告が**出ない**。

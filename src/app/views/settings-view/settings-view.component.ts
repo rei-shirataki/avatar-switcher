@@ -265,6 +265,7 @@ export class SettingsViewComponent implements OnInit {
   readonly heightLimitMax = EYE_HEIGHT_MAX;
 
   private pollHandle: ReturnType<typeof setInterval> | null = null;
+  private destroyed = false;
 
   constructor(
     public auth: VRChatAuthService,
@@ -274,6 +275,7 @@ export class SettingsViewComponent implements OnInit {
   ) {
     // 設定画面破棄時にポーリングを止める。
     inject(DestroyRef).onDestroy(() => {
+      this.destroyed = true;
       if (this.pollHandle !== null) {
         clearInterval(this.pollHandle);
         this.pollHandle = null;
@@ -294,6 +296,10 @@ export class SettingsViewComponent implements OnInit {
     if (overlaySettings) {
       this.placementMode.set(overlaySettings.placementMode);
     }
+
+    // 上の await 中に画面を離れていたら onDestroy は既に済んでいるので、
+    // ここで interval を張ると誰にも止められず画面を開くたびに積み上がる。
+    if (this.destroyed) return;
 
     // VRChat の後起動を検知するため、設定画面表示中だけ短い間隔で polling する。
     this.pollHandle = setInterval(async () => {

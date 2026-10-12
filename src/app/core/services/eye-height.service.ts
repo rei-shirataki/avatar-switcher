@@ -196,6 +196,8 @@ export class EyeHeightService {
   private _prefabHeight: number | null = null;
   /** 直近の /avatar/change 受信時刻。AVATAR_SETTLE_MS の起点。 */
   private _lastAvatarChangeAt = Number.NEGATIVE_INFINITY;
+  /** アバター切替のたびに増える世代。非同期の問い合わせ結果が切替前のものか判定する。 */
+  private _avatarGeneration = 0;
 
   constructor(private tauri: TauriService) {
     // limitEnabled の真の情報源はRust storage（SteamVRオーバーレイとWSブリッジ経由で
@@ -254,6 +256,8 @@ export class EyeHeightService {
       if (v !== null && !this.isAvatarSettling()) this._worldMaxHeight.set(v);
     }));
     this.registerListener(listen<boolean>('osc:eye-height-scaling-allowed', e => {
+      // 他のペイロードと同じく型を確認してから使う。
+      if (typeof e.payload !== 'boolean') return;
       if (!this.isAvatarSettling()) this._scalingAllowed.set(e.payload);
     }));
 
@@ -469,6 +473,7 @@ export class EyeHeightService {
   }
 
   private onAvatarChange(): void {
+    this._avatarGeneration++;
     this._scaleFactor = null;
     this._scaleModified = null;
     this._lastEcho = null;
@@ -542,9 +547,14 @@ export class EyeHeightService {
   async getAvatarDefault(): Promise<number> {
     if (this._prefabHeight != null) return this._prefabHeight;
     this._fetchingDefault.set(true);
+    const generation = this._avatarGeneration;
     try {
       const snapshot = await this.tauri.invoke<AvatarScaleSnapshot>('osc_query_avatar_scale_snapshot');
       const computed = this.computePrefabFromSnapshot(snapshot);
+      // 問い合わせ中にアバターが変わっていたら、前のアバターの値は使わずに問い合わせ直す
+      // （onAvatarChange で消したキャッシュを古い値で埋め戻すと、以降のリセットが
+      // 前のアバターの身長になる）。
+      if (generation !== this._avatarGeneration) return await this.getAvatarDefault();
       if (computed != null) {
         this._prefabHeight = computed;
         return computed;

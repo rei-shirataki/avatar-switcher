@@ -105,6 +105,22 @@ Rust 側ログは起動したコンソールに出力される（`RUST_LOG=info`
 
 結果: ______
 
+### D-5 Cookie 暗号鍵を OS キーチェーンに保存する（レビュー Critical 1）
+前提: 旧バージョンでログイン済みで、アプリデータに `key.bin` と `cookies.enc` があること。
+1. 新バージョンを起動する。期待ログ: `Encryption key saved to OS keyring.`
+2. アプリデータの `key.bin` が削除されていること。
+3. 「資格情報マネージャー」→「Windows 資格情報」に `cookie-encryption-key@avatar-switcher`
+   （汎用資格情報）があること。
+4. アプリを再起動し、ログイン状態が保たれていること。再起動後も `key.bin` が作られないこと。
+5. 任意（復号失敗時に上書きしない確認）: アプリを終了し、`cookies.enc` を退避コピーしたうえで
+   末尾の数バイトをバイナリエディタで書き換えて起動する。起動ログに
+   `cookies.enc を復号できなかったため、起動時の保存をスキップします。` が出て、`cookies.enc` の
+   更新日時が変わらないこと。確認後は退避コピーを戻す。
+
+期待結果: 平文の `key.bin` が残らず、再起動後もログインが保持される。
+
+結果: ______
+
 ---
 
 ## 2. 起動・通信まわり
@@ -229,6 +245,7 @@ Rust 側ログは起動したコンソールに出力される（`RUST_LOG=info`
 | D-2 | | | |
 | D-3 | | | |
 | D-4 | | | |
+| D-5 | | | |
 | N-1 | | | |
 | N-2 | | | |
 | S-1 | | | |
@@ -245,6 +262,7 @@ NG があれば、症状・再現手順・該当ログを添えて Issue にす�
 - お気に入り/アバター取得結果の統合判定、一過性ステータス判定（`vrchat::avatars::tests`）
 - avatar_id の形式検証（`vrchat::ids::tests`）
 - リトライ方針・`Retry-After` の解釈（`vrchat::auth::retry_tests`）
+- 暗号鍵の取得方針（キーチェーン障害時に鍵を生成・上書きしない）（`vrchat::auth::key_plan_tests`）
 - WS の Origin 判定・定数時間比較（`steamvr::bridge::tests`）
 - mDNS 発見元判定・`OSC_PORT` 検証（`osc::oscquery::trust_tests`）
 - ログローテーション（`steamvr::sidecar::tests`）

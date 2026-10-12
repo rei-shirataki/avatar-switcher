@@ -203,17 +203,26 @@ fn dispatch_packet(packet: OscPacket, app: &AppHandle) {
     }
 }
 
+/// 先頭引数が有限の Float ならその値。NaN / ±Inf は JSON では null になり、
+/// フロント（number 前提）に型の合わない値を渡してしまうため捨てる。
+fn first_finite_float(args: &[OscType]) -> Option<f32> {
+    match args.first() {
+        Some(OscType::Float(v)) if v.is_finite() => Some(*v),
+        _ => None,
+    }
+}
+
 fn dispatch_message(msg: OscMessage, app: &AppHandle) {
     match msg.addr.as_str() {
         OSC_ADDR_EYE_HEIGHT_PARAM | OSC_ADDR_EYE_HEIGHT_DIRECT => {
-            if let Some(OscType::Float(v)) = msg.args.first() {
-                let _ = app.emit(EVENT_EYE_HEIGHT, *v);
-                crate::steamvr::bridge::broadcast_eye_height(*v, false);
+            if let Some(v) = first_finite_float(&msg.args) {
+                let _ = app.emit(EVENT_EYE_HEIGHT, v);
+                crate::steamvr::bridge::broadcast_eye_height(v, false);
             }
         }
         OSC_ADDR_SCALE_FACTOR => {
-            if let Some(OscType::Float(v)) = msg.args.first() {
-                let _ = app.emit(EVENT_SCALE_FACTOR, *v);
+            if let Some(v) = first_finite_float(&msg.args) {
+                let _ = app.emit(EVENT_SCALE_FACTOR, v);
             }
         }
         OSC_ADDR_SCALE_MODIFIED => {
@@ -236,13 +245,13 @@ fn dispatch_message(msg: OscMessage, app: &AppHandle) {
             }
         }
         OSC_ADDR_EYE_HEIGHT_MIN => {
-            if let Some(OscType::Float(v)) = msg.args.first() {
-                let _ = app.emit(EVENT_EYE_HEIGHT_MIN, *v);
+            if let Some(v) = first_finite_float(&msg.args) {
+                let _ = app.emit(EVENT_EYE_HEIGHT_MIN, v);
             }
         }
         OSC_ADDR_EYE_HEIGHT_MAX => {
-            if let Some(OscType::Float(v)) = msg.args.first() {
-                let _ = app.emit(EVENT_EYE_HEIGHT_MAX, *v);
+            if let Some(v) = first_finite_float(&msg.args) {
+                let _ = app.emit(EVENT_EYE_HEIGHT_MAX, v);
             }
         }
         OSC_ADDR_EYE_HEIGHT_SCALING_ALLOWED => {
@@ -256,5 +265,19 @@ fn dispatch_message(msg: OscMessage, app: &AppHandle) {
             let _ = app.emit(EVENT_EYE_HEIGHT_SCALING_ALLOWED, b);
         }
         _ => {}
+    }
+}
+
+#[cfg(test)]
+mod float_tests {
+    use super::*;
+
+    #[test]
+    fn non_finite_floats_are_dropped() {
+        assert_eq!(first_finite_float(&[OscType::Float(1.5)]), Some(1.5));
+        assert_eq!(first_finite_float(&[OscType::Float(f32::NAN)]), None);
+        assert_eq!(first_finite_float(&[OscType::Float(f32::INFINITY)]), None);
+        assert_eq!(first_finite_float(&[OscType::Int(1)]), None);
+        assert_eq!(first_finite_float(&[]), None);
     }
 }

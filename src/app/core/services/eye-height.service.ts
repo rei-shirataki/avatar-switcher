@@ -2,6 +2,13 @@ import { DestroyRef, Injectable, computed, inject, signal } from '@angular/core'
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { TauriService } from './tauri.service';
 import { coerceFiniteNumber } from '../utils/number.util';
+import {
+  EYE_HEIGHT_DEFAULT,
+  EYE_HEIGHT_MIN,
+  EYE_HEIGHT_MAX,
+  EYE_HEIGHT_SAFE_MIN,
+  EYE_HEIGHT_SAFE_MAX,
+} from '../../../../shared/eye-height.constants';
 
 const STORAGE_KEY_VALUE = 'avatar-switcher.eyeheight.value';
 const STORAGE_KEY_MODE = 'avatar-switcher.eyeheight.mode';
@@ -24,17 +31,7 @@ interface EyeHeightSettings {
   limitEnabled: boolean;
 }
 
-export const EYE_HEIGHT_DEFAULT = 1.6;
-export const EYE_HEIGHT_MIN = 0.2;
-export const EYE_HEIGHT_MAX = 5.0;
-
-/** 設定で上限適用をオフにした場合でも残す最小限のセーフガード。
- *  VRChat の OSC 書き込みは EYE_HEIGHT_MIN/MAX の制限を受けないため、意図的に
- *  範囲外の身長を試したいユーザーのためにオフを許可するが、0 以下や桁外れの値は
- *  UI 表示崩壊・意図しない暴走の原因になるため下限だけは死守する。上限は
- *  「実質無制限」とみなせる程度に広く取っている。 */
-export const EYE_HEIGHT_SAFE_MIN = 0.01;
-export const EYE_HEIGHT_SAFE_MAX = 100;
+export { EYE_HEIGHT_DEFAULT, EYE_HEIGHT_MIN, EYE_HEIGHT_MAX, EYE_HEIGHT_SAFE_MIN, EYE_HEIGHT_SAFE_MAX };
 
 /** 自前の OSC 送信後、この期間内に VRChat から届くエコーは applyExternalValue で無視する。
  *  スムーズ終端で _isSmoothing=false に戻った直後に届く中間値エコーが _target を

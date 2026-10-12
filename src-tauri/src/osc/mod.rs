@@ -89,6 +89,8 @@ fn get_osc_addr() -> String {
 }
 
 pub fn send_avatar_change(avatar_id: &str) -> anyhow::Result<()> {
+    // REST 経路と同じ形式チェックを OSC 送信の前にも行い、任意の文字列を VRChat へ送らない。
+    crate::vrchat::ids::validate_avatar_id(avatar_id)?;
     let Some(socket) = OSC_SOCKET.as_ref() else {
         return Err(anyhow::anyhow!("OSC ソケットが初期化されていません"));
     };

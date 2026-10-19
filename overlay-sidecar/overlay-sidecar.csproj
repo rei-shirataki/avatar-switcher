@@ -22,7 +22,7 @@
     <PackageReference Include="SharpDX.Direct3D11" Version="4.2.0" />
     <!-- ポインタ画像(Resources/pointer.png)のPNGデコード専用。net10.0-windows限定の
          アプリなのでクロスプラットフォーム非対応は問題にならない。 -->
-    <PackageReference Include="System.Drawing.Common" Version="10.0.12" />
+    <PackageReference Include="System.Drawing.Common" Version="10.0.13" />
   </ItemGroup>
 
   <ItemGroup>

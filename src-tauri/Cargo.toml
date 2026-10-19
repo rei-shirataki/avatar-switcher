@@ -30,7 +30,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
 # --- OSC ---
-rosc = "0.10"
+rosc = "0.11"
 mdns-sd = "0.11"
 
 # --- SteamVR overlay bridge ---

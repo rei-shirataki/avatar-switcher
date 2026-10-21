@@ -31,7 +31,7 @@ VRChat のアバター切り替え・身長（Eye Height）調整をひとつの
 
 ### 必要環境
 
-- [Node.js](https://nodejs.org/)（npm）
+- [Node.js](https://nodejs.org/) 24.22.1 以上（npm。推奨バージョンは `.nvmrc` を参照）
 - [Rust](https://www.rust-lang.org/tools/install)
 - Tauri の [各 OS 向け前提パッケージ](https://tauri.app/start/prerequisites/)
 

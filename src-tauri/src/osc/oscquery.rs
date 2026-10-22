@@ -106,6 +106,9 @@ fn register_service(mdns: &ServiceDaemon, http_port: u16, our_osc_port: u16) {
     // mDNS の A レコードには実 LAN IP + ループバックの両方を載せる。
     // enable_addr_auto() は register 前の get_addresses() に反映されず、
     // 実環境で `ips=[]` になっていたため、ここで明示的に列挙する。
+    // ただし mdns-sd は送信インターフェイスと同じサブネットのアドレスだけを送り、
+    // loopback インターフェイスからは送らないため、127.0.0.1 は実際には広告されない。
+    // 127.0.0.1 だけを渡すと広告そのものが出なくなるので、実 LAN IP は外せない（#107）。
     // mdns-sd の host_ipv4 引数はカンマ区切りで複数 IP を指定できる。
     let ips_str = collect_ips_for_mdns()
         .iter()
@@ -150,7 +153,8 @@ fn register_one(
     }
 }
 
-/// mDNS A レコードに載せる IPv4 群を返す。実 LAN IP + 127.0.0.1。
+/// mDNS A レコードに載せる IPv4 群を返す。実 LAN IP + 127.0.0.1
+/// （127.0.0.1 は mdns-sd が送らない。`register_service` のコメント参照）。
 fn collect_ips_for_mdns() -> Vec<Ipv4Addr> {
     let mut ips = Vec::new();
     if let Some(lan) = detect_local_ipv4() {
@@ -434,9 +438,11 @@ async fn query_param_bool(http_port: u16, path: &str) -> Option<bool> {
 // ── HTTP サーバー ────────────────────────────────────────────────────────────
 
 async fn start_http_server(osc_port: u16) -> anyhow::Result<u16> {
-    // OSCQuery の HTTP も全インターフェイスで受ける。VRChat は mDNS の
+    // OSCQuery の HTTP も既定では全インターフェイスで受ける。VRChat は mDNS の
     // A レコードに載った IP（実 LAN IP）に対して HTTP を投げてくるため。
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:0").await?;
+    // AVATAR_SWITCHER_OSC_LOOPBACK_ONLY 指定時は 127.0.0.1 に限定する（#107）。
+    // 応答は HOST_INFO とパラメータツリーの読み取りだけで、値を書き込む経路は無い。
+    let listener = tokio::net::TcpListener::bind((super::listen_host(), 0)).await?;
     let http_port = listener.local_addr()?.port();
 
     tokio::spawn(async move {

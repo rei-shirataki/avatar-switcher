@@ -51,7 +51,7 @@ md5 = "0.7"
 # keyring v3 は feature を指定しないとメモリ上のモックストアになり、鍵が永続化されない。
 # Linux の linux-native (keyutils) は再起動で消えるため有効にせず、key.bin フォールバックに任せる。
 keyring = { version = "3", features = ["windows-native", "apple-native"] }
-chacha20poly1305 = "0.10"
+chacha20poly1305 = "0.11"
 rand = "0.8"
 
 [features]
